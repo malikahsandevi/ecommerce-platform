@@ -1,0 +1,28 @@
+# Render blueprint for the E-Commerce backend API.
+# Usage: in Render, choose "New > Blueprint" and select this repo —
+# the backend service below is created automatically; you only fill
+# the secret env values (sync: false) in the Render dashboard.
+services:
+  - type: web
+    name: ecommerce-backend
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: PORT
+        value: 5000
+      - key: MONGO_URI
+        sync: false # MongoDB Atlas connection string
+      - key: JWT_SECRET
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
