@@ -29,7 +29,7 @@ const loginAdmin = async (req, res) => {
                 username: 'admin',
                 email: envAdminEmail,
                 password: envAdminPass,
-                role: 'admin', // assuming role exists or just standard user field
+                role: 'Super Admin',
                 isVerified: true
             });
             await adminUser.save();
