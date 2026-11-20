@@ -68,15 +68,15 @@ export const TopCategories: React.FC<TopCategoriesProps> = ({ categoriesData, lo
       ) : (
         <>
           {/* Donut Chart — share of products per category */}
-          <div className="relative w-full h-40 flex items-center justify-center">
+          <div className="relative w-full h-56 flex items-center justify-center">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
                   data={items}
                   cx="50%"
                   cy="50%"
-                  innerRadius={58}
-                  outerRadius={75}
+                  innerRadius={74}
+                  outerRadius={94}
                   paddingAngle={2}
                   cornerRadius={4}
                   dataKey="value"
@@ -91,9 +91,9 @@ export const TopCategories: React.FC<TopCategoriesProps> = ({ categoriesData, lo
             {/* Center Text */}
             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
               <span className="text-[11px] font-medium text-(--text-muted)">
-                Products
+                Total Products
               </span>
-              <span className="text-base font-bold text-(--text)">
+              <span className="text-xl font-bold text-(--text)">
                 {totalProducts.toLocaleString()}
               </span>
             </div>

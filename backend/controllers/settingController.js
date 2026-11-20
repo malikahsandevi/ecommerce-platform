@@ -96,6 +96,9 @@ const normalizeSection = (section, value, currentValue) => {
     }
 
     const normalized = { ...(currentValue?.toObject?.() || currentValue || {}), ...value };
+    if (section === 'general' && value.monthlyTarget !== undefined) {
+        normalized.monthlyTarget = parseCurrencyNumber(value.monthlyTarget, 'monthlyTarget');
+    }
     if (section === 'storeInfo' && value.address) {
         normalized.address = {
             ...(currentValue?.address?.toObject?.() || currentValue?.address || {}),

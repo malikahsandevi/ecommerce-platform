@@ -10,6 +10,9 @@ const settingSchema = new mongoose.Schema(
       phone: { type: String, default: "" },
       timeZone: { type: String, default: "" },
       language: { type: String, default: "English" },
+      // Admin-set revenue goal for the current calendar month, shown as
+      // the gauge on the dashboard. 0 means "not set".
+      monthlyTarget: { type: Number, default: 0 },
       logo: { type: String, default: "" },
       favicon: { type: String, default: "" },
     },

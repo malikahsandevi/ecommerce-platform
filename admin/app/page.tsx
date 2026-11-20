@@ -2,19 +2,32 @@
 "use client";
 import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { AlertCircle, DollarSign, Package, RefreshCcw, ShoppingBag, Users } from "lucide-react";
-import StatsOverview from "@/components/layout/StatsOverview";
-import RevenueAnalytics, { RevenuePoint } from "@/components/layout/RevenueAnalytics";
+import { AlertCircle, CircleDollarSign, RefreshCcw, ShoppingBag, Users } from "lucide-react";
+import DashboardStatCard from "@/components/layout/DashboardStatCard";
+import RevenueAnalytics, {
+  DailyPoint,
+  RevenuePoint,
+} from "@/components/layout/RevenueAnalytics";
+import MonthlyTargetCard, {
+  MonthlyTargetData,
+} from "@/components/layout/MonthlyTargetCard";
 import TopCategories, { CategoryItem } from "@/components/layout/TopCategories";
+import NewCustomersCard, { NewCustomer } from "@/components/layout/NewCustomersCard";
+import InventoryOverviewCard, {
+  InventoryData,
+} from "@/components/layout/InventoryOverviewCard";
+import OrdersByStatusCard, {
+  OrderStatusCount,
+} from "@/components/layout/OrdersByStatusCard";
 import RecentOrdersCard, { DashboardOrder } from "@/components/layout/RecentOrdersCard";
 import ActivityCard, { ActivityLogItem } from "@/components/layout/ActivityCard";
 import TopBar from "@/components/ui/TopBar";
-import type { StatCardProps } from "@/components/ui/StatsCard";
 import { getDashboardAllData } from "@/services/dashboardService";
 import { apiClient } from "@/services/api";
 import { useAdminAuth } from "@/services/authContext";
 
-const CATEGORY_COLORS = ["#f97416", "#0ea5e9", "#22c55e", "#a855f7", "#eab308", "#ec4899"];
+// Orange shades, darkest first — the reference design's donut palette.
+const CATEGORY_COLORS = ["#ea580c", "#f97316", "#fb923c", "#fdba74", "#fed7aa", "#ffedd5"];
 
 interface ProductSearchRecord {
   id: string;
@@ -22,6 +35,25 @@ interface ProductSearchRecord {
   category: string;
   sku: string;
   [key: string]: string;
+}
+
+interface DashboardStats {
+  totalRevenue: number;
+  totalOrders: number;
+  totalCustomers: number;
+  totalProducts: number;
+}
+
+interface Comparison {
+  current: number;
+  previous: number;
+  pct: number | null;
+}
+
+interface Comparisons {
+  revenue?: Comparison;
+  orders?: Comparison;
+  customers?: Comparison;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -35,13 +67,29 @@ function customerNameOf(order: AnyRecord): string {
   );
 }
 
+const fmtWholeMoney = (value: number) =>
+  `$${Math.round(Number(value || 0)).toLocaleString()}`;
+
+const fmtJoinedDate = (iso: string) =>
+  new Date(iso).toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+
 export default function Page() {
   const { user, isAuthenticated } = useAdminAuth();
-  const [statsCards, setStatsCards] = useState<StatCardProps[] | undefined>(undefined);
+  const [stats, setStats] = useState<DashboardStats | undefined>(undefined);
+  const [comparisons, setComparisons] = useState<Comparisons | undefined>(undefined);
   const [recentOrders, setRecentOrders] = useState<DashboardOrder[] | undefined>(undefined);
   const [activityLogs, setActivityLogs] = useState<ActivityLogItem[] | undefined>(undefined);
   const [categories, setCategories] = useState<CategoryItem[] | undefined>(undefined);
-  const [revenueSeries, setRevenueSeries] = useState<RevenuePoint[] | undefined>(undefined);
+  const [monthlySeries, setMonthlySeries] = useState<RevenuePoint[] | undefined>(undefined);
+  const [dailySeries, setDailySeries] = useState<DailyPoint[] | undefined>(undefined);
+  const [monthlyTarget, setMonthlyTarget] = useState<MonthlyTargetData | undefined>(undefined);
+  const [ordersByStatus, setOrdersByStatus] = useState<OrderStatusCount[] | undefined>(undefined);
+  const [inventory, setInventory] = useState<InventoryData | undefined>(undefined);
+  const [newestCustomers, setNewestCustomers] = useState<NewCustomer[] | undefined>(undefined);
   const [loadError, setLoadError] = useState(false);
   const [slowLoad, setSlowLoad] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
@@ -52,16 +100,22 @@ export default function Page() {
   const fetchData = useCallback(async () => {
     setLoadError(false);
     setSlowLoad(false);
-    setStatsCards(undefined);
+    setStats(undefined);
+    setComparisons(undefined);
     setRecentOrders(undefined);
     setActivityLogs(undefined);
     setCategories(undefined);
-    setRevenueSeries(undefined);
+    setMonthlySeries(undefined);
+    setDailySeries(undefined);
+    setMonthlyTarget(undefined);
+    setOrdersByStatus(undefined);
+    setInventory(undefined);
+    setNewestCustomers(undefined);
 
-    // The dashboard payload drives the stat cards, orders and activity —
-    // render those as soon as IT lands instead of holding them hostage to
-    // the (independent) products request, which used to delay the whole
-    // page behind whichever call was slower on a cold start.
+    // The dashboard payload drives every card — render as soon as IT
+    // lands instead of holding the page hostage to the (independent)
+    // products request, which used to delay everything behind whichever
+    // call was slower on a cold start.
     const slowTimer = setTimeout(() => setSlowLoad(true), 6000);
 
     const productsPromise = apiClient
@@ -78,47 +132,14 @@ export default function Page() {
       return;
     }
 
-    const stats = data.stats || {};
-    setStatsCards([
-      {
-        title: "Total Revenue",
-        value: `$${Number(stats.totalRevenue || 0).toLocaleString(undefined, {
-          maximumFractionDigits: 2,
-        })}`,
-        change: "",
-        isPositive: true,
-        period: "All time",
-        icon: DollarSign,
-        theme: "orange",
-      },
-      {
-        title: "Total Orders",
-        value: Number(stats.totalOrders || 0).toLocaleString(),
-        change: "",
-        isPositive: true,
-        period: "All time",
-        icon: ShoppingBag,
-        theme: "blue",
-      },
-      {
-        title: "Total Customers",
-        value: Number(stats.totalCustomers || 0).toLocaleString(),
-        change: "",
-        isPositive: true,
-        period: "Registered accounts",
-        icon: Users,
-        theme: "green",
-      },
-      {
-        title: "Total Products",
-        value: Number(stats.totalProducts || 0).toLocaleString(),
-        change: "",
-        isPositive: true,
-        period: "In the catalog",
-        icon: Package,
-        theme: "purple",
-      },
-    ]);
+    const rawStats = data.stats || {};
+    setStats({
+      totalRevenue: Number(rawStats.totalRevenue || 0),
+      totalOrders: Number(rawStats.totalOrders || 0),
+      totalCustomers: Number(rawStats.totalCustomers || 0),
+      totalProducts: Number(rawStats.totalProducts || 0),
+    });
+    setComparisons(data.comparisons || {});
 
     setRecentOrders(
       (data.recentOrders || []).map((order: AnyRecord) => {
@@ -140,9 +161,9 @@ export default function Page() {
       })
     );
 
-    // Monthly revenue/orders for the chart — aggregated server-side from
-    // the real Order collection (cancelled orders excluded).
-    setRevenueSeries(
+    // Revenue series — aggregated server-side from the real Order
+    // collection (cancelled orders excluded), monthly and daily.
+    setMonthlySeries(
       Array.isArray(data.revenueSeries)
         ? data.revenueSeries.map((point: AnyRecord) => ({
             month: String(point.month || ""),
@@ -150,6 +171,59 @@ export default function Page() {
             orders: Number(point.orders || 0),
           }))
         : []
+    );
+    setDailySeries(
+      Array.isArray(data.dailySeries)
+        ? data.dailySeries.map((point: AnyRecord) => ({
+            day: String(point.day || ""),
+            revenue: Number(point.revenue || 0),
+            orders: Number(point.orders || 0),
+          }))
+        : []
+    );
+
+    const target = data.monthlyTarget || {};
+    setMonthlyTarget({
+      target: Number(target.target || 0),
+      revenueThisMonth: Number(target.revenueThisMonth || 0),
+      percentage:
+        target.percentage === null || target.percentage === undefined
+          ? null
+          : Number(target.percentage),
+      vsLastMonthPct:
+        target.vsLastMonthPct === null || target.vsLastMonthPct === undefined
+          ? null
+          : Number(target.vsLastMonthPct),
+    });
+
+    setOrdersByStatus(
+      Array.isArray(data.ordersByStatus)
+        ? data.ordersByStatus.map((row: AnyRecord) => ({
+            status: String(row.status || ""),
+            count: Number(row.count || 0),
+          }))
+        : []
+    );
+
+    const inv = data.inventory || {};
+    setInventory({
+      total: Number(inv.total || 0),
+      published: Number(inv.published || 0),
+      inStock: Number(inv.inStock || 0),
+      lowStock: Number(inv.lowStock || 0),
+      outOfStock: Number(inv.outOfStock || 0),
+    });
+
+    setNewestCustomers(
+      (data.newestCustomers || []).map((customer: AnyRecord) => ({
+        id: String(customer._id),
+        name:
+          [customer.firstName, customer.lastName].filter(Boolean).join(" ") ||
+          customer.email ||
+          "—",
+        email: customer.email || "",
+        joined: customer.createdAt ? fmtJoinedDate(customer.createdAt) : "",
+      }))
     );
 
     setActivityLogs(
@@ -217,6 +291,8 @@ export default function Page() {
       cancelled = true;
     };
   }, [fetchData, reloadToken, isAuthenticated]);
+
+  const statsLoading = stats === undefined;
 
   return (
     <div className="flex-1 min-w-0 p-3 bg-[var(--background)] text-[var(--text)] transition-colors duration-200 flex flex-col gap-3">
@@ -286,30 +362,87 @@ export default function Page() {
         </div>
       ) : (
         <>
-          {slowLoad && statsCards === undefined && (
+          {slowLoad && statsLoading && (
             <div className="rounded-2xl border border-amber-500/25 bg-amber-500/5 px-4 py-3 text-xs text-(--text-muted)">
               The server is waking up — the first load after a quiet period can
               take a little longer. Your numbers will appear in a moment.
             </div>
           )}
-          <StatsOverview statsData={statsCards} />
 
-          <section>
-            <RevenueAnalytics data={revenueSeries} />
-          </section>
+          {/* Reference grid: main column + tall Top Categories rail */}
+          <div className="grid grid-cols-1 xl:grid-cols-4 gap-3 items-stretch">
+            <div className="xl:col-span-3 flex flex-col gap-3 min-w-0">
+              {/* Stat cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <DashboardStatCard
+                  title="Total Revenue"
+                  value={statsLoading ? "" : fmtWholeMoney(stats.totalRevenue)}
+                  icon={CircleDollarSign}
+                  wowPct={comparisons?.revenue?.pct}
+                  highlighted
+                  loading={statsLoading}
+                />
+                <DashboardStatCard
+                  title="Total Orders"
+                  value={statsLoading ? "" : stats.totalOrders.toLocaleString()}
+                  icon={ShoppingBag}
+                  wowPct={comparisons?.orders?.pct}
+                  loading={statsLoading}
+                />
+                <DashboardStatCard
+                  title="Total Customers"
+                  value={statsLoading ? "" : stats.totalCustomers.toLocaleString()}
+                  icon={Users}
+                  wowPct={comparisons?.customers?.pct}
+                  loading={statsLoading}
+                />
+              </div>
 
-          <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
-            <section className="xl:col-span-2">
-              <RecentOrdersCard orders={recentOrders} />
-            </section>
-            <section>
-              <TopCategories categoriesData={categories} loading={categories === undefined} />
+              {/* Revenue chart + Monthly target */}
+              <div className="grid grid-cols-1 lg:grid-cols-5 gap-3 flex-1">
+                <section className="lg:col-span-3 min-w-0">
+                  <RevenueAnalytics
+                    dailyData={dailySeries}
+                    monthlyData={monthlySeries}
+                  />
+                </section>
+                <section className="lg:col-span-2 min-w-0">
+                  <MonthlyTargetCard data={monthlyTarget} />
+                </section>
+              </div>
+            </div>
+
+            {/* Right rail — spans the stats + chart rows */}
+            <section className="min-w-0">
+              <TopCategories
+                categoriesData={categories}
+                loading={categories === undefined}
+              />
             </section>
           </div>
 
-          <section>
-            <ActivityCard logs={activityLogs} />
-          </section>
+          {/* Bottom row — mirrors the reference's three-card strip */}
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-3">
+            <section className="xl:col-span-3 min-w-0">
+              <NewCustomersCard customers={newestCustomers} />
+            </section>
+            <section className="md:col-span-2 xl:col-span-5 min-w-0">
+              <InventoryOverviewCard data={inventory} />
+            </section>
+            <section className="xl:col-span-4 min-w-0">
+              <OrdersByStatusCard data={ordersByStatus} />
+            </section>
+          </div>
+
+          {/* Existing real cards, kept below the new grid */}
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-3">
+            <section className="xl:col-span-2 min-w-0">
+              <RecentOrdersCard orders={recentOrders} />
+            </section>
+            <section className="min-w-0">
+              <ActivityCard logs={activityLogs} />
+            </section>
+          </div>
         </>
       )}
     </div>

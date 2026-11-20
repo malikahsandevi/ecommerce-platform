@@ -158,6 +158,7 @@ function GeneralPanel({ data, saving, onSave }: SectionPanelProps<ObjectData>) {
     timeZone: String(data?.timeZone ?? ""),
     language: String(data?.language ?? ""),
     logo: String(data?.logo ?? ""),
+    monthlyTarget: String(data?.monthlyTarget ?? ""),
   }));
 
   return (
@@ -201,6 +202,21 @@ function GeneralPanel({ data, saving, onSave }: SectionPanelProps<ObjectData>) {
           value={form.logo}
           onChange={(event) => setForm({ ...form, logo: event.target.value })}
         />
+        <div>
+          <SettingsInput
+            label="Monthly Target (amount $)"
+            type="number"
+            min="0"
+            step="any"
+            placeholder="e.g. 5000"
+            value={form.monthlyTarget}
+            onChange={(event) => setForm({ ...form, monthlyTarget: event.target.value })}
+          />
+          <p className="mt-1.5 text-[11px] text-[var(--text-muted)]">
+            Revenue goal for the current month — shown as the gauge on the
+            dashboard. Leave empty for no target.
+          </p>
+        </div>
       </div>
       {form.logo && (
         <Image
@@ -212,7 +228,18 @@ function GeneralPanel({ data, saving, onSave }: SectionPanelProps<ObjectData>) {
           className="mt-5 rounded-lg border border-[var(--border)] object-contain"
         />
       )}
-      <SettingsSaveButton onSave={() => onSave(form)} saving={saving} />
+      <SettingsSaveButton
+        onSave={() =>
+          onSave({
+            ...form,
+            monthlyTarget:
+              form.monthlyTarget.trim() === ""
+                ? 0
+                : Number(form.monthlyTarget) || 0,
+          })
+        }
+        saving={saving}
+      />
     </SettingsCard>
   );
 }
