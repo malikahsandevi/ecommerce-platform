@@ -719,6 +719,8 @@ function IntegrationsPanel({ data, saving, onSave }: SectionPanelProps<Array<Rec
                   variant="danger"
                   size="sm"
                   icon={Trash2}
+                  title="Remove integration"
+                  aria-label="Remove integration"
                   onClick={() => setIntegrations(integrations.filter((_, idx) => idx !== index))}
                 />
               </div>
