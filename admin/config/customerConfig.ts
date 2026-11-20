@@ -1,66 +1,50 @@
 import { SelectOption, FormField } from "@/components/models/FormModal";
 import { Download, Plus, RefreshCcwDot } from "lucide-react";
 
+export interface CustomerAddress {
+  street?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  country?: string;
+}
+
+/** Shape of a record from GET /users (plus the derived `status` the list adapter adds). */
 export interface Customer {
   _id: string;
-  personalInfo: {
-    firstName: string;
-    lastName: string;
-    email: string;
-    phone: string;
-    avatar: string;
-  };
-  auth: {
-    password?: string;
-    loginMethod: string;
-    isEmailVerified: boolean;
-    lastLogin: string;
-  };
-  status: "active" | "inactive" | "blocked" | string;
-  customerGroup: string;
-  address: {
-    country: string;
-    city: string;
-    address: string;
-    postalCode: string;
-  };
-  orders: {
-    totalOrders: number;
-    completed: number;
-    pending: number;
-    cancelled: number;
-    totalSpent: number;
-    averageOrderValue: number;
-  };
-  cart: {
-    totalItems: number;
-    items: Array<{ productId: string; quantity: number }>;
-  };
-  favorites: {
-    total: number;
-    products: string[];
-  };
-  activity: {
-    totalVisits: number;
-    last30Days: number;
-    lastVisit: string;
-    lastActive: string;
-    isOnline: boolean;
-    visits: {
-      lastVisit: string;
-      lastActive: string;
-    };
-  };
-  createdAt: string;
-  updatedAt: string;
+  username?: string;
+  email: string;
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+  avatar?: string;
+  role?: string;
+  isActive?: boolean;
+  isVerified?: boolean;
+  status?: string;
+  addresses?: CustomerAddress[];
+  createdAt?: string;
 }
+
+const ROLE_OPTIONS = [
+  { label: "Customer", value: "Customer" },
+  { label: "Support", value: "Support" },
+  { label: "Editor", value: "Editor" },
+  { label: "Manager", value: "Manager" },
+  { label: "Admin", value: "Admin" },
+  { label: "Super Admin", value: "Super Admin" },
+];
+
+const fullName = (customer: Customer): string =>
+  [customer.firstName, customer.lastName].filter(Boolean).join(" ") ||
+  customer.username ||
+  customer.email;
 
 export const customerConfig = {
   routeTitle: "Customers",
 
-  // Tabs config driven from here — "Blocked" is the panel's word for the
-  // API's "banned" status (translated in the customers adapter).
-  tabs: ["All Customers", "Active", "Inactive", "Suspended", "Blocked"],
+  // Account state comes from User.isActive (derived to `status` on fetch).
+  tabs: ["All Customers", "Active", "Inactive"],
 
   // Header Buttons Control
   buttons: [
@@ -90,107 +74,56 @@ export const customerConfig = {
     },
   ],
 
-  searchFields: [
-    "personalInfo.firstName",
-    "personalInfo.lastName",
-    "personalInfo.email",
-    "customerGroup",
-  ],
+  searchFields: ["firstName", "lastName", "email", "username", "phone"],
 
   columnHeaders: {
     _id: "ID",
-    name: "Customer Name",
+    name: "Customer",
     email: "Email",
-    customerGroup: "Customer Group",
-    city: "City",
+    phone: "Phone",
+    role: "Role",
     status: "Status",
   },
-
-  items: [
-    {
-      _id: "user_001",
-      personalInfo: {
-        firstName: "James",
-        lastName: "Anderson",
-        email: "james@example.com",
-        phone: "+92 300 1234567",
-        avatar: "/uploads/users/james.jpg",
-      },
-      auth: {
-        loginMethod: "email",
-        isEmailVerified: true,
-        lastLogin: "2026-08-25T10:30:00Z",
-      },
-      status: "active",
-      customerGroup: "VIP",
-      address: {
-        country: "Pakistan",
-        city: "Lahore",
-        address: "Model Town",
-        postalCode: "54000",
-      },
-      orders: {
-        totalOrders: 18,
-        completed: 15,
-        pending: 2,
-        cancelled: 1,
-        totalSpent: 2568.4,
-        averageOrderValue: 142.69,
-      },
-      cart: {
-        totalItems: 3,
-        items: [
-          { productId: "product_101", quantity: 2 },
-          { productId: "product_205", quantity: 1 },
-        ],
-      },
-      favorites: {
-        total: 8,
-        products: ["product_101", "product_205"],
-      },
-      activity: {
-        totalVisits: 42,
-        last30Days: 12,
-        lastVisit: "2026-08-25T11:20:00Z",
-        lastActive: "2026-08-25T11:25:00Z",
-        isOnline: true,
-        visits: {
-          lastVisit: "2026-08-25T11:20:00Z",
-          lastActive: "2026-08-25T11:25:00Z",
-        },
-      },
-      createdAt: "2026-08-18T10:30:00Z",
-      updatedAt: "2026-08-25T11:25:00Z",
-    },
-  ] as Customer[],
 
   mapTableData: (customer: Customer) => ({
     id: customer._id,
     _id: customer._id,
-    name: `${customer.personalInfo?.firstName || ""} ${customer.personalInfo?.lastName || ""}`.trim(),
-    email: customer.personalInfo?.email || "",
-    customerGroup: customer.customerGroup || "",
-    city: customer.address?.city ? `${customer.address.city}, ${customer.address.country}` : "",
-    status: customer.status || "active",
+    name: fullName(customer),
+    email: customer.email || "",
+    phone: customer.phone || "—",
+    role: customer.role || "Customer",
+    status: customer.status || (customer.isActive === false ? "inactive" : "active"),
   }),
 
-  mapDetailData: (customer: Customer) => ({
-    id: customer._id,
-    title: `${customer.personalInfo?.firstName || ""} ${customer.personalInfo?.lastName || ""}`.trim(),
-    status: customer.status,
-    image: customer.personalInfo?.avatar,
-    shortDescription: `Phone: ${customer.personalInfo?.phone || "N/A"} | Group: ${customer.customerGroup}`,
-    attributes: {
-      Email: customer.personalInfo?.email,
-      Address: `${customer.address?.address}, ${customer.address?.city}`,
-      TotalOrders: customer.orders?.totalOrders,
-      TotalSpent: `$${customer.orders?.totalSpent?.toFixed(2) || "0.00"}`,
-      AvgOrderValue: `$${customer.orders?.averageOrderValue?.toFixed(2) || "0.00"}`,
-      CartItems: customer.cart?.totalItems,
-      TotalVisits: customer.activity?.totalVisits,
-      LastActive: customer.activity?.lastActive ? new Date(customer.activity.lastActive).toLocaleDateString() : "N/A",
-    },
-  }),
+  mapDetailData: (customer: Customer) => {
+    const address = customer.addresses?.[0];
+    const addressText = address
+      ? [address.street, address.city, address.state, address.zipCode, address.country]
+          .filter(Boolean)
+          .join(", ")
+      : "";
+    return {
+      id: customer._id,
+      title: fullName(customer),
+      status: customer.status || (customer.isActive === false ? "inactive" : "active"),
+      image:
+        customer.avatar && customer.avatar !== "default-avatar.png"
+          ? customer.avatar
+          : undefined,
+      shortDescription: customer.email,
+      attributes: {
+        Username: customer.username || "—",
+        Email: customer.email,
+        Phone: customer.phone || "—",
+        Role: customer.role || "Customer",
+        "Email Verified": customer.isVerified ? "Yes" : "No",
+        Address: addressText || "—",
+        Joined: customer.createdAt
+          ? new Date(customer.createdAt).toLocaleDateString()
+          : "—",
+      },
+    };
+  },
 
   // Form Modal Mapper for Customer fields
   mapFormData: (customer?: Customer) => {
@@ -198,72 +131,49 @@ export const customerConfig = {
       return {
         firstName: "",
         lastName: "",
+        username: "",
         email: "",
         phone: "",
         avatar: "",
-        role: "customer",
-        customerGroup: "Regular",
+        password: "",
+        role: "Customer",
         status: "active",
         isEmailVerified: false,
-        streetAddress: "",
-        city: "",
-        country: "Pakistan",
-        postalCode: "",
       };
     }
 
     return {
       _id: customer._id,
-      firstName: customer.personalInfo?.firstName || "",
-      lastName: customer.personalInfo?.lastName || "",
-      email: customer.personalInfo?.email || "",
-      phone: customer.personalInfo?.phone || "",
-      avatar: customer.personalInfo?.avatar || "",
-      role: (customer as any).role || "customer",
-      customerGroup: customer.customerGroup || "Regular",
-      status: customer.status || "active",
-      isEmailVerified: customer.auth?.isEmailVerified || false,
-      streetAddress: customer.address?.address || "",
-      city: customer.address?.city || "",
-      country: customer.address?.country || "Pakistan",
-      postalCode: customer.address?.postalCode || "",
+      firstName: customer.firstName || "",
+      lastName: customer.lastName || "",
+      username: customer.username || "",
+      email: customer.email || "",
+      phone: customer.phone || "",
+      avatar:
+        customer.avatar && customer.avatar !== "default-avatar.png"
+          ? customer.avatar
+          : "",
+      password: "",
+      role: customer.role || "Customer",
+      status: customer.isActive === false ? "inactive" : "active",
+      isEmailVerified: customer.isVerified || false,
     };
   },
 
   filters: [
     {
-      id: "customerGroup",
-      placeholder: "All Groups",
+      id: "role",
+      placeholder: "All Roles",
       options: [
-        { label: "All Groups", value: "all" },
-        { label: "VIP", value: "VIP" },
-        { label: "Regular", value: "Regular" },
-        { label: "New", value: "New" },
-        { label: "Wholesale", value: "Wholesale" },
+        { label: "All Roles", value: "all" },
+        ...ROLE_OPTIONS.map((role) => ({ label: role.label, value: role.value })),
       ],
     },
   ],
 
-  // Dynamic Options sent directly to FormModal Select dropdowns
-  categoryOptions: [
-    { label: "VIP Group", value: "VIP" },
-    { label: "Regular Group", value: "Regular" },
-    { label: "New Customer", value: "New" },
-    { label: "Wholesale", value: "Wholesale" },
-  ] as SelectOption[],
-
-  brandOptions: [
-    { label: "Customer", value: "customer" },
-    { label: "Staff Member", value: "staff" },
-    { label: "Vendor", value: "vendor" },
-    { label: "Admin", value: "admin" },
-  ] as SelectOption[],
-
   statusOptions: [
     { label: "Active", value: "active" },
     { label: "Inactive", value: "inactive" },
-    { label: "Blocked", value: "blocked" },
-    { label: "Suspended", value: "suspended" },
   ] as SelectOption[],
 
   // Dynamic FormModal Schema Definition
@@ -274,8 +184,8 @@ export const customerConfig = {
       label: "First Name",
       type: "text",
       required: true,
-      colSpan: 2,
-      placeholder: "e.g. Marcus",
+      colSpan: 1,
+      placeholder: "e.g. Ali",
       section: "Personal Information",
     },
     {
@@ -283,8 +193,17 @@ export const customerConfig = {
       label: "Last Name",
       type: "text",
       required: true,
-      colSpan: 2,
-      placeholder: "e.g. George",
+      colSpan: 1,
+      placeholder: "e.g. Raza",
+      section: "Personal Information",
+    },
+    {
+      name: "username",
+      label: "Username",
+      type: "text",
+      required: true,
+      colSpan: 1,
+      placeholder: "e.g. aliraza",
       section: "Personal Information",
     },
     {
@@ -292,54 +211,44 @@ export const customerConfig = {
       label: "Email Address",
       type: "text",
       required: true,
-      colSpan: 2,
-      placeholder: "e.g. marcus@example.com",
+      colSpan: 1,
+      placeholder: "e.g. ali@example.com",
       section: "Personal Information",
     },
     {
       name: "phone",
       label: "Phone Number",
       type: "text",
-      colSpan: 2,
+      colSpan: 1,
       placeholder: "e.g. +92 300 1234567",
       section: "Personal Information",
     },
     {
       name: "avatar",
-      label: "Avatar Profile Image URL",
+      label: "Avatar Image URL",
       type: "image",
-      colSpan: 4,
+      colSpan: 2,
       placeholder: "https://...",
       section: "Personal Information",
     },
 
     // Section 2: Account & Role Settings
     {
+      name: "password",
+      label: "Password",
+      type: "text",
+      colSpan: 1,
+      placeholder: "Set a password",
+      helperText: "Required for new accounts (min. 6 characters). Leave blank when editing to keep the current password.",
+      section: "Account & Permissions",
+    },
+    {
       name: "role",
       label: "User Role",
       type: "select",
       required: true,
       colSpan: 1,
-      options: [
-        { label: "Customer", value: "customer" },
-        { label: "Staff Member", value: "staff" },
-        { label: "Vendor", value: "vendor" },
-        { label: "Admin", value: "admin" },
-      ],
-      section: "Account & Permissions",
-    },
-    {
-      name: "customerGroup",
-      label: "Customer Group / Tier",
-      type: "select",
-      required: true,
-      colSpan: 1,
-      options: [
-        { label: "Regular", value: "Regular" },
-        { label: "VIP", value: "VIP" },
-        { label: "New", value: "New" },
-        { label: "Wholesale", value: "Wholesale" },
-      ],
+      options: ROLE_OPTIONS,
       section: "Account & Permissions",
     },
     {
@@ -351,8 +260,6 @@ export const customerConfig = {
       options: [
         { label: "Active", value: "active" },
         { label: "Inactive", value: "inactive" },
-        { label: "Blocked", value: "blocked" },
-        { label: "Suspended", value: "suspended" },
       ],
       section: "Account & Permissions",
     },
@@ -362,40 +269,6 @@ export const customerConfig = {
       type: "switch",
       colSpan: 1,
       section: "Account & Permissions",
-    },
-
-    // Section 3: Default Delivery Address
-    {
-      name: "streetAddress",
-      label: "Street Address",
-      type: "text",
-      colSpan: 2,
-      placeholder: "e.g. House 45, Street 10",
-      section: "Delivery Address",
-    },
-    {
-      name: "city",
-      label: "City",
-      type: "text",
-      colSpan: 1,
-      placeholder: "e.g. Lahore",
-      section: "Delivery Address",
-    },
-    {
-      name: "country",
-      label: "Country",
-      type: "text",
-      colSpan: 1,
-      placeholder: "e.g. Pakistan",
-      section: "Delivery Address",
-    },
-    {
-      name: "postalCode",
-      label: "Postal / Zip Code",
-      type: "text",
-      colSpan: 1,
-      placeholder: "e.g. 54000",
-      section: "Delivery Address",
     },
   ] as FormField[],
 };

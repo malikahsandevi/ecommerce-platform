@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { AlertCircle, Loader2, X } from "lucide-react";
+import { AlertCircle, Loader2, Store, X } from "lucide-react";
 import { describeAuthError, useAdminAuth } from "@/services/authContext";
 
 interface AdminLoginPopupProps {
@@ -55,6 +55,12 @@ export const AdminLoginPopup: React.FC<AdminLoginPopupProps> = ({
         }}
       >
         <div className="mb-5 text-center">
+          <div
+            className="mx-auto mb-3 w-11 h-11 rounded-2xl flex items-center justify-center text-white shadow-sm"
+            style={{ backgroundColor: "var(--primary)" }}
+          >
+            <Store className="w-5 h-5" />
+          </div>
           <h3 className="text-base font-bold" style={{ color: "var(--text)" }}>
             Admin Sign In
           </h3>

@@ -11,6 +11,7 @@ import {
   Package,
   ShoppingBag,
   Star,
+  Tag,
   Ticket,
   Users,
 } from "lucide-react";
@@ -46,16 +47,16 @@ const PAGE_STATS: Record<string, PageStatConfig> = {
   customers: {
     liveStatuses: ["active"],
     liveLabel: "Active",
-    pendingStatuses: ["blocked", "suspended"],
-    pendingLabel: "Blocked / Suspended",
+    pendingStatuses: ["inactive"],
+    pendingLabel: "Inactive",
     icon: Users,
   },
   orders: {
     liveStatuses: ["delivered"],
     liveLabel: "Delivered",
-    pendingStatuses: ["pending", "confirmed", "processing"],
+    pendingStatuses: ["pending", "processing"],
     pendingLabel: "In Progress",
-    amountField: "pricing.totalAmount",
+    amountField: "total",
     amountLabel: "Order Value",
     icon: ShoppingBag,
   },
@@ -76,18 +77,25 @@ const PAGE_STATS: Record<string, PageStatConfig> = {
     icon: Ticket,
   },
   reviews: {
-    liveStatuses: ["published"],
-    liveLabel: "Published",
+    liveStatuses: ["approved"],
+    liveLabel: "Approved",
     pendingStatuses: ["pending"],
     pendingLabel: "Awaiting Moderation",
     icon: Star,
   },
   media: {
-    liveStatuses: ["published"],
-    liveLabel: "Published",
-    pendingStatuses: ["draft", "archived"],
-    pendingLabel: "Draft / Archived",
+    liveStatuses: ["active"],
+    liveLabel: "Active",
+    pendingStatuses: ["inactive"],
+    pendingLabel: "Inactive",
     icon: ImageIcon,
+  },
+  brands: {
+    liveStatuses: ["active"],
+    liveLabel: "Active",
+    pendingStatuses: ["inactive"],
+    pendingLabel: "Inactive",
+    icon: Tag,
   },
 };
 
@@ -193,7 +201,7 @@ export default function StatsGrid({ pageUrl, items = [], isLoading = false }: St
       });
     } else {
       cards.push({
-        title: "Inactive / Other",
+        title: "Other Statuses",
         value: placeholder ?? Math.max(0, total - liveCount - pendingCount).toLocaleString(),
         change: "",
         isPositive: true,

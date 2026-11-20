@@ -86,7 +86,7 @@ export function Pagination({
             </span>
           </>
         ) : null}{" "}
-        products
+        records
       </div>
 
       {/* Right Controls Container */}

@@ -73,7 +73,7 @@ export const couponConfig = {
   ],
 
   // Search Fields
-  searchFields: ["code", "type", "description"],
+  searchFields: ["code", "discountType", "description"],
 
   // Table Column Labels
   columnHeaders: {
@@ -85,46 +85,10 @@ export const couponConfig = {
     status: "Status",
   },
 
-  // Dummy Items Data
-  items: [
-    {
-      _id: "66d48f21e8a9f1a23b777001",
-      id: 1,
-      code: "SUMMER2026",
-      type: "percentage",
-      value: 20,
-      minPurchaseAmount: 100,
-      maxDiscountAmount: 50,
-      usageLimit: 500,
-      usedCount: 142,
-      startDate: "2026-06-01T00:00:00Z",
-      endDate: "2026-09-30T23:59:59Z",
-      status: "active",
-      description: "Get 20% off on all summer products above $100.",
-      createdAt: "2026-05-25T10:00:00Z",
-    },
-    {
-      _id: "66d48f21e8a9f1a23b777002",
-      id: 2,
-      code: "WELCOME10",
-      type: "fixed_amount",
-      value: 10,
-      minPurchaseAmount: 30,
-      maxDiscountAmount: 10,
-      usageLimit: 1000,
-      usedCount: 1000,
-      startDate: "2026-01-01T00:00:00Z",
-      endDate: "2026-08-31T23:59:59Z",
-      status: "expired",
-      description: "$10 flat discount for first-time buyers.",
-      createdAt: "2026-01-01T08:00:00Z",
-    },
-  ] as Coupon[],
-
   // Map Data for CreateTable Component
   mapTableData: (coupon: Coupon) => ({
     id: coupon._id || String(coupon.id),
-    _id: coupon.code,
+    _id: coupon._id,
     code: coupon.code,
     type: getDiscountType(coupon) === "percentage" ? "Percentage (%)" : "Fixed Amount ($)",
     value: getDiscountType(coupon) === "percentage"
@@ -163,7 +127,6 @@ export const couponConfig = {
         minPurchaseAmount: 0,
         maxDiscountAmount: 0,
         usageLimit: 100,
-        perUserLimit: 1,
         validFrom: new Date().toISOString().split("T")[0],
         validUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
         isActive: true,
@@ -180,7 +143,6 @@ export const couponConfig = {
       minPurchaseAmount: coupon.minPurchaseAmount || 0,
       maxDiscountAmount: coupon.maxDiscountAmount || 0,
       usageLimit: coupon.usageLimit || 0,
-      perUserLimit: (coupon as any).perUserLimit || 1,
       validFrom: coupon.validFrom || coupon.startDate || "",
       validUntil: coupon.validUntil || coupon.endDate || "",
       isActive: coupon.isActive ?? coupon.status !== "disabled",
@@ -191,13 +153,12 @@ export const couponConfig = {
   // Table Filters
   filters: [
     {
-      id: "type",
+      id: "discountType",
       placeholder: "Discount Type",
       options: [
         { label: "All Types", value: "all" },
         { label: "Percentage", value: "percentage" },
-        { label: "Fixed Amount", value: "fixed_amount" },
-        { label: "Free Shipping", value: "free_shipping" },
+        { label: "Fixed Amount", value: "fixed" },
       ],
     },
   ],
@@ -281,16 +242,9 @@ export const couponConfig = {
       name: "usageLimit",
       label: "Total Usage Limit",
       type: "number",
-      min: 1,
+      min: 0,
       colSpan: 1,
-      section: "Discount Rules & Limits",
-    },
-    {
-      name: "perUserLimit",
-      label: "Limit Per Customer",
-      type: "number",
-      min: 1,
-      colSpan: 1,
+      helperText: "Leave at 0 for unlimited use.",
       section: "Discount Rules & Limits",
     },
 

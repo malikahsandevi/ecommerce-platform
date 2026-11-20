@@ -2,6 +2,7 @@
 import React, { useState } from "react";
 import { X, Package, Star, Pencil, Trash2 } from "lucide-react";
 import Button from "@/components/ui/Button";
+import { StatusPill } from "@/components/models/CreateTable";
 
 export interface DetailSpecification {
   key: string;
@@ -132,8 +133,8 @@ export function DetailPanel<T extends DetailPanelData>({
                   </div>
 
                   {selectedItem.status && (
-                    <span className="shrink-0 px-2 py-0.5 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 rounded-full font-bold text-[10px] capitalize">
-                      {selectedItem.status}
+                    <span className="shrink-0">
+                      <StatusPill status={selectedItem.status} />
                     </span>
                   )}
                 </div>

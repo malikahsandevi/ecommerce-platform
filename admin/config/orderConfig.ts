@@ -1,74 +1,102 @@
 import { SelectOption, FormField } from "@/components/models/FormModal";
 import { Download, Plus, RefreshCcwDot } from "lucide-react";
 
-export interface OrderCustomer {
-  customerId: string;
-  name: string;
-  email: string;
-  phone: string;
+export interface OrderUser {
+  _id?: string;
+  firstName?: string;
+  lastName?: string;
+  email?: string;
 }
 
-export interface OrderItem {
-  productId: string;
-  name: string;
-  sku: string;
-  price: number;
-  quantity: number;
-  total: number;
+export interface OrderLineItem {
+  product?: string;
+  name?: string;
+  sku?: string;
+  price?: number;
+  quantity?: number;
+  image?: string;
 }
 
-export interface OrderPricing {
-  subtotal: number;
-  discount: number;
-  shippingFee: number;
-  tax: number;
-  totalAmount: number;
-}
-
-export interface OrderPayment {
-  method: string;
-  status: "paid" | "unpaid" | "refunded" | string;
-  transactionId: string;
-}
-
-export interface OrderShipping {
-  carrier: string;
-  trackingNumber: string;
-  address: {
-    address: string;
-    city: string;
-    country: string;
-    postalCode: string;
-  };
+export interface OrderAddress {
+  street?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  country?: string;
 }
 
 export interface Order {
   _id?: string;
-  orderId: string;
-  customer: OrderCustomer;
-  items: OrderItem[];
-  pricing: OrderPricing;
-  status: "completed" | "pending" | "processing" | "cancelled" | string;
-  payment: OrderPayment;
-  shipping: OrderShipping;
-  orderDate: string;
+  orderNumber?: string;
+  user?: OrderUser | string;
+  items?: OrderLineItem[];
+  subtotal?: number;
+  tax?: number;
+  shippingCost?: number;
+  discount?: number;
+  total?: number;
+  shippingAddress?: OrderAddress;
+  billingAddress?: OrderAddress;
+  paymentMethod?: string;
+  paymentStatus?: string;
+  status?: string;
+  shippingCarrier?: string;
+  trackingNumber?: string;
   createdAt?: string;
-  updatedAt?: string;
 }
+
+const customerName = (order: Order): string => {
+  if (!order.user || typeof order.user === "string") return "—";
+  const name = [order.user.firstName, order.user.lastName].filter(Boolean).join(" ");
+  return name || order.user.email || "—";
+};
+
+const customerEmail = (order: Order): string =>
+  order.user && typeof order.user !== "string" ? order.user.email || "" : "";
+
+const userId = (order: Order): string =>
+  typeof order.user === "string" ? order.user : order.user?._id || "";
+
+const addressText = (address?: OrderAddress): string =>
+  [address?.street, address?.city, address?.state, address?.zipCode, address?.country]
+    .filter(Boolean)
+    .join(", ") || "—";
+
+const STATUS_OPTIONS = [
+  { label: "Pending", value: "pending" },
+  { label: "Processing", value: "processing" },
+  { label: "Shipped", value: "shipped" },
+  { label: "Delivered", value: "delivered" },
+  { label: "Cancelled", value: "cancelled" },
+  { label: "Refunded", value: "refunded" },
+];
+
+const PAYMENT_STATUS_OPTIONS = [
+  { label: "Pending", value: "pending" },
+  { label: "Paid", value: "paid" },
+  { label: "Failed", value: "failed" },
+  { label: "Refunded", value: "refunded" },
+];
+
+const PAYMENT_METHOD_OPTIONS = [
+  { label: "Cash on Delivery", value: "cod" },
+  { label: "Credit / Debit Card", value: "card" },
+  { label: "Bank Transfer", value: "bank_transfer" },
+  { label: "JazzCash / EasyPaisa", value: "wallet" },
+];
 
 export const orderConfig = {
   routeTitle: "Orders",
 
-  // Tabs for filtering orders — these mirror the Order.status enum in the API.
+  // Tabs mirror the Order.status enum in the API.
   tabs: [
     "All Orders",
     "Pending",
-    "Confirmed",
     "Processing",
     "Shipped",
     "Delivered",
     "Cancelled",
-    "Returned",
+    "Refunded",
   ],
 
   // Action Buttons Controls
@@ -99,148 +127,52 @@ export const orderConfig = {
     },
   ],
 
-  // Search Fields
-  searchFields: [
-    "orderId",
-    "customer.name",
-    "customer.email",
-    "shipping.trackingNumber",
-  ],
+  // Search Fields (top-level scalar fields of the API records)
+  searchFields: ["orderNumber", "status", "paymentStatus", "trackingNumber"],
 
   // Table Headers
   columnHeaders: {
-    _id: "Order ID",
+    orderNumber: "Order #",
     customer: "Customer",
-    totalAmount: "Total Amount",
+    totalAmount: "Total",
     paymentStatus: "Payment",
     carrier: "Carrier",
-    status: "Order Status",
+    status: "Status",
   },
-
-  // Orders List Data
-  items: [
-    {
-      _id: "66d48f21e8a9f1a23b999001",
-      orderId: "ORD-2026-1001",
-      customer: {
-        customerId: "user_001",
-        name: "James Anderson",
-        email: "james@example.com",
-        phone: "+92 300 1234567",
-      },
-      items: [
-        {
-          productId: "66d48f21e8a9f1a23b456789",
-          name: "Wireless Noise-Canceling Headphones",
-          sku: "HD-PRO-100",
-          price: 249.99,
-          quantity: 1,
-          total: 249.99,
-        },
-      ],
-      pricing: {
-        subtotal: 249.99,
-        discount: 10.0,
-        shippingFee: 15.0,
-        tax: 5.0,
-        totalAmount: 259.99,
-      },
-      status: "completed",
-      payment: {
-        method: "credit_card",
-        status: "paid",
-        transactionId: "TXN_9988776655",
-      },
-      shipping: {
-        carrier: "TCS",
-        trackingNumber: "TCS-90210-PK",
-        address: {
-          address: "Model Town",
-          city: "Lahore",
-          country: "Pakistan",
-          postalCode: "54000",
-        },
-      },
-      orderDate: "2026-08-28T10:30:00Z",
-      createdAt: "2026-08-28T10:30:00Z",
-      updatedAt: "2026-08-29T14:20:00Z",
-    },
-    {
-      _id: "66d48f21e8a9f1a23b999002",
-      orderId: "ORD-2026-1002",
-      customer: {
-        customerId: "user_002",
-        name: "Sarah Khan",
-        email: "sarah@example.com",
-        phone: "+92 321 7654321",
-      },
-      items: [
-        {
-          productId: "66d48f21e8a9f1a23b456790",
-          name: "Ergonomic Mesh Chair",
-          sku: "CH-ERG-202",
-          price: 180.0,
-          quantity: 2,
-          total: 360.0,
-        },
-      ],
-      pricing: {
-        subtotal: 360.0,
-        discount: 0.0,
-        shippingFee: 25.0,
-        tax: 10.0,
-        totalAmount: 395.0,
-      },
-      status: "pending",
-      payment: {
-        method: "cod",
-        status: "unpaid",
-        transactionId: "N/A",
-      },
-      shipping: {
-        carrier: "Leopard",
-        trackingNumber: "LEO-44321-PK",
-        address: {
-          address: "Gulberg III",
-          city: "Lahore",
-          country: "Pakistan",
-          postalCode: "54600",
-        },
-      },
-      orderDate: "2026-09-01T09:15:00Z",
-      createdAt: "2026-09-01T09:15:00Z",
-      updatedAt: "2026-09-01T09:15:00Z",
-    },
-  ] as Order[],
 
   // Map Data for CreateTable Component
   mapTableData: (order: Order) => ({
-    id: order._id || order.orderId,
-    _id: order.orderId,
-    customer: order.customer?.name || "N/A",
-    totalAmount: `$${order.pricing?.totalAmount?.toFixed(2) || "0.00"}`,
-    paymentStatus: order.payment?.status?.toUpperCase() || "UNPAID",
-    carrier: order.shipping?.carrier || "N/A",
-    status: order.status,
+    id: order._id,
+    _id: order._id,
+    orderNumber: order.orderNumber || "—",
+    customer: customerName(order),
+    totalAmount: `$${(order.total ?? 0).toFixed(2)}`,
+    paymentStatus: (order.paymentStatus || "pending").toUpperCase(),
+    carrier: order.shippingCarrier || "—",
+    status: order.status || "pending",
   }),
 
   // Map Data for DetailPanel Component
   mapDetailData: (order: Order) => ({
-    id: order._id || order.orderId,
-    title: `Order #${order.orderId}`,
+    id: order._id,
+    title: `Order ${order.orderNumber || ""}`.trim(),
     status: order.status,
-    shortDescription: `Customer: ${order.customer?.name || "N/A"} (${order.customer?.email || ""})`,
+    shortDescription: `Customer: ${customerName(order)}${customerEmail(order) ? ` (${customerEmail(order)})` : ""}`,
     attributes: {
-      "Customer Phone": order.customer?.phone || "N/A",
-      "Total Amount": `$${order.pricing?.totalAmount?.toFixed(2) || "0.00"}`,
-      "Subtotal": `$${order.pricing?.subtotal?.toFixed(2) || "0.00"}`,
-      "Shipping Fee": `$${order.pricing?.shippingFee?.toFixed(2) || "0.00"}`,
-      "Payment Method": order.payment?.method?.toUpperCase() || "N/A",
-      "Payment Status": order.payment?.status?.toUpperCase() || "N/A",
-      "Carrier": order.shipping?.carrier || "N/A",
-      "Tracking Number": order.shipping?.trackingNumber || "N/A",
-      "Shipping Address": `${order.shipping?.address?.address || ""}, ${order.shipping?.address?.city || ""}`,
-      "Order Date": order.orderDate ? new Date(order.orderDate).toLocaleDateString() : "N/A",
+      Items: (order.items || [])
+        .map((item) => `${item.name || "Product"} × ${item.quantity || 1}`)
+        .join(", ") || "—",
+      Subtotal: `$${(order.subtotal ?? 0).toFixed(2)}`,
+      Tax: `$${(order.tax ?? 0).toFixed(2)}`,
+      "Shipping Cost": `$${(order.shippingCost ?? 0).toFixed(2)}`,
+      Discount: `$${(order.discount ?? 0).toFixed(2)}`,
+      Total: `$${(order.total ?? 0).toFixed(2)}`,
+      "Payment Method": (order.paymentMethod || "—").toUpperCase(),
+      "Payment Status": (order.paymentStatus || "—").toUpperCase(),
+      Carrier: order.shippingCarrier || "—",
+      "Tracking Number": order.trackingNumber || "—",
+      "Shipping Address": addressText(order.shippingAddress),
+      "Order Date": order.createdAt ? new Date(order.createdAt).toLocaleDateString() : "—",
     },
   }),
 
@@ -248,37 +180,40 @@ export const orderConfig = {
   mapFormData: (order?: Order) => {
     if (!order) {
       return {
-        orderId: `ORD-${Date.now().toString().slice(-5)}`,
+        orderNumber: `ORD-${Date.now().toString().slice(-6)}`,
+        user: "",
+        product: "",
+        quantity: 1,
         status: "pending",
-        customerName: "",
-        customerEmail: "",
-        customerPhone: "",
         paymentMethod: "cod",
-        paymentStatus: "unpaid",
-        totalAmount: 0,
-        carrier: "TCS",
+        paymentStatus: "pending",
+        shippingCarrier: "",
         trackingNumber: "",
-        shippingAddress: "",
-        shippingCity: "Karachi",
+        shippingStreet: "",
+        shippingCity: "",
+        shippingState: "",
+        shippingZip: "",
         shippingCountry: "Pakistan",
       };
     }
 
+    const firstItem = order.items?.[0];
     return {
       _id: order._id,
-      orderId: order.orderId || "",
+      orderNumber: order.orderNumber || "",
+      user: userId(order),
+      product: typeof firstItem?.product === "string" ? firstItem.product : "",
+      quantity: firstItem?.quantity || 1,
       status: order.status || "pending",
-      customerName: order.customer?.name || "",
-      customerEmail: order.customer?.email || "",
-      customerPhone: order.customer?.phone || "",
-      paymentMethod: order.payment?.method || "cod",
-      paymentStatus: order.payment?.status || "unpaid",
-      totalAmount: order.pricing?.totalAmount || 0,
-      carrier: order.shipping?.carrier || "TCS",
-      trackingNumber: order.shipping?.trackingNumber || "",
-      shippingAddress: order.shipping?.address?.address || "",
-      shippingCity: order.shipping?.address?.city || "",
-      shippingCountry: order.shipping?.address?.country || "Pakistan",
+      paymentMethod: order.paymentMethod || "cod",
+      paymentStatus: order.paymentStatus || "pending",
+      shippingCarrier: order.shippingCarrier || "",
+      trackingNumber: order.trackingNumber || "",
+      shippingStreet: order.shippingAddress?.street || "",
+      shippingCity: order.shippingAddress?.city || "",
+      shippingState: order.shippingAddress?.state || "",
+      shippingZip: order.shippingAddress?.zipCode || "",
+      shippingCountry: order.shippingAddress?.country || "Pakistan",
     };
   },
 
@@ -289,49 +224,27 @@ export const orderConfig = {
       placeholder: "Payment Status",
       options: [
         { label: "All Payments", value: "all" },
-        { label: "Paid", value: "paid" },
         { label: "Pending", value: "pending" },
+        { label: "Paid", value: "paid" },
+        { label: "Failed", value: "failed" },
         { label: "Refunded", value: "refunded" },
       ],
     },
   ],
 
-  // Select Options for Modal
-  categoryOptions: [
-    { label: "Credit Card", value: "card" },
-    { label: "Cash on Delivery", value: "cod" },
-    { label: "Bank Transfer", value: "bank_transfer" },
-    { label: "JazzCash / EasyPaisa", value: "wallet" },
-  ] as SelectOption[],
-
-  brandOptions: [
-    { label: "TCS Express", value: "TCS" },
-    { label: "Leopard Courier", value: "Leopard" },
-    { label: "DHL Express", value: "DHL" },
-    { label: "M&P Logistics", value: "M&P" },
-  ] as SelectOption[],
-
-  statusOptions: [
-    { label: "Pending", value: "pending" },
-    { label: "Confirmed", value: "confirmed" },
-    { label: "Processing", value: "processing" },
-    { label: "Shipped", value: "shipped" },
-    { label: "Delivered", value: "delivered" },
-    { label: "Cancelled", value: "cancelled" },
-    { label: "Returned", value: "returned" },
-  ] as SelectOption[],
+  statusOptions: STATUS_OPTIONS as SelectOption[],
 
   // Dynamic FormModal Schema Definition
   formFields: [
-    // Section 1: Order & Amount
+    // Section 1: Order
     {
-      name: "orderId",
-      label: "Order Number / ID",
+      name: "orderNumber",
+      label: "Order Number",
       type: "text",
       required: true,
-      colSpan: 2,
-      placeholder: "e.g. ORD-2026-1001",
-      section: "Order Summary",
+      colSpan: 1,
+      placeholder: "e.g. ORD-1001",
+      section: "Order",
     },
     {
       name: "status",
@@ -339,131 +252,108 @@ export const orderConfig = {
       type: "select",
       required: true,
       colSpan: 1,
-      options: [
-        { label: "Pending", value: "pending" },
-        { label: "Confirmed", value: "confirmed" },
-        { label: "Processing", value: "processing" },
-        { label: "Shipped", value: "shipped" },
-        { label: "Delivered", value: "delivered" },
-        { label: "Cancelled", value: "cancelled" },
-        { label: "Returned", value: "returned" },
-      ],
-      section: "Order Summary",
+      options: STATUS_OPTIONS,
+      section: "Order",
     },
     {
-      name: "totalAmount",
-      label: "Total Amount ($)",
-      type: "number",
-      required: true,
-      min: 0,
-      colSpan: 1,
-      section: "Order Summary",
-    },
-
-    // Section 2: Customer Information
-    {
-      name: "customerName",
-      label: "Customer Name",
-      type: "text",
+      name: "user",
+      label: "Customer",
+      type: "select",
       required: true,
       colSpan: 2,
-      placeholder: "e.g. James Anderson",
-      section: "Customer Information",
-    },
-    {
-      name: "customerEmail",
-      label: "Customer Email",
-      type: "text",
-      required: true,
-      colSpan: 1,
-      placeholder: "e.g. james@example.com",
-      section: "Customer Information",
-    },
-    {
-      name: "customerPhone",
-      label: "Customer Phone",
-      type: "text",
-      colSpan: 1,
-      placeholder: "e.g. +92 300 1234567",
-      section: "Customer Information",
+      placeholder: "Select a customer",
+      section: "Order",
     },
 
-    // Section 3: Payment & Status
+    // Section 2: Item (single line item for manual orders)
+    {
+      name: "product",
+      label: "Product",
+      type: "select",
+      colSpan: 2,
+      placeholder: "Select a product",
+      helperText: "Used when creating a new order. The price is taken from the product.",
+      section: "Item",
+    },
+    {
+      name: "quantity",
+      label: "Quantity",
+      type: "number",
+      min: 1,
+      colSpan: 1,
+      section: "Item",
+    },
+
+    // Section 3: Payment
     {
       name: "paymentMethod",
       label: "Payment Method",
       type: "select",
       required: true,
-      colSpan: 2,
-      options: [
-        { label: "Cash on Delivery", value: "cod" },
-        { label: "Credit Card / Stripe", value: "card" },
-        { label: "Bank Transfer", value: "bank_transfer" },
-        { label: "JazzCash / EasyPaisa", value: "wallet" },
-      ],
-      section: "Payment Details",
+      colSpan: 1,
+      options: PAYMENT_METHOD_OPTIONS,
+      section: "Payment",
     },
     {
       name: "paymentStatus",
       label: "Payment Status",
       type: "select",
       required: true,
-      colSpan: 2,
-      options: [
-        { label: "Pending", value: "pending" },
-        { label: "Authorized", value: "authorized" },
-        { label: "Paid", value: "paid" },
-        { label: "Failed", value: "failed" },
-        { label: "Refunded", value: "refunded" },
-      ],
-      section: "Payment Details",
-    },
-    {
-      name: "transactionId",
-      label: "Transaction / Reference ID",
-      type: "text",
-      colSpan: 2,
-      placeholder: "e.g. TXN_9988776655",
-      section: "Payment Details",
+      colSpan: 1,
+      options: PAYMENT_STATUS_OPTIONS,
+      section: "Payment",
     },
 
-    // Section 4: Shipping & Fulfillment
+    // Section 4: Fulfilment
     {
-      name: "carrier",
+      name: "shippingCarrier",
       label: "Courier / Carrier",
-      type: "select",
-      colSpan: 2,
-      options: [
-        { label: "TCS Express", value: "TCS" },
-        { label: "Leopard Courier", value: "Leopard" },
-        { label: "DHL Express", value: "DHL" },
-        { label: "M&P Logistics", value: "M&P" },
-      ],
-      section: "Shipping & Fulfillment",
+      type: "text",
+      colSpan: 1,
+      placeholder: "e.g. TCS",
+      section: "Fulfilment",
     },
     {
       name: "trackingNumber",
       label: "Tracking Number",
       type: "text",
-      colSpan: 2,
+      colSpan: 1,
       placeholder: "e.g. TRK-98765432",
-      section: "Shipping & Fulfillment",
+      section: "Fulfilment",
     },
+
+    // Section 5: Shipping Address
     {
-      name: "shippingAddress",
-      label: "Delivery Address",
+      name: "shippingStreet",
+      label: "Street Address",
       type: "text",
       colSpan: 2,
-      placeholder: "e.g. 124 Main Boulevard",
-      section: "Shipping & Fulfillment",
+      placeholder: "e.g. House 45, Street 10",
+      section: "Shipping Address",
     },
     {
       name: "shippingCity",
       label: "City",
       type: "text",
       colSpan: 1,
-      placeholder: "e.g. Karachi",
-      section: "Shipping & Fulfillment",
+      placeholder: "e.g. Rahim Yar Khan",
+      section: "Shipping Address",
+    },
+    {
+      name: "shippingState",
+      label: "State / Province",
+      type: "text",
+      colSpan: 1,
+      placeholder: "e.g. Punjab",
+      section: "Shipping Address",
+    },
+    {
+      name: "shippingZip",
+      label: "Postal / Zip Code",
+      type: "text",
+      colSpan: 1,
+      placeholder: "e.g. 64200",
+      section: "Shipping Address",
     },
     {
       name: "shippingCountry",
@@ -471,7 +361,7 @@ export const orderConfig = {
       type: "text",
       colSpan: 1,
       placeholder: "e.g. Pakistan",
-      section: "Shipping & Fulfillment",
+      section: "Shipping Address",
     },
   ] as FormField[],
 };

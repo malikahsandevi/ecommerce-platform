@@ -3,25 +3,29 @@ import { Download, Plus, RefreshCcwDot } from "lucide-react";
 
 export interface Category {
   _id?: string;
-  id: number;
   name: string;
   slug: string;
   description?: string;
-  icon?: string;
   image?: string;
-  parentCategory?: string | null;
-  productsCount: number;
-  status: "active" | "inactive" | string;
-  isFeatured?: boolean;
+  parent?: string | { _id?: string; name?: string } | null;
+  isActive?: boolean;
+  /** Derived from isActive by the list adapter. */
+  status?: string;
   sortOrder?: number;
   createdAt?: string;
-  updatedAt?: string;
 }
+
+const parentId = (category: Category): string => {
+  if (!category.parent) return "";
+  return typeof category.parent === "string"
+    ? category.parent
+    : category.parent._id || "";
+};
 
 export const categoryConfig = {
   routeTitle: "Categories",
 
-  // Tabs status wise filter
+  // Tabs filter on the derived status (from isActive).
   tabs: ["All Categories", "Active", "Inactive"],
 
   // Header Action Buttons
@@ -60,72 +64,34 @@ export const categoryConfig = {
     _id: "ID",
     name: "Category Name",
     slug: "Slug",
-    productsCount: "Total Products",
-    isFeatured: "Featured",
+    sortOrder: "Sort Order",
     status: "Status",
   },
 
-  // Dummy Categories List
-  items: [
-    {
-      _id: "cat_66d48f21e8a9f1a23b888001",
-      id: 1,
-      name: "Electronics",
-      slug: "electronics",
-      description: "Gadgets, devices, audio accessories, and home appliances.",
-      icon: "Laptop",
-      image: "https://via.placeholder.com/150",
-      parentCategory: null,
-      productsCount: 142,
-      status: "active",
-      isFeatured: true,
-      sortOrder: 1,
-      createdAt: "2026-08-01T10:00:00Z",
-      updatedAt: "2026-08-20T12:00:00Z",
-    },
-    {
-      _id: "cat_66d48f21e8a9f1a23b888002",
-      id: 2,
-      name: "Furniture",
-      slug: "furniture",
-      description: "Ergonomic office chairs, tables, and home furniture items.",
-      icon: "Armchair",
-      image: "https://via.placeholder.com/150",
-      parentCategory: null,
-      productsCount: 38,
-      status: "active",
-      isFeatured: false,
-      sortOrder: 2,
-      createdAt: "2026-08-05T09:30:00Z",
-      updatedAt: "2026-08-25T14:15:00Z",
-    },
-  ] as Category[],
-
   // Map Data for CreateTable Component
   mapTableData: (category: Category) => ({
-    id: category._id || String(category.id),
-    _id: category.slug,
+    id: category._id,
+    _id: category._id,
     name: category.name,
-    slug: `/${category.slug}`,
-    productsCount: category.productsCount,
-    isFeatured: category.isFeatured ? "Yes" : "No",
-    status: category.status,
+    image: category.image || "",
+    slug: category.slug,
+    sortOrder: category.sortOrder ?? 0,
+    status: category.status || (category.isActive === false ? "inactive" : "active"),
   }),
 
   // Map Data for DetailPanel Component
   mapDetailData: (category: Category) => ({
-    id: category._id || String(category.id),
+    id: category._id,
     title: category.name,
-    status: category.status,
+    status: category.status || (category.isActive === false ? "inactive" : "active"),
     image: category.image,
     shortDescription: category.description || `Slug: ${category.slug}`,
     attributes: {
       Slug: category.slug,
-      "Total Products": category.productsCount,
-      "Parent Category": category.parentCategory || "None (Main)",
-      Featured: category.isFeatured ? "Yes" : "No",
-      "Sort Order": category.sortOrder ?? "N/A",
-      "Created Date": category.createdAt ? new Date(category.createdAt).toLocaleDateString() : "N/A",
+      "Sort Order": category.sortOrder ?? 0,
+      "Created Date": category.createdAt
+        ? new Date(category.createdAt).toLocaleDateString()
+        : "—",
     },
     description: category.description || "",
   }),
@@ -136,57 +102,28 @@ export const categoryConfig = {
       return {
         name: "",
         slug: "",
-        parentCategory: "main",
+        parentCategory: "",
         description: "",
-        icon: "",
         image: "",
-        banner: "",
         status: "active",
-        isFeatured: false,
         sortOrder: 0,
       };
     }
 
     return {
       _id: category._id,
-      id: category.id,
       name: category.name || "",
       slug: category.slug || "",
-      parentCategory: category.parentCategory || "main",
+      parentCategory: parentId(category),
       description: category.description || "",
-      icon: category.icon || "",
       image: category.image || "",
-      banner: (category as any).banner || "",
-      status: category.status || "active",
-      isFeatured: category.isFeatured || false,
+      status: category.isActive === false ? "inactive" : "active",
       sortOrder: category.sortOrder ?? 0,
     };
   },
 
   // Table Filters
-  filters: [
-    {
-      id: "isFeatured",
-      placeholder: "Featured Status",
-      options: [
-        { label: "All Types", value: "all" },
-        { label: "Featured", value: "true" },
-        { label: "Standard", value: "false" },
-      ],
-    },
-  ],
-
-  // Select Options for FormModal Dynamic Dropdowns
-  categoryOptions: [
-    { label: "Main Category (None)", value: "main" },
-    { label: "Electronics", value: "electronics" },
-    { label: "Furniture", value: "furniture" },
-  ] as SelectOption[],
-
-  brandOptions: [
-    { label: "Standard Category", value: "standard" },
-    { label: "Featured Category", value: "featured" },
-  ] as SelectOption[],
+  filters: [],
 
   statusOptions: [
     { label: "Active", value: "active" },
@@ -209,9 +146,9 @@ export const categoryConfig = {
       name: "slug",
       label: "Slug (URL identifier)",
       type: "text",
-      required: true,
       colSpan: 2,
       placeholder: "e.g. electronics",
+      helperText: "Leave blank to auto-generate from the category name.",
       section: "Category Details",
     },
     {
@@ -219,11 +156,7 @@ export const categoryConfig = {
       label: "Parent Category",
       type: "select",
       colSpan: 2,
-      options: [
-        { label: "Main Category (None)", value: "main" },
-        { label: "Electronics", value: "electronics" },
-        { label: "Furniture", value: "furniture" },
-      ],
+      options: [{ label: "Main Category (None)", value: "" }],
       section: "Category Details",
     },
     {
@@ -246,38 +179,15 @@ export const categoryConfig = {
       colSpan: 1,
       section: "Category Details",
     },
-    {
-      name: "isFeatured",
-      label: "Featured Category (Show on Homepage)",
-      type: "switch",
-      colSpan: 2,
-      section: "Category Details",
-    },
 
     // Section 2: Visual Assets
     {
-      name: "icon",
-      label: "Menu Icon URL / SVG",
-      type: "text",
-      colSpan: 2,
-      placeholder: "e.g. /icons/electronics.svg",
-      section: "Visual Assets & Icons",
-    },
-    {
       name: "image",
-      label: "Card Thumbnail URL",
+      label: "Category Image URL",
       type: "image",
       colSpan: 2,
       placeholder: "https://...",
-      section: "Visual Assets & Icons",
-    },
-    {
-      name: "banner",
-      label: "Category Hero Banner URL",
-      type: "image",
-      colSpan: 4,
-      placeholder: "https://...",
-      section: "Visual Assets & Icons",
+      section: "Visual Assets",
     },
 
     // Section 3: Description
@@ -288,7 +198,7 @@ export const categoryConfig = {
       rows: 3,
       colSpan: 4,
       placeholder: "Describe this category...",
-      section: "Description & SEO",
+      section: "Description",
     },
   ] as FormField[],
 };

@@ -1,43 +1,59 @@
 import { SelectOption, FormField } from "@/components/models/FormModal";
 import { Download, Plus, RefreshCcwDot } from "lucide-react";
 
-export interface ProductSpecification {
-  key: string;
+export interface ProductImage {
+  url: string;
+  altText?: string;
+  isPrimary?: boolean;
+}
+
+export interface ProductAttribute {
+  name: string;
   value: string;
 }
 
 export interface Product {
   _id?: string;
-  id: number;
   name: string;
   sku: string;
-  category: string | { _id?: string; name?: string };
-  brand: string | { _id?: string; name?: string };
-  status: "published" | "draft" | "archived";
-  image?: string;
-  gallery?: string[];
-  price: number;
-  salePrice: number;
-  discount?: number;
-  rating?: number;
-  reviewsCount?: number;
-  stock: number;
-  lowStockThreshold: number;
-  weight?: number;
-  dimensions?: string;
-  featured?: boolean;
-  createdAt?: string;
-  shortDescription?: string;
+  slug?: string;
   description?: string;
+  price: number;
+  comparePrice?: number;
+  costPrice?: number;
+  stock: number;
+  lowStockThreshold?: number;
+  category: string | { _id?: string; name?: string };
+  brand?: string | { _id?: string; name?: string };
+  images?: ProductImage[];
+  status: string;
+  weight?: number;
+  dimensions?: { length?: number; width?: number; height?: number } | string;
   tags?: string[];
-  specifications?: ProductSpecification[];
+  attributes?: ProductAttribute[];
+  averageRating?: number;
+  reviewCount?: number;
+  createdAt?: string;
 }
 
-const referenceId = (reference: Product["category"]): string =>
+type Reference = string | { _id?: string; name?: string } | undefined;
+
+const referenceId = (reference: Reference): string =>
   typeof reference === "string" ? reference : reference?._id || "";
 
-const referenceName = (reference: Product["category"]): string =>
+const referenceName = (reference: Reference): string =>
   typeof reference === "string" ? reference : reference?.name || "";
+
+const primaryImage = (product: Product): string =>
+  product.images?.find((img) => img.isPrimary)?.url || product.images?.[0]?.url || "";
+
+const dimensionsText = (product: Product): string => {
+  if (!product.dimensions) return "";
+  if (typeof product.dimensions === "string") return product.dimensions;
+  const { length, width, height } = product.dimensions;
+  if (length === undefined && width === undefined && height === undefined) return "";
+  return `${length ?? ""} x ${width ?? ""} x ${height ?? ""}`.trim();
+};
 
 export const productConfig = {
   routeTitle: "Products",
@@ -74,8 +90,8 @@ export const productConfig = {
     },
   ],
 
-  // Search Parameters
-  searchFields: ["name", "sku", "category", "brand"],
+  // Search Parameters (top-level fields of the API records)
+  searchFields: ["name", "sku", "status"],
 
   // Table Column Labels
   columnHeaders: {
@@ -88,209 +104,55 @@ export const productConfig = {
     status: "Status",
   },
 
-  // Dummy Items Data (5 Real Items)
-  items: [
-    {
-      _id: "66d48f21e8a9f1a23b456789",
-      id: 101,
-      name: "Wireless Noise-Canceling Headphones",
-      sku: "HD-PRO-100",
-      category: "Electronics",
-      brand: "AudioTech",
-      status: "published",
-      image: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&auto=format&fit=crop&q=60",
-      gallery: [
-        "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&auto=format&fit=crop&q=60",
-        "https://images.unsplash.com/photo-1484704849700-f032a568e944?w=500&auto=format&fit=crop&q=60",
-      ],
-      price: 299.99,
-      salePrice: 249.99,
-      discount: 16,
-      rating: 4.8,
-      reviewsCount: 124,
-      stock: 45,
-      lowStockThreshold: 10,
-      weight: 0.35,
-      dimensions: "20 x 18 x 8 cm",
-      featured: true,
-      createdAt: "2026-08-10T08:00:00Z",
-      shortDescription:
-        "High-quality wireless headphones with active noise cancellation.",
-      description:
-        "Experience premium sound quality with ultra-soft earcups and long battery life.",
-      tags: ["wireless", "audio", "bluetooth"],
-      specifications: [
-        { key: "Connectivity", value: "Bluetooth 5.2" },
-        { key: "Battery Life", value: "30 Hours" },
-      ],
-    },
-    {
-      _id: "66d48f21e8a9f1a23b456790",
-      id: 102,
-      name: "Ergonomic Mesh Chair",
-      sku: "CH-ERG-202",
-      category: "Furniture",
-      brand: "ComfortMax",
-      status: "draft",
-      image: "https://images.unsplash.com/photo-1580481072645-022f9a6d83d0?w=500&auto=format&fit=crop&q=60",
-      gallery: [
-        "https://images.unsplash.com/photo-1580481072645-022f9a6d83d0?w=500&auto=format&fit=crop&q=60",
-      ],
-      price: 180.0,
-      salePrice: 180.0,
-      discount: 0,
-      rating: 4.2,
-      reviewsCount: 18,
-      stock: 5,
-      lowStockThreshold: 8,
-      weight: 12.5,
-      dimensions: "65 x 65 x 110 cm",
-      featured: false,
-      createdAt: "2026-08-15T09:30:00Z",
-      shortDescription: "Breathable mesh back office chair.",
-      description: "Designed for posture support during long working hours.",
-      tags: ["chair", "office", "ergonomic"],
-      specifications: [
-        { key: "Material", value: "Mesh & Steel" },
-        { key: "Weight Capacity", value: "150 kg" },
-      ],
-    },
-    {
-      _id: "66d48f21e8a9f1a23b456791",
-      id: 103,
-      name: "Smart Watch Series 7",
-      sku: "SW-SER-700",
-      category: "Electronics",
-      brand: "AudioTech",
-      status: "published",
-      image: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500&auto=format&fit=crop&q=60",
-      gallery: [
-        "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500&auto=format&fit=crop&q=60",
-      ],
-      price: 199.99,
-      salePrice: 169.99,
-      discount: 15,
-      rating: 4.6,
-      reviewsCount: 89,
-      stock: 22,
-      lowStockThreshold: 5,
-      weight: 0.15,
-      dimensions: "4.4 x 3.8 x 1.0 cm",
-      featured: true,
-      createdAt: "2026-08-18T10:15:00Z",
-      shortDescription: "Fitness and health tracking smartwatch.",
-      description:
-        "Track your workouts, heart rate, and notifications seamlessly.",
-      tags: ["smartwatch", "fitness", "gadgets"],
-      specifications: [
-        { key: "Display", value: "1.9 inch AMOLED" },
-        { key: "Water Resistance", value: "50m" },
-      ],
-    },
-    {
-      _id: "66d48f21e8a9f1a23b456792",
-      id: 104,
-      name: "Minimalist Leather Backpack",
-      sku: "BP-LEA-404",
-      category: "Clothing",
-      brand: "Generic",
-      status: "published",
-      image: "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=500&auto=format&fit=crop&q=60",
-      gallery: [
-        "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=500&auto=format&fit=crop&q=60",
-      ],
-      price: 120.0,
-      salePrice: 99.0,
-      discount: 17,
-      rating: 4.5,
-      reviewsCount: 42,
-      stock: 14,
-      lowStockThreshold: 3,
-      weight: 0.85,
-      dimensions: "40 x 30 x 15 cm",
-      featured: false,
-      createdAt: "2026-08-20T14:20:00Z",
-      shortDescription: "Premium genuine leather laptop backpack.",
-      description:
-        "Durable, stylish, and perfect for daily commute or weekend trips.",
-      tags: ["backpack", "leather", "travel"],
-      specifications: [
-        { key: "Laptop Size", value: "Up to 15.6 inch" },
-        { key: "Material", value: "100% Genuine Leather" },
-      ],
-    },
-    {
-      _id: "66d48f21e8a9f1a23b456793",
-      id: 105,
-      name: "Mechanical Gaming Keyboard",
-      sku: "KB-MCH-505",
-      category: "Electronics",
-      brand: "AudioTech",
-      status: "archived",
-      image: "https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=500&auto=format&fit=crop&q=60",
-      gallery: [
-        "https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=500&auto=format&fit=crop&q=60",
-      ],
-      price: 89.99,
-      salePrice: 79.99,
-      discount: 11,
-      rating: 4.7,
-      reviewsCount: 210,
-      stock: 0,
-      lowStockThreshold: 5,
-      weight: 0.95,
-      dimensions: "44 x 13 x 3.5 cm",
-      featured: false,
-      createdAt: "2026-08-22T11:00:00Z",
-      shortDescription: "RGB backlit mechanical keyboard with tactile switches.",
-      description: "Ultra-fast response time designed for gaming enthusiasts.",
-      tags: ["keyboard", "gaming", "rgb"],
-      specifications: [
-        { key: "Switch Type", value: "Mechanical Red" },
-        { key: "Lighting", value: "Customizable RGB" },
-      ],
-    },
-  ] as Product[],
-
   // Map Data for CreateTable Component
   mapTableData: (product: Product) => ({
-    id: product._id || product.id,
-    _id: product._id || String(product.id),
+    id: product._id,
+    _id: product._id,
     name: product.name,
-    image: product.image,
+    image: primaryImage(product),
     sku: product.sku,
     category: referenceName(product.category),
-    price: `$${product.price?.toFixed(2) || "0.00"}`,
+    price: `$${(product.price ?? 0).toFixed(2)}`,
     stock: product.stock,
     status: product.status,
   }),
 
   // Map Data for DetailPanel Component
   mapDetailData: (product: Product) => ({
-    id: product._id || String(product.id),
+    id: product._id,
     title: product.name,
     status: product.status,
-    image: product.image,
-    shortDescription: product.shortDescription || `SKU: ${product.sku}`,
+    image: primaryImage(product),
+    gallery: (product.images || []).map((img) => img.url),
+    salePrice: product.price ?? 0,
+    price:
+      product.comparePrice && product.comparePrice > (product.price ?? 0)
+        ? product.comparePrice
+        : undefined,
+    discount:
+      product.comparePrice && product.comparePrice > (product.price ?? 0)
+        ? Math.round((1 - (product.price ?? 0) / product.comparePrice) * 100)
+        : undefined,
+    rating: product.averageRating || undefined,
+    reviewsCount: product.reviewCount || 0,
+    shortDescription: `SKU: ${product.sku}`,
     attributes: {
       SKU: product.sku,
-      Category: referenceName(product.category),
-      Brand: referenceName(product.brand),
-      Price: `$${product.price?.toFixed(2) || "0.00"}`,
-      SalePrice: `$${product.salePrice?.toFixed(2) || "0.00"}`,
-      Discount: product.discount ? `${product.discount}%` : "0%",
+      Category: referenceName(product.category) || "—",
+      Brand: referenceName(product.brand) || "—",
+      "Cost Price": product.costPrice ? `$${product.costPrice.toFixed(2)}` : "—",
       Stock: product.stock,
-      LowStockThreshold: product.lowStockThreshold,
-      Rating: product.rating
-        ? `${product.rating} ★ (${product.reviewsCount || 0})`
-        : "N/A",
-      Featured: product.featured ? "Yes" : "No",
-      Weight: product.weight ? `${product.weight} kg` : "N/A",
-      Dimensions: product.dimensions || "N/A",
+      "Low Stock Alert": product.lowStockThreshold ?? "—",
+      Weight: product.weight ? `${product.weight} kg` : "—",
+      Dimensions: dimensionsText(product) || "—",
+      Added: product.createdAt ? new Date(product.createdAt).toLocaleDateString() : "—",
     },
     description: product.description || "",
     tags: product.tags || [],
-    specifications: product.specifications || [],
+    specifications: (product.attributes || []).map((attr) => ({
+      key: attr.name,
+      value: attr.value,
+    })),
   }),
 
   // Map Data for FormModal (Add/Edit Mode)
@@ -303,14 +165,13 @@ export const productConfig = {
         brand: "",
         status: "published",
         price: 0,
-        salePrice: 0,
-        discount: 0,
+        comparePrice: "",
+        costPrice: "",
         stock: 0,
-        lowStockThreshold: 5,
-        weight: 0,
+        lowStockThreshold: 10,
+        weight: "",
         dimensions: "",
-        featured: false,
-        shortDescription: "",
+        image: "",
         description: "",
         tags: [],
         specifications: [],
@@ -322,32 +183,36 @@ export const productConfig = {
       sku: product.sku || "",
       category: referenceId(product.category),
       brand: referenceId(product.brand),
-      status: product.status || "published",
-      price: product.price || 0,
-      salePrice: product.salePrice || 0,
-      discount: product.discount || 0,
-      stock: product.stock || 0,
-      lowStockThreshold: product.lowStockThreshold || 5,
-      weight: product.weight || 0,
-      dimensions: product.dimensions || "",
-      featured: product.featured || false,
-      shortDescription: product.shortDescription || "",
+      status: product.status || "draft",
+      price: product.price ?? 0,
+      comparePrice: product.comparePrice ?? "",
+      costPrice: product.costPrice ?? "",
+      stock: product.stock ?? 0,
+      lowStockThreshold: product.lowStockThreshold ?? 10,
+      weight: product.weight ?? "",
+      dimensions: dimensionsText(product),
+      image: primaryImage(product),
       description: product.description || "",
       tags: product.tags || [],
-      specifications: product.specifications || [],
+      specifications: (product.attributes || []).map((attr) => ({
+        key: attr.name,
+        value: attr.value,
+      })),
     };
   },
 
-  // Table Filters
+  // Table Filters (matched against the raw API records)
   filters: [
     {
-      id: "category",
-      placeholder: "All Categories",
+      id: "status",
+      placeholder: "All Statuses",
       options: [
-        { label: "All Categories", value: "all" },
-        { label: "Electronics", value: "Electronics" },
-        { label: "Furniture", value: "Furniture" },
-        { label: "Clothing", value: "Clothing" },
+        { label: "All Statuses", value: "all" },
+        { label: "Published", value: "published" },
+        { label: "Active", value: "active" },
+        { label: "Draft", value: "draft" },
+        { label: "Pending Review", value: "pending_review" },
+        { label: "Archived", value: "archived" },
       ],
     },
   ],
@@ -355,8 +220,10 @@ export const productConfig = {
   // FormModal Dropdown Options
   statusOptions: [
     { label: "Published", value: "published" },
+    { label: "Active", value: "active" },
     { label: "Pending Review", value: "pending_review" },
     { label: "Draft", value: "draft" },
+    { label: "Inactive", value: "inactive" },
     { label: "Rejected", value: "rejected" },
     { label: "Archived", value: "archived" },
   ] as SelectOption[],
@@ -383,6 +250,23 @@ export const productConfig = {
       section: "Basic Information",
     },
     {
+      name: "status",
+      label: "Status",
+      type: "select",
+      required: true,
+      colSpan: 1,
+      options: [
+        { label: "Published", value: "published" },
+        { label: "Active", value: "active" },
+        { label: "Pending Review", value: "pending_review" },
+        { label: "Draft", value: "draft" },
+        { label: "Inactive", value: "inactive" },
+        { label: "Rejected", value: "rejected" },
+        { label: "Archived", value: "archived" },
+      ],
+      section: "Basic Information",
+    },
+    {
       name: "category",
       label: "Category",
       type: "select",
@@ -394,57 +278,37 @@ export const productConfig = {
       name: "brand",
       label: "Brand",
       type: "select",
-      required: true,
       colSpan: 1,
-      section: "Basic Information",
-    },
-    {
-      name: "status",
-      label: "Status",
-      type: "select",
-      required: true,
-      colSpan: 1,
-      options: [
-        { label: "Published", value: "published" },
-        { label: "Pending Review", value: "pending_review" },
-        { label: "Draft", value: "draft" },
-        { label: "Rejected", value: "rejected" },
-        { label: "Archived", value: "archived" },
-      ],
-      section: "Basic Information",
-    },
-    {
-      name: "featured",
-      label: "Featured Product",
-      type: "switch",
-      colSpan: 2,
       section: "Basic Information",
     },
 
     // Section 2: Pricing & Inventory
     {
       name: "price",
-      label: "Cost Price ($)",
-      type: "number",
-      min: 0,
-      colSpan: 1,
-      section: "Pricing & Inventory",
-    },
-    {
-      name: "salePrice",
       label: "Sale Price ($)",
       type: "number",
       required: true,
       min: 0,
+      step: 0.01,
       colSpan: 1,
       section: "Pricing & Inventory",
     },
     {
-      name: "discount",
-      label: "Discount (%)",
+      name: "comparePrice",
+      label: "Compare-at Price ($)",
       type: "number",
       min: 0,
-      max: 100,
+      step: 0.01,
+      colSpan: 1,
+      helperText: "Original price shown struck through; must be higher than the sale price.",
+      section: "Pricing & Inventory",
+    },
+    {
+      name: "costPrice",
+      label: "Cost Price ($)",
+      type: "number",
+      min: 0,
+      step: 0.01,
       colSpan: 1,
       section: "Pricing & Inventory",
     },
@@ -476,10 +340,10 @@ export const productConfig = {
     },
     {
       name: "dimensions",
-      label: "Dimensions (L x W x H)",
+      label: "Dimensions (L x W x H cm)",
       type: "text",
       colSpan: 2,
-      placeholder: "e.g. 20 x 15 x 8 cm",
+      placeholder: "e.g. 20 x 15 x 8",
       section: "Pricing & Inventory",
     },
 
@@ -494,35 +358,28 @@ export const productConfig = {
     },
     {
       name: "specifications",
-      label: "Dynamic Specifications",
+      label: "Product Attributes",
       type: "key-value",
       colSpan: 2,
       section: "Tags & Specifications",
     },
 
-    // Section 4: Media & Descriptions
+    // Section 4: Media & Description
     {
       name: "image",
-      label: "Product Primary Image URL",
+      label: "Product Image URL",
       type: "image",
       colSpan: 2,
-      section: "Media & Descriptions",
-    },
-    {
-      name: "shortDescription",
-      label: "Short Summary",
-      type: "textarea",
-      rows: 2,
-      colSpan: 2,
-      section: "Media & Descriptions",
+      section: "Media & Description",
     },
     {
       name: "description",
       label: "Full Description",
       type: "textarea",
+      required: true,
       rows: 4,
       colSpan: 4,
-      section: "Media & Descriptions",
+      section: "Media & Description",
     },
   ] as FormField[],
 };

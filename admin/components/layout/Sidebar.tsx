@@ -1,129 +1,187 @@
 "use client";
 
-import React, { useState } from "react";
-import { Home, X, Menu } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
+import {
+  FolderTree,
+  Image as ImageIcon,
+  LayoutDashboard,
+  Package,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Settings,
+  ShoppingCart,
+  Star,
+  Store,
+  Tag,
+  Ticket,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
 import SidebarItem from "@/components/ui/SidebarItem";
-
-export type IconType =
-  | "home"
-  | "dashboard"
-  | "orders"
-  | "products"
-  | "customers"
-  | "reports"
-  | "discounts"
-  | "integrations"
-  | "help"
-  | "settings"
-  | "search"
-  | "fullscreen"
-  | "notifications"
-  | "dropdown"
-  | "sales"
-  | "visitors"
-  | "growth"
-  | "more"
-  | "group"
-  |"media";
+import { useAdminAuth } from "@/services/authContext";
 
 interface SidebarConfig {
   name: string;
-  icon: IconType;
-  iconsize: number;
+  icon: LucideIcon;
   link: string;
-  tailwindcss?: string;
 }
 
 const TOP_ITEMS: SidebarConfig[] = [
-  { name: "Dashboard", icon: "dashboard", iconsize: 20, link: "/" },
-  { name: "Customers", icon: "customers", iconsize: 20, link: "/customers" },
-  { name: "Products", icon: "products", iconsize: 20, link: "/products" },
-  { name: "Orders", icon: "orders", iconsize: 20, link: "/orders" },
-  { name: "Category", icon: "group", iconsize: 20, link: "/categories" },
-  { name: "Brands", icon: "sales", iconsize: 20, link: "/brands" },
-  { name: "Coupons", icon: "discounts", iconsize: 20, link: "/coupons" },
-  { name: "Media", icon: "media", iconsize: 20, link: "/media" },
-  { name: "Reviews", icon: "reports", iconsize: 20, link: "/reviews" },
+  { name: "Dashboard", icon: LayoutDashboard, link: "/" },
+  { name: "Products", icon: Package, link: "/products" },
+  { name: "Orders", icon: ShoppingCart, link: "/orders" },
+  { name: "Customers", icon: Users, link: "/customers" },
+  { name: "Category", icon: FolderTree, link: "/categories" },
+  { name: "Brands", icon: Tag, link: "/brands" },
+  { name: "Coupons", icon: Ticket, link: "/coupons" },
+  { name: "Media", icon: ImageIcon, link: "/media" },
+  { name: "Reviews", icon: Star, link: "/reviews" },
 ];
 
 const BOTTOM_ITEMS: SidebarConfig[] = [
-  // { name: "Integrations", icon: "integrations", iconsize: 20, link: "" },
-  // { name: "Help", icon: "help", iconsize: 20, link: "" },
-  { name: "Settings", icon: "settings", iconsize: 20, link: "/setting" },
+  { name: "Settings", icon: Settings, link: "/setting" },
 ];
 
+function initialsOf(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "A";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
 const Sidebar: React.FC = () => {
-  const [isOpen, setIsOpen] = useState<boolean>(false);
+  const pathname = usePathname();
+  const { user } = useAdminAuth();
+  const [collapsed, setCollapsed] = useState(false);
 
-  const renderSidebarItem = (item: SidebarConfig) => {
-    const iconSizeCalculated = isOpen
-      ? item.iconsize
-      : item.iconsize + 8;
+  // Expanded by default on desktop; remember the admin's own choice.
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("admin-sidebar");
+      if (saved !== null) {
+        setCollapsed(saved === "collapsed");
+      } else if (window.innerWidth < 1024) {
+        setCollapsed(true);
+      }
+    } catch {
+      /* keep the default */
+    }
+  }, []);
 
-    const baseClasses = item.tailwindcss || "";
-    const computedTailwind = isOpen
-      ? baseClasses
-      : `${baseClasses} flex justify-center text-2xl`;
-
-    return (
-      <SidebarItem
-        key={item.name}
-        name={isOpen ? item.name : ""}
-        icon={item.icon}
-        link={item.link}
-        iconsize={Number(iconSizeCalculated)}
-        tooltip={isOpen ? "" : item.name}
-        tailwindcss={computedTailwind}
-      />
-    );
+  const toggle = () => {
+    setCollapsed((prev) => {
+      try {
+        localStorage.setItem("admin-sidebar", prev ? "expanded" : "collapsed");
+      } catch {
+        /* persistence is best-effort */
+      }
+      return !prev;
+    });
   };
+
+  const isActive = (link: string) =>
+    link === "/" ? pathname === "/" : pathname.startsWith(link);
 
   return (
     <aside
-      className={`h-[calc(100dvh-24px)] sticky top-3 left-3 z-50 transition-all duration-300 ${
-        isOpen ? " lg:w-53 w-15 " : "w-15 "
+      className={`h-[calc(100dvh-24px)] sticky top-3 left-3 z-50 shrink-0 transition-all duration-300 ${
+        collapsed ? "w-[68px]" : "w-60"
       }`}
     >
-      <div
-        className={`${
-          isOpen ? "min-w-42 w-[40svw] md:w-64 lg:w-full" : "w-fit"
-        } h-full flex flex-col shadow-xl p-2 bg-(--primary-light) rounded-md`}
-      >
-        {/* Logo Bar */}
-        <div className="h-12 p-2 flex items-center justify-between">
-          <div className="flex items-center gap-2 text-(--text) font-semibold">
-            {isOpen && (
-              <>
-                <Home className="w-5 h-5" />
-                <span>Ecom</span>
-              </>
-            )}
-          </div>
-
-          <button
-            type="button"
-            className={`${isOpen ? "ml-auto" : "mx-auto"} text-(--text) cursor-pointer focus:outline-none`}
-            onClick={() => setIsOpen((prev) => !prev)}
-            aria-label={isOpen ? "Close sidebar" : "Open sidebar"}
-          >
-            {isOpen ? <X size={20} /> : <Menu size={28} />}
-          </button>
+      <div className="h-full flex flex-col shadow-xl p-3 bg-(--primary-light) rounded-2xl">
+        {/* Brand Bar */}
+        <div className={`flex items-center ${collapsed ? "justify-center" : "gap-2.5"} px-1 pt-1 pb-3`}>
+          <span className="w-10 h-10 shrink-0 rounded-xl bg-(--primary) text-white flex items-center justify-center shadow-sm">
+            <Store className="w-5 h-5" />
+          </span>
+          {!collapsed && (
+            <span className="min-w-0 leading-tight">
+              <span className="block text-sm font-bold text-(--text) truncate">
+                Ecom Store
+              </span>
+              <span className="block text-[11px] font-medium text-(--text-soft)">
+                Admin Panel
+              </span>
+            </span>
+          )}
         </div>
 
-        {/* Divider */}
-        <hr className="border-(--border) my-2" />
+        <hr className="border-(--background)/50 mb-3" />
 
-        {/* Sidebar Items */}
-        <div className="flex flex-col h-full justify-between">
-          {/* Top Items */}
-          <nav className="flex flex-col gap-1">
-            {TOP_ITEMS.map(renderSidebarItem)}
+        {/* Navigation */}
+        <div className="flex flex-col flex-1 justify-between min-h-0">
+          <nav className="flex flex-col gap-1 overflow-y-auto">
+            {!collapsed && (
+              <span className="px-3 pb-1 text-[10px] font-bold uppercase tracking-widest text-(--text-soft)/80">
+                Main Menu
+              </span>
+            )}
+            {TOP_ITEMS.map((item) => (
+              <SidebarItem
+                key={item.name}
+                name={item.name}
+                icon={item.icon}
+                link={item.link}
+                active={isActive(item.link)}
+                collapsed={collapsed}
+              />
+            ))}
           </nav>
 
-          {/* Bottom Items */}
-          <nav className="flex flex-col gap-1">
-            {BOTTOM_ITEMS.map(renderSidebarItem)}
-          </nav>
+          <div className="flex flex-col gap-1">
+            {!collapsed && (
+              <span className="px-3 pb-1 text-[10px] font-bold uppercase tracking-widest text-(--text-soft)/80">
+                General
+              </span>
+            )}
+            {BOTTOM_ITEMS.map((item) => (
+              <SidebarItem
+                key={item.name}
+                name={item.name}
+                icon={item.icon}
+                link={item.link}
+                active={isActive(item.link)}
+                collapsed={collapsed}
+              />
+            ))}
+
+            {/* Signed-in admin */}
+            {user && (
+              <div
+                className={`mt-2 flex items-center rounded-xl bg-(--background)/70 p-2 ${
+                  collapsed ? "justify-center" : "gap-2.5"
+                }`}
+                title={collapsed ? user.name : undefined}
+              >
+                <span className="w-8 h-8 shrink-0 rounded-full bg-(--primary) text-white flex items-center justify-center text-[11px] font-bold">
+                  {initialsOf(user.name || "Admin")}
+                </span>
+                {!collapsed && (
+                  <span className="min-w-0 leading-tight">
+                    <span className="block text-xs font-bold text-(--text) truncate">
+                      {user.name}
+                    </span>
+                    <span className="block text-[10px] font-medium text-(--text-muted) truncate">
+                      {user.email || user.role}
+                    </span>
+                  </span>
+                )}
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={toggle}
+              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              className={`mt-1 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-(--text-soft) transition-colors hover:bg-(--background)/60 hover:text-(--text) ${
+                collapsed ? "justify-center px-0" : ""
+              }`}
+            >
+              {collapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
+              {!collapsed && <span>Collapse</span>}
+            </button>
+          </div>
         </div>
       </div>
     </aside>

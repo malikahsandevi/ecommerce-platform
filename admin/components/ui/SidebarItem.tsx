@@ -1,117 +1,43 @@
-import {
-  Home,
-  LayoutDashboard,
-  ShoppingCart,
-  Package,
-  Users,
-  FileText,
-  Percent,
-  Blocks,
-  HelpCircle,
-  Settings,
-  Search,
-  Maximize,
-  Bell,
-  ChevronDown,
-  DollarSign,
-  Eye,
-  TrendingUp,
-  MoreHorizontal,
-  Group,
-  Image, // Media ke liye Image use kiya hai
-} from "lucide-react";
+"use client";
 
-export type IconType =
-  | "home"
-  | "dashboard"
-  | "orders"
-  | "products"
-  | "customers"
-  | "reports"
-  | "discounts"
-  | "integrations"
-  | "help"
-  | "settings"
-  | "search"
-  | "fullscreen"
-  | "notifications"
-  | "dropdown"
-  | "sales"
-  | "visitors"
-  | "growth"
-  | "more"
-  | "group"
-  | "media";
+import React from "react";
+import Link from "next/link";
+import type { LucideIcon } from "lucide-react";
 
-type SidebarItemProps = {
+interface SidebarItemProps {
   name: string;
-  icon: IconType;
-  iconsize: number;
-  tooltip?: string;
-  link?: string;
-  tailwindcss?: string;
-};
+  icon: LucideIcon;
+  link: string;
+  active?: boolean;
+  collapsed?: boolean;
+}
 
-const icons = {
-  // Navigation
-  home: Home,
-  dashboard: LayoutDashboard,
-  orders: ShoppingCart,
-  products: Package,
-  customers: Users,
-  reports: FileText,
-  discounts: Percent,
-  integrations: Blocks,
-  help: HelpCircle,
-  settings: Settings,
-
-  // Header
-  search: Search,
-  fullscreen: Maximize,
-  notifications: Bell,
-  dropdown: ChevronDown,
-
-  // Dashboard / Analytics
-  sales: DollarSign,
-  visitors: Eye,
-  growth: TrendingUp,
-  more: MoreHorizontal,
-  group: Group,
-  media: Image,
-};
-
-const SidebarItem = ({
+const SidebarItem: React.FC<SidebarItemProps> = ({
   name,
-  icon,
-  iconsize,
-  tooltip,
-  tailwindcss = "",
+  icon: Icon,
   link,
-}: SidebarItemProps) => {
-  const Icon = icons[icon];
-
+  active = false,
+  collapsed = false,
+}) => {
   return (
-    <a
-      title={tooltip || undefined}
+    <Link
       href={link}
-      className={`
-        flex
-        items-center
-        gap-3
-        rounded-md
-        p-2
-        text-xl
-        cursor-pointer
-        text-(--text)
-        hover:bg-(--primary)
-        hover:text-(--text-soft)
-        ${tailwindcss}
-      `}
+      title={collapsed ? name : undefined}
+      aria-current={active ? "page" : undefined}
+      className={`relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all duration-150 ${
+        collapsed ? "justify-center px-0" : ""
+      } ${
+        active
+          ? "bg-(--background) text-(--primary-dark) font-semibold shadow-sm"
+          : "text-(--text-soft) hover:bg-(--background)/60 hover:text-(--text)"
+      }`}
     >
-      {Icon && <Icon size={iconsize} />}
-
-      {name && <h2>{name}</h2>}
-    </a>
+      {active && (
+        <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-1 rounded-r-full bg-(--primary)" />
+      )}
+      <Icon size={20} className={active ? "text-(--primary)" : ""} />
+      {!collapsed && <span className="truncate">{name}</span>}
+    </Link>
   );
 };
 

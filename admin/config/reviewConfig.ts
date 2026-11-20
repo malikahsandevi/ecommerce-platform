@@ -78,36 +78,6 @@ export const reviewConfig = {
     status: "Status",
   },
 
-  // Dummy Items Data
-  items: [
-    {
-      _id: "66d48f21e8a9f1a23b666001",
-      id: 1,
-      productId: "66d48f21e8a9f1a23b456789",
-      productName: "Wireless Noise-Canceling Headphones",
-      customerName: "Ali Raza",
-      customerEmail: "ali@example.com",
-      rating: 5,
-      title: "Amazing Sound Quality!",
-      comment: "The active noise cancellation works perfectly during travel.",
-      status: "approved",
-      createdAt: "2026-08-20T10:15:00Z",
-    },
-    {
-      _id: "66d48f21e8a9f1a23b666002",
-      id: 2,
-      productId: "66d48f21e8a9f1a23b456790",
-      productName: "Ergonomic Mesh Chair",
-      customerName: "Usman Ahmed",
-      customerEmail: "usman@example.com",
-      rating: 2,
-      title: "Average Quality",
-      comment: "Armrests feel a bit wobbly, not worth the full price.",
-      status: "pending",
-      createdAt: "2026-08-25T14:30:00Z",
-    },
-  ] as ProductReview[],
-
   // Map Data for CreateTable Component
   mapTableData: (review: ProductReview) => ({
     id: review._id || String(review.id),
@@ -168,7 +138,8 @@ export const reviewConfig = {
         { label: "5 Stars", value: "5" },
         { label: "4 Stars", value: "4" },
         { label: "3 Stars", value: "3" },
-        { label: "2 Stars & Below", value: "low" },
+        { label: "2 Stars", value: "2" },
+        { label: "1 Star", value: "1" },
       ],
     },
   ],

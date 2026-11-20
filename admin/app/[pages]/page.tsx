@@ -37,8 +37,17 @@ const DEFAULT_PAGE_SIZE = 10;
 function withDynamicOptions(fields: FormField[], options: EntityOptions): FormField[] {
   return fields.map((field) => {
     switch (field.name) {
-      case "category":
       case "parentCategory":
+        return options.categoryOptions?.length
+          ? {
+              ...field,
+              options: [
+                { label: "Main Category (None)", value: "" },
+                ...options.categoryOptions,
+              ],
+            }
+          : field;
+      case "category":
         return options.categoryOptions?.length
           ? { ...field, options: options.categoryOptions }
           : field;
@@ -338,6 +347,20 @@ const PageLayout: React.FC = () => {
     [items],
   );
 
+  const handleRowEdit = useCallback(
+    (mappedRow: Row) => {
+      const raw =
+        items.find(
+          (item) => (item._id || item.id) === (mappedRow._id || mappedRow.id),
+        ) || mappedRow;
+      setSelectedRawRow(raw);
+      setFormMode("edit");
+      setFormData(buildInitialFormValues(raw));
+      setIsModalOpen(true);
+    },
+    [items, buildInitialFormValues],
+  );
+
   const handleSaveItem = useCallback(
     async (event: React.FormEvent) => {
       event.preventDefault();
@@ -390,6 +413,10 @@ const PageLayout: React.FC = () => {
         return;
       }
 
+      if (!window.confirm(`Delete this ${Route.replace(/s$/, "").toLowerCase()}? This cannot be undone.`)) {
+        return;
+      }
+
       setLoadError(null);
       setNotice(null);
       try {
@@ -402,6 +429,13 @@ const PageLayout: React.FC = () => {
       }
     },
     [service, Route, reload],
+  );
+
+  const handleRowDelete = useCallback(
+    (mappedRow: Row) => {
+      void handleDeleteItem(String(mappedRow._id || mappedRow.id));
+    },
+    [handleDeleteItem],
   );
 
   /**
@@ -417,14 +451,27 @@ const PageLayout: React.FC = () => {
 
       try {
         const file = mediaData.file as File | undefined;
-        if (!file) {
-          throw new Error(
-            "Pick a file before saving. Uploaded media cannot be edited in place.",
-          );
+        if (file) {
+          await mediaService.upload({
+            file,
+            altText: mediaData.altText,
+            title: mediaData.title,
+            description: mediaData.description,
+          });
+          setNotice("Media uploaded.");
+        } else if (mediaData.id || mediaData._id) {
+          // No new file picked — this is a metadata-only edit of an
+          // already-uploaded item.
+          await mediaService.update(String(mediaData.id || mediaData._id), {
+            title: mediaData.title,
+            altText: mediaData.altText,
+            description: mediaData.description,
+          });
+          setNotice("Media updated.");
+        } else {
+          throw new Error("Pick a file before saving.");
         }
 
-        await mediaService.upload({ file, altText: mediaData.altText });
-        setNotice("Media uploaded.");
         setIsModalOpen(false);
         reload();
       } catch (error) {
@@ -450,6 +497,7 @@ const PageLayout: React.FC = () => {
             role: user?.role
               ? user.role.charAt(0).toUpperCase() + user.role.slice(1)
               : "Admin",
+            email: user?.email,
             avatar: user?.avatar || "",
           }}
           messages={[]}
@@ -536,6 +584,8 @@ const PageLayout: React.FC = () => {
                   selectedRawRow && tableMapper ? tableMapper(selectedRawRow) : null
                 }
                 onSelectItem={handleSelectRow}
+                onEditItem={handleRowEdit}
+                onDeleteItem={handleRowDelete}
                 columnHeaders={currentConfig.columnHeaders}
               />
             </div>
@@ -573,7 +623,31 @@ const PageLayout: React.FC = () => {
         <MediaHandlerModal
           isOpen={isModalOpen}
           mode={formMode}
-          initialData={selectedRawRow}
+          initialData={
+            selectedRawRow
+              ? {
+                  ...selectedRawRow,
+                  // The modal renders these as text — flatten the raw
+                  // record's object/number fields first.
+                  dimensions:
+                    selectedRawRow.dimensions?.width &&
+                    selectedRawRow.dimensions?.height
+                      ? `${selectedRawRow.dimensions.width} x ${selectedRawRow.dimensions.height} px`
+                      : "N/A",
+                  size:
+                    typeof selectedRawRow.size === "number"
+                      ? `${(selectedRawRow.size / 1024).toFixed(1)} KB`
+                      : selectedRawRow.size,
+                  type: selectedRawRow.mimeType || selectedRawRow.type,
+                  previewUrl: selectedRawRow.url,
+                  mediaCategory: selectedRawRow.mimeType?.startsWith("video/")
+                    ? "video"
+                    : selectedRawRow.mimeType?.startsWith("image/")
+                      ? "image"
+                      : "document",
+                }
+              : null
+          }
           onClose={() => setIsModalOpen(false)}
           onSave={handleMediaSave}
         />

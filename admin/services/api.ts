@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 
 export interface PaginationMeta {
   total: number;
@@ -10,6 +10,9 @@ export const apiClient = axios.create({
   // Set NEXT_PUBLIC_API_URL in .env.local (see .env.example) when the
   // backend is deployed; defaults to the local backend.
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api',
+  // The serverless backend can take a while on a cold start (function boot +
+  // Atlas connect), so allow generous time before giving up.
+  timeout: 45000,
 });
 
 apiClient.interceptors.request.use((config) => {
@@ -22,11 +25,61 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
+type RetriableConfig = InternalAxiosRequestConfig & { _retryCount?: number };
+
+const RETRYABLE_STATUSES = new Set([502, 503, 504]);
+const MAX_GET_RETRIES = 2;
+
+apiClient.interceptors.response.use(
+  (response) => response,
+  async (error: AxiosError) => {
+    const config = error.config as RetriableConfig | undefined;
+
+    // A 401 with a stored session means the token died — clear it and let
+    // the auth provider surface the "session expired" notice + login popup.
+    if (error.response?.status === 401 && typeof window !== 'undefined') {
+      if (localStorage.getItem('adminToken')) {
+        localStorage.removeItem('adminToken');
+        localStorage.removeItem('adminUser');
+        window.dispatchEvent(new Event('admin:session-expired'));
+      }
+      throw error;
+    }
+
+    // Cold starts on the free serverless tier occasionally drop the first
+    // request or answer 502/503/504. GETs are idempotent, so retry them a
+    // couple of times with backoff instead of failing the page.
+    const isNetworkError = !error.response;
+    const isRetryableStatus = error.response
+      ? RETRYABLE_STATUSES.has(error.response.status)
+      : false;
+
+    if (
+      config &&
+      (config.method || 'get').toLowerCase() === 'get' &&
+      (isNetworkError || isRetryableStatus) &&
+      (config._retryCount || 0) < MAX_GET_RETRIES
+    ) {
+      config._retryCount = (config._retryCount || 0) + 1;
+      const delay = 1200 * config._retryCount;
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      return apiClient(config);
+    }
+
+    throw error;
+  }
+);
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function extractApiError(error: any): string {
+  if (error?.code === 'ECONNABORTED') {
+    return 'The server took too long to respond. It may be waking up — please try again.';
+  }
   if (error.response && error.response.data && error.response.data.message) {
     return error.response.data.message;
   }
+  if (!error.response && error.message) {
+    return 'Could not reach the server. Check your connection and try again.';
+  }
   return error.message || 'An unexpected error occurred';
 }
-

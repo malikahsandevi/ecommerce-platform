@@ -3,19 +3,15 @@ import { Download, Plus, RefreshCcwDot } from "lucide-react";
 
 export interface Brand {
   _id?: string;
-  id: number;
   name: string;
   slug: string;
-  logo?: string;
-  banner?: string;
   description?: string;
+  logo?: string;
   website?: string;
-  productsCount?: number;
-  isFeatured?: boolean;
-  status: "active" | "inactive" | string;
-  sortOrder?: number;
+  isActive?: boolean;
+  /** Derived from isActive by the list adapter. */
+  status?: string;
   createdAt?: string;
-  updatedAt?: string;
 }
 
 export const brandConfig = {
@@ -50,100 +46,38 @@ export const brandConfig = {
     },
   ],
 
-  searchFields: ["name", "slug", "description", "website"],
+  searchFields: ["name", "slug", "website"],
 
   columnHeaders: {
     _id: "ID",
     name: "Brand Name",
     slug: "Slug",
-    productsCount: "Total Products",
-    isFeatured: "Featured",
+    website: "Website",
     status: "Status",
   },
 
-  items: [
-    {
-      _id: "66d48f21e8a9f1a23b888001",
-      id: 1,
-      name: "AudioTech",
-      slug: "audiotech",
-      logo: "https://images.unsplash.com/photo-1546868871-7041f2a55e12?w=100&auto=format&fit=crop&q=60",
-      banner: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=1200&auto=format&fit=crop&q=60",
-      description: "Premium acoustics and cutting-edge audio engineering.",
-      website: "https://audiotech.example.com",
-      productsCount: 42,
-      isFeatured: true,
-      status: "active",
-      sortOrder: 1,
-      createdAt: "2026-08-01T10:00:00Z",
-    },
-    {
-      _id: "66d48f21e8a9f1a23b888002",
-      id: 2,
-      name: "ComfortMax",
-      slug: "comfortmax",
-      logo: "https://images.unsplash.com/photo-1580481072645-022f9a6d83d0?w=100&auto=format&fit=crop&q=60",
-      banner: "https://images.unsplash.com/photo-1524758631624-e2822e304c36?w=1200&auto=format&fit=crop&q=60",
-      description: "Ergonomic workspace furniture designed for posture and productivity.",
-      website: "https://comfortmax.example.com",
-      productsCount: 18,
-      isFeatured: true,
-      status: "active",
-      sortOrder: 2,
-      createdAt: "2026-08-05T12:00:00Z",
-    },
-    {
-      _id: "66d48f21e8a9f1a23b888003",
-      id: 3,
-      name: "Generic Essentials",
-      slug: "generic-essentials",
-      logo: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=100&auto=format&fit=crop&q=60",
-      description: "Everyday durable essentials at wholesale prices.",
-      website: "https://generic.example.com",
-      productsCount: 65,
-      isFeatured: false,
-      status: "active",
-      sortOrder: 3,
-      createdAt: "2026-08-10T09:00:00Z",
-    },
-    {
-      _id: "66d48f21e8a9f1a23b888004",
-      id: 4,
-      name: "VoltGadgets",
-      slug: "voltgadgets",
-      description: "Smart electronics, power banks and charging solutions.",
-      website: "https://voltgadgets.example.com",
-      productsCount: 0,
-      isFeatured: false,
-      status: "inactive",
-      sortOrder: 4,
-      createdAt: "2026-08-20T16:00:00Z",
-    },
-  ] as Brand[],
-
   mapTableData: (brand: Brand) => ({
-    id: brand._id || String(brand.id),
-    _id: brand.slug,
+    id: brand._id,
+    _id: brand._id,
     name: brand.name,
-    slug: `/${brand.slug}`,
-    productsCount: brand.productsCount || 0,
-    isFeatured: brand.isFeatured ? "Yes" : "No",
-    status: brand.status,
+    image: brand.logo || "",
+    slug: brand.slug,
+    website: brand.website || "—",
+    status: brand.status || (brand.isActive === false ? "inactive" : "active"),
   }),
 
   mapDetailData: (brand: Brand) => ({
-    id: brand._id || String(brand.id),
+    id: brand._id,
     title: brand.name,
-    status: brand.status,
+    status: brand.status || (brand.isActive === false ? "inactive" : "active"),
     image: brand.logo,
-    shortDescription: brand.description || `Website: ${brand.website || "N/A"}`,
+    shortDescription: brand.description || `Website: ${brand.website || "—"}`,
     attributes: {
       Slug: brand.slug,
-      Website: brand.website || "N/A",
-      "Total Products": brand.productsCount || 0,
-      Featured: brand.isFeatured ? "Yes" : "No",
-      "Sort Order": brand.sortOrder ?? "N/A",
-      "Created Date": brand.createdAt ? new Date(brand.createdAt).toLocaleDateString() : "N/A",
+      Website: brand.website || "—",
+      "Created Date": brand.createdAt
+        ? new Date(brand.createdAt).toLocaleDateString()
+        : "—",
     },
     description: brand.description || "",
   }),
@@ -155,49 +89,29 @@ export const brandConfig = {
         slug: "",
         website: "",
         logo: "",
-        banner: "",
         status: "active",
-        isFeatured: false,
-        sortOrder: 0,
         description: "",
       };
     }
 
     return {
       _id: brand._id,
-      id: brand.id,
       name: brand.name || "",
       slug: brand.slug || "",
       website: brand.website || "",
       logo: brand.logo || "",
-      banner: brand.banner || "",
-      status: brand.status || "active",
-      isFeatured: Boolean(brand.isFeatured),
-      sortOrder: brand.sortOrder ?? 0,
+      status: brand.isActive === false ? "inactive" : "active",
       description: brand.description || "",
     };
   },
 
-  filters: [
-    {
-      id: "isFeatured",
-      placeholder: "Featured Status",
-      options: [
-        { label: "All Brands", value: "all" },
-        { label: "Featured Brands", value: "true" },
-        { label: "Standard Brands", value: "false" },
-      ],
-    },
-  ],
+  filters: [],
 
-  categoryOptions: [] as SelectOption[],
-  brandOptions: [] as SelectOption[],
   statusOptions: [
     { label: "Active", value: "active" },
     { label: "Inactive", value: "inactive" },
   ] as SelectOption[],
 
-  // Dynamic FormModal    Schema Definition
   formFields: [
     // Section 1: Brand Details
     {
@@ -213,9 +127,9 @@ export const brandConfig = {
       name: "slug",
       label: "Brand Slug (URL Key)",
       type: "text",
-      required: true,
       colSpan: 2,
       placeholder: "e.g. audiotech",
+      helperText: "Leave blank to auto-generate from the brand name.",
       section: "Brand Details",
     },
     {
@@ -238,48 +152,25 @@ export const brandConfig = {
       ],
       section: "Brand Details",
     },
-    {
-      name: "sortOrder",
-      label: "Sort Order",
-      type: "number",
-      min: 0,
-      colSpan: 1,
-      section: "Brand Details",
-    },
-    {
-      name: "isFeatured",
-      label: "Featured Brand (Show on Homepage Slider)",
-      type: "switch",
-      colSpan: 2,
-      section: "Brand Details",
-    },
 
     // Section 2: Visual Assets
     {
       name: "logo",
-      label: "Brand Square Logo URL",
+      label: "Brand Logo URL",
       type: "image",
       colSpan: 2,
       placeholder: "https://...",
-      section: "Visual Assets & Banners",
-    },
-    {
-      name: "banner",
-      label: "Brand Storefront Cover Banner URL",
-      type: "image",
-      colSpan: 4,
-      placeholder: "https://...",
-      section: "Visual Assets & Banners",
+      section: "Visual Assets",
     },
 
     // Section 3: Description
     {
       name: "description",
-      label: "Brand Story & Description",
+      label: "Brand Description",
       type: "textarea",
       rows: 3,
       colSpan: 4,
-      placeholder: "Write brand story, warranty policies or description...",
+      placeholder: "Describe this brand...",
       section: "Description",
     },
   ] as FormField[],
