@@ -1,37 +1,43 @@
-# Deployment Guide
+# Deployment Guide — Vercel + MongoDB Atlas
 
-Three pieces: database (MongoDB Atlas), backend API (Render), admin
-dashboard (Vercel). About 10 minutes in total.
+Three pieces: database (MongoDB Atlas, free), backend API (Vercel
+serverless), admin dashboard (Vercel). Both code parts deploy from this
+one repo as two separate Vercel projects.
 
 ## 1. Database — MongoDB Atlas (free)
 
-1. Create a free cluster at https://cloud.mongodb.com (M0 tier is enough).
-2. Database Access: create a database user with a password.
-3. Network Access: allow `0.0.0.0/0` (so the hosted backend can connect).
-4. Connect → Drivers → copy the connection string, e.g.
-   `mongodb+srv://<user>:<password>@<cluster>.mongodb.net/ecommerce`
+1. Create a free M0 cluster at https://cloud.mongodb.com
+2. Database Access: create a user (this project uses `ahsan`) with
+   read/write access.
+3. Network Access: allow `0.0.0.0/0` (Vercel functions run from changing
+   IPs, so the API can only connect with open network access).
+4. Your connection string looks like:
+   `mongodb+srv://ahsan:<password>@<cluster>.mongodb.net/ecommerce?retryWrites=true&w=majority`
 
-## 2. Backend API — Render (free)
+## 2. Backend API — Vercel
 
-1. https://dashboard.render.com → **New → Blueprint** → select this repo.
-   The included `render.yaml` creates the `ecommerce-backend` web service.
-2. Fill the secret env values when prompted:
-   `MONGO_URI` (from step 1), `JWT_SECRET` (any long random string),
-   `ADMIN_EMAIL`, `ADMIN_PASSWORD`, and your Cloudinary values.
-3. Deploy. Your API URL will look like
-   `https://ecommerce-backend.onrender.com` — opening it should reply
-   "Server live hai!" and the API lives under `/api/...`.
-
-> Render's free web services sleep when idle; the first request after a
-> break can take ~30–50 seconds to wake up. That is expected on the free tier.
+- Import this repo as a new Vercel project, **Root Directory: `backend`**
+- No build command needed — `backend/vercel.json` routes every request to
+  the serverless entry `backend/api/index.js` (the Express app in
+  `backend/app.js`). `backend/server.js` remains for local use.
+- Environment variables:
+  - `MONGO_URI` — the Atlas string from step 1
+  - `JWT_SECRET` — a long random string
+  - `ADMIN_EMAIL` / `ADMIN_PASSWORD` — the admin login
+  - `CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_API_KEY` / `CLOUDINARY_API_SECRET`
+- Verify: opening the project URL shows `Server live hai!` and
+  `/api/products` returns JSON.
 
 ## 3. Admin dashboard — Vercel
 
-1. Import this repo in Vercel and set the **Root Directory** to `admin`.
-2. Add one environment variable:
-   `NEXT_PUBLIC_API_URL = https://ecommerce-backend.onrender.com/api`
-3. Deploy. Log in with the `ADMIN_EMAIL` / `ADMIN_PASSWORD` from step 2.
+- Import this repo again as a second project, **Root Directory: `admin`**
+- Environment variable (needed before the first build):
+  - `NEXT_PUBLIC_API_URL = https://<backend-project-domain>/api`
+- Verify: the project URL shows the **Admin Sign In** screen; log in with
+  the `ADMIN_EMAIL` / `ADMIN_PASSWORD` from step 2.
 
 ## Local development
 
-See the main [README](README.md#getting-started).
+See the main [README](README.md#getting-started). Locally the backend runs
+the classic way (`node server.js`) — the serverless entry is only used by
+Vercel.
