@@ -24,7 +24,7 @@ const SidebarItem: React.FC<SidebarItemProps> = ({
       href={link}
       title={collapsed ? name : undefined}
       aria-current={active ? "page" : undefined}
-      className={`relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all duration-150 ${
+      className={`relative flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition-all duration-150 ${
         collapsed ? "justify-center px-0" : ""
       } ${
         active

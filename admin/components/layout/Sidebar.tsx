@@ -96,11 +96,11 @@ const Sidebar: React.FC = () => {
         collapsed ? "w-[68px]" : "w-60"
       }`}
     >
-      <div className="h-full flex flex-col shadow-xl p-3 bg-(--primary-light) rounded-2xl">
+      <div className="h-full flex flex-col shadow-xl px-3 py-2.5 bg-(--primary-light) rounded-2xl">
         {/* Brand Bar */}
-        <div className={`flex items-center ${collapsed ? "justify-center" : "gap-2.5"} px-1 pt-1 pb-3`}>
-          <span className="w-10 h-10 shrink-0 rounded-xl bg-(--primary) text-white flex items-center justify-center shadow-sm">
-            <Store className="w-5 h-5" />
+        <div className={`flex items-center ${collapsed ? "justify-center" : "gap-2.5"} px-1 pt-0.5 pb-2`}>
+          <span className="w-9 h-9 shrink-0 rounded-xl bg-(--primary) text-white flex items-center justify-center shadow-sm">
+            <Store className="w-[18px] h-[18px]" />
           </span>
           {!collapsed && (
             <span className="min-w-0 leading-tight">
@@ -114,13 +114,13 @@ const Sidebar: React.FC = () => {
           )}
         </div>
 
-        <hr className="border-(--background)/50 mb-3" />
+        <hr className="border-(--background)/50 mb-2" />
 
         {/* Navigation */}
         <div className="flex flex-col flex-1 justify-between min-h-0">
-          <nav className="flex flex-col gap-1 overflow-y-auto">
+          <nav className="flex flex-col gap-0.5 overflow-y-auto no-scrollbar">
             {!collapsed && (
-              <span className="px-3 pb-1 text-[10px] font-bold uppercase tracking-widest text-(--text-soft)/80">
+              <span className="px-3 pb-0.5 text-[10px] font-bold uppercase tracking-widest text-(--text-soft)/80">
                 Main Menu
               </span>
             )}
@@ -136,9 +136,9 @@ const Sidebar: React.FC = () => {
             ))}
           </nav>
 
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-0.5 mt-2">
             {!collapsed && (
-              <span className="px-3 pb-1 text-[10px] font-bold uppercase tracking-widest text-(--text-soft)/80">
+              <span className="px-3 pb-0.5 text-[10px] font-bold uppercase tracking-widest text-(--text-soft)/80">
                 General
               </span>
             )}
@@ -156,12 +156,12 @@ const Sidebar: React.FC = () => {
             {/* Signed-in admin */}
             {user && (
               <div
-                className={`mt-2 flex items-center rounded-xl bg-(--background)/70 p-2 ${
+                className={`mt-1.5 flex items-center rounded-xl bg-(--background)/70 p-1.5 ${
                   collapsed ? "justify-center" : "gap-2.5"
                 }`}
                 title={collapsed ? user.name : undefined}
               >
-                <span className="w-8 h-8 shrink-0 rounded-full bg-(--primary) text-white flex items-center justify-center text-[11px] font-bold">
+                <span className="w-7 h-7 shrink-0 rounded-full bg-(--primary) text-white flex items-center justify-center text-[10px] font-bold">
                   {initialsOf(user.name || "Admin")}
                 </span>
                 {!collapsed && (
@@ -181,7 +181,7 @@ const Sidebar: React.FC = () => {
               type="button"
               onClick={toggle}
               aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-              className={`mt-1 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-(--text-soft) transition-colors hover:bg-(--background)/60 hover:text-(--text) ${
+              className={`mt-0.5 flex items-center gap-3 rounded-xl px-3 py-2 text-sm text-(--text-soft) transition-colors hover:bg-(--background)/60 hover:text-(--text) ${
                 collapsed ? "justify-center px-0" : ""
               }`}
             >

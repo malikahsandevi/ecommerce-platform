@@ -72,6 +72,16 @@ body {
   outline: none !important;
   border: none !important;
 }
+
+/* Sidebar nav: stays scrollable as a safety fallback on short screens,
+   but the scrollbar itself is never shown. */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
 /* Settings → Appearance → Animations off: neutralise transitions and
    animations panel-wide (the attribute is set by services/appearance.ts). */
 [data-animations="off"] *,

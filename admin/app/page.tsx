@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { AlertCircle, DollarSign, Package, RefreshCcw, ShoppingBag, Users } from "lucide-react";
 import StatsOverview from "@/components/layout/StatsOverview";
+import RevenueAnalytics, { RevenuePoint } from "@/components/layout/RevenueAnalytics";
 import TopCategories, { CategoryItem } from "@/components/layout/TopCategories";
 import RecentOrdersCard, { DashboardOrder } from "@/components/layout/RecentOrdersCard";
 import ActivityCard, { ActivityLogItem } from "@/components/layout/ActivityCard";
@@ -40,6 +41,7 @@ export default function Page() {
   const [recentOrders, setRecentOrders] = useState<DashboardOrder[] | undefined>(undefined);
   const [activityLogs, setActivityLogs] = useState<ActivityLogItem[] | undefined>(undefined);
   const [categories, setCategories] = useState<CategoryItem[] | undefined>(undefined);
+  const [revenueSeries, setRevenueSeries] = useState<RevenuePoint[] | undefined>(undefined);
   const [loadError, setLoadError] = useState(false);
   const [slowLoad, setSlowLoad] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
@@ -54,6 +56,7 @@ export default function Page() {
     setRecentOrders(undefined);
     setActivityLogs(undefined);
     setCategories(undefined);
+    setRevenueSeries(undefined);
 
     // The dashboard payload drives the stat cards, orders and activity —
     // render those as soon as IT lands instead of holding them hostage to
@@ -135,6 +138,18 @@ export default function Page() {
           status: order.status || "pending",
         };
       })
+    );
+
+    // Monthly revenue/orders for the chart — aggregated server-side from
+    // the real Order collection (cancelled orders excluded).
+    setRevenueSeries(
+      Array.isArray(data.revenueSeries)
+        ? data.revenueSeries.map((point: AnyRecord) => ({
+            month: String(point.month || ""),
+            revenue: Number(point.revenue || 0),
+            orders: Number(point.orders || 0),
+          }))
+        : []
     );
 
     setActivityLogs(
@@ -278,6 +293,10 @@ export default function Page() {
             </div>
           )}
           <StatsOverview statsData={statsCards} />
+
+          <section>
+            <RevenueAnalytics data={revenueSeries} />
+          </section>
 
           <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
             <section className="xl:col-span-2">

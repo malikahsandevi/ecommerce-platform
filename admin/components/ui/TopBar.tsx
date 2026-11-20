@@ -113,11 +113,11 @@ export const TopBar = <T extends SearchableEntityRecord>({
   );
 
   return (
-    <header className="w-full min-h-14 bg-(--background) rounded-2xl shadow-sm border border-(--border) px-3 flex items-center justify-between select-none">
+    <header className="w-full min-h-14 bg-(--background) rounded-2xl shadow-sm border border-(--border) px-4 py-3 flex items-center justify-between select-none">
       {/* Dynamic Page Title & Subtitle */}
       <div>
         {showBreadcrumbs && (
-          <nav aria-label="Breadcrumb" className="text-[10px] font-medium text-(--text-muted) leading-tight">
+          <nav aria-label="Breadcrumb" className="text-[10px] font-medium text-(--text-muted) leading-tight mb-0.5">
             Home <span aria-hidden="true" className="mx-0.5">/</span>{" "}
             <span className="text-(--primary)">{title}</span>
           </nav>
