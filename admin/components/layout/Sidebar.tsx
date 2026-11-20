@@ -57,16 +57,23 @@ const Sidebar: React.FC = () => {
 
   // Expanded by default on desktop; remember the admin's own choice.
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem("admin-sidebar");
-      if (saved !== null) {
-        setCollapsed(saved === "collapsed");
-      } else if (window.innerWidth < 1024) {
-        setCollapsed(true);
+    const syncFromStorage = () => {
+      try {
+        const saved = localStorage.getItem("admin-sidebar");
+        if (saved !== null) {
+          setCollapsed(saved === "collapsed");
+        } else if (window.innerWidth < 1024) {
+          setCollapsed(true);
+        }
+      } catch {
+        /* keep the default */
       }
-    } catch {
-      /* keep the default */
-    }
+    };
+    syncFromStorage();
+    // Settings → Appearance (compact sidebar) writes the same key and
+    // fires this event so the change applies without a reload.
+    window.addEventListener("admin:sidebar-pref", syncFromStorage);
+    return () => window.removeEventListener("admin:sidebar-pref", syncFromStorage);
   }, []);
 
   const toggle = () => {

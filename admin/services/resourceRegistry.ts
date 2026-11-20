@@ -45,8 +45,16 @@ function adaptRow(endpoint: string, row: any) {
     case 'users':
     case 'categories':
     case 'brands':
-    case 'media':
       return { ...row, status: row.isActive === false ? 'inactive' : 'active' };
+    case 'media':
+      // Media has a real lifecycle status (published/draft/archived) —
+      // only fall back to the isActive derivation for legacy records.
+      return {
+        ...row,
+        status:
+          row.status ||
+          (row.isActive === false ? 'inactive' : 'active'),
+      };
     case 'coupons': {
       let status = 'active';
       if (row.isActive === false) status = 'disabled';
@@ -299,19 +307,24 @@ export function getResourceService(pathname: string): ResourceService | null {
           apiClient.get('/brands'),
         ]);
 
+        // Only ACTIVE categories/brands may be picked for a product — the
+        // dropdowns used to offer deactivated entries too, so a product
+        // could silently end up filed under an inactive category/brand.
+        const isEnabled = (record: { isActive?: boolean }) => record.isActive !== false;
+
         return {
-          categoryOptions: (categoriesResponse.data || []).map(
-            (category: { _id: string; name: string }) => ({
+          categoryOptions: (categoriesResponse.data || [])
+            .filter(isEnabled)
+            .map((category: { _id: string; name: string }) => ({
               label: category.name,
               value: category._id,
-            }),
-          ),
-          brandOptions: (brandsResponse.data || []).map(
-            (brand: { _id: string; name: string }) => ({
+            })),
+          brandOptions: (brandsResponse.data || [])
+            .filter(isEnabled)
+            .map((brand: { _id: string; name: string }) => ({
               label: brand.name,
               value: brand._id,
-            }),
-          ),
+            })),
         };
       }
       if (apiEndpoint === 'reviews' || apiEndpoint === 'orders') {
@@ -379,6 +392,7 @@ export const mediaService = {
       altText: data.altText || '',
       title: data.title || file.name,
       description: data.description || '',
+      status: data.status || 'published',
       uploadedBy,
     });
     return res.data;
@@ -391,7 +405,14 @@ export const mediaService = {
       title: data.title,
       altText: data.altText,
       description: data.description,
+      status: data.status,
     });
+    return res.data;
+  },
+
+  /** Real storage usage for the Media page cards (Cloudinary + library). */
+  storage: async () => {
+    const res = await apiClient.get('/media/storage');
     return res.data;
   },
 };

@@ -42,7 +42,7 @@ const statusOf = (media: MediaItem): string =>
 export const mediaConfig = {
   routeTitle: "Media",
 
-  tabs: ["All Media", "Active", "Inactive"],
+  tabs: ["All Media", "Published", "Draft", "Archived"],
 
   buttons: [
     {
@@ -126,7 +126,8 @@ export const mediaConfig = {
   categoryOptions: [],
   brandOptions: [],
   statusOptions: [
-    { label: "Active", value: "active" },
-    { label: "Inactive", value: "inactive" },
+    { label: "Published", value: "published" },
+    { label: "Draft", value: "draft" },
+    { label: "Archived", value: "archived" },
   ],
 };

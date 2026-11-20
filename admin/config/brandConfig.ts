@@ -11,6 +11,8 @@ export interface Brand {
   isActive?: boolean;
   /** Derived from isActive by the list adapter. */
   status?: string;
+  /** Real usage count attached by GET /brands. */
+  productsCount?: number;
   createdAt?: string;
 }
 
@@ -53,6 +55,7 @@ export const brandConfig = {
     name: "Brand Name",
     slug: "Slug",
     website: "Website",
+    productsCount: "Products",
     status: "Status",
   },
 
@@ -63,6 +66,8 @@ export const brandConfig = {
     image: brand.logo || "",
     slug: brand.slug,
     website: brand.website || "—",
+    // Real count attached by the API (products actually using this brand).
+    productsCount: brand.productsCount ?? 0,
     status: brand.status || (brand.isActive === false ? "inactive" : "active"),
   }),
 
@@ -75,6 +80,7 @@ export const brandConfig = {
     attributes: {
       Slug: brand.slug,
       Website: brand.website || "—",
+      Products: brand.productsCount ?? 0,
       "Created Date": brand.createdAt
         ? new Date(brand.createdAt).toLocaleDateString()
         : "—",

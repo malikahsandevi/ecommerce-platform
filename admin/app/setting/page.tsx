@@ -17,6 +17,8 @@ import {
 import Button from "@/components/ui/Button";
 import { settingsService } from "@/services/settingsService";
 import type { SettingsDocument, SettingsSection, SettingsUser } from "@/services/settingsService";
+import { useAdminAuth } from "@/services/authContext";
+import { applyAppearance, type AppearanceSettings } from "@/services/appearance";
 import { SettingsPanel } from "../../components/layout/SettingsPanels";
 
 type SettingMenu =
@@ -44,6 +46,7 @@ const settingMenus: { name: SettingMenu; icon: LucideIcon }[] = [
 ];
 
 export default function SettingsPage() {
+  const { isAuthenticated } = useAdminAuth();
   const [activeMenu, setActiveMenu] = useState<SettingMenu>("General");
   const [settings, setSettings] = useState<SettingsDocument>({});
   const [users, setUsers] = useState<SettingsUser[]>([]);
@@ -52,8 +55,14 @@ export default function SettingsPage() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
+  // The settings API requires the admin token — wait for the session
+  // before loading, and reload once it appears (the shell renders this
+  // page behind the login popup, so a mount-only fetch would 401 and the
+  // page would sit on an error even after signing in).
   useEffect(() => {
+    if (!isAuthenticated) return;
     let cancelled = false;
+    setLoading(true);
     settingsService.getSettings()
       .then((data) => {
         if (!cancelled) setSettings(data);
@@ -68,10 +77,10 @@ export default function SettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isAuthenticated]);
 
   useEffect(() => {
-    if (activeMenu !== "Users & Roles") return;
+    if (activeMenu !== "Users & Roles" || !isAuthenticated) return;
     let cancelled = false;
 
     settingsService.getUsers()
@@ -85,7 +94,7 @@ export default function SettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeMenu]);
+  }, [activeMenu, isAuthenticated]);
 
   const saveSection = async (section: SettingsSection, value: unknown) => {
     setSaving(true);
@@ -94,6 +103,10 @@ export default function SettingsPage() {
     try {
       const updated = await settingsService.updateSection(section, value);
       setSettings(updated);
+      // Appearance takes effect immediately, not just in the database.
+      if (section === "appearance") {
+        applyAppearance(updated.appearance as AppearanceSettings);
+      }
       setNotice("Settings saved.");
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Unable to save settings.");

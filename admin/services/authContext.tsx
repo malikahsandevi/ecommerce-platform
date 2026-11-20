@@ -41,6 +41,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setUser(null);
   }, []);
 
+  // Wake the serverless backend (function boot + database connect) as soon
+  // as the panel opens, so the first real request after login is not the
+  // one paying the cold-start cost. Fire-and-forget against a public route.
+  useEffect(() => {
+    apiClient.get('/products').catch(() => {
+      /* warm-up only — failures are retried by the real requests */
+    });
+  }, []);
+
   useEffect(() => {
     const token = localStorage.getItem('adminToken');
     const storedUser = localStorage.getItem('adminUser');

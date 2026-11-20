@@ -7,6 +7,9 @@ const {
     updateOrder,
     deleteOrder
 } = require('../controllers/orderController');
+const { protect } = require('../middleware/auth');
+
+router.use(protect);
 
 router.route('/')
     .get(getOrders)
@@ -18,4 +21,3 @@ router.route('/:id')
     .delete(deleteOrder);
 
 module.exports = router;
-

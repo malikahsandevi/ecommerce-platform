@@ -87,9 +87,14 @@ const mediaSchema = new mongoose.Schema({
   tags: [{ type: String }],
   
   // Status
-  isActive: { 
-    type: Boolean, 
-    default: true 
+  status: {
+    type: String,
+    enum: ['published', 'draft', 'archived'],
+    default: 'published'
+  },
+  isActive: {
+    type: Boolean,
+    default: true
   },
   isPublic: { 
     type: Boolean, 

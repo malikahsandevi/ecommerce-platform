@@ -3,6 +3,11 @@ const router = express.Router();
 const { Setting } = require('../models');
 const genericController = require('../controllers/genericController')(Setting);
 const { getSettings, updateSettings, executeIntegration } = require('../controllers/settingController');
+const { protect } = require('../middleware/auth');
+
+// Settings hold integration credentials and drive outbound calls — every
+// route here requires a signed-in admin.
+router.use(protect);
 
 // Standard settings fetch and update
 router.route('/')

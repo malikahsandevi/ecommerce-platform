@@ -72,3 +72,12 @@ body {
   outline: none !important;
   border: none !important;
 }
+/* Settings → Appearance → Animations off: neutralise transitions and
+   animations panel-wide (the attribute is set by services/appearance.ts). */
+[data-animations="off"] *,
+[data-animations="off"] *::before,
+[data-animations="off"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}

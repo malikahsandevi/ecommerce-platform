@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 import Select, { SelectOption } from "@/components/ui/Select";
 import Button from "@/components/ui/Button";
+import { mediaService } from "@/services/resourceRegistry";
+import { extractApiError } from "@/services/api";
 
 // Export SelectOption for module integration
 export type { SelectOption };
@@ -107,6 +109,26 @@ export const FormModal: React.FC<FormModalProps> = ({
   error,
 }) => {
   const [tagInputs, setTagInputs] = useState<Record<string, string>>({});
+  const [imageUpload, setImageUpload] = useState<{ field: string; busy: boolean; error: string }>({
+    field: "",
+    busy: false,
+    error: "",
+  });
+
+  // Image fields accept a pasted URL or a real file — files go through the
+  // media library upload endpoint and the field receives the hosted URL.
+  const handleImageFile = async (fieldName: string, file: File | undefined) => {
+    if (!file) return;
+    setImageUpload({ field: fieldName, busy: true, error: "" });
+    try {
+      const uploaded = await mediaService.upload({ file, title: file.name });
+      if (!uploaded?.url) throw new Error("The upload did not return a URL.");
+      handleFieldChange(fieldName, uploaded.url);
+      setImageUpload({ field: fieldName, busy: false, error: "" });
+    } catch (uploadError) {
+      setImageUpload({ field: fieldName, busy: false, error: extractApiError(uploadError) });
+    }
+  };
 
   // Group fields by section
   const groupedSections = useMemo(() => {
@@ -471,9 +493,24 @@ export const FormModal: React.FC<FormModalProps> = ({
                 type="text"
                 value={rawValue}
                 onChange={(e) => handleFieldChange(field.name, e.target.value)}
-                placeholder="Image URL (https://...)"
+                placeholder="Image URL (https://...) or upload a file"
                 className="flex-1 px-3 py-2 bg-[var(--surface-muted)] border border-[var(--border)] rounded-xl outline-none text-xs text-[var(--text)]"
               />
+              <label
+                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-xs font-medium cursor-pointer hover:border-[var(--primary)] transition-colors ${imageUpload.busy && imageUpload.field === field.name ? "opacity-50 pointer-events-none" : ""}`}
+              >
+                <UploadCloud className="w-3.5 h-3.5" />
+                {imageUpload.busy && imageUpload.field === field.name ? "Uploading…" : "Upload"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    void handleImageFile(field.name, e.target.files?.[0]);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
               {rawValue && (
                 <img
                   src={rawValue}
@@ -483,6 +520,9 @@ export const FormModal: React.FC<FormModalProps> = ({
                 />
               )}
             </div>
+            {imageUpload.field === field.name && imageUpload.error && (
+              <p className="mt-1 text-[11px] text-red-500">{imageUpload.error}</p>
+            )}
           </div>
         );
 

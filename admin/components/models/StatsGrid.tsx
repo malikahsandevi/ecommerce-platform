@@ -36,7 +36,7 @@ interface PageStatConfig {
 // One entry per route. Anything not listed falls back to the generic total.
 const PAGE_STATS: Record<string, PageStatConfig> = {
   products: {
-    liveStatuses: ["published"],
+    liveStatuses: ["published", "active"],
     liveLabel: "Published",
     pendingStatuses: ["pending_review", "draft"],
     pendingLabel: "Awaiting Review",
@@ -72,7 +72,7 @@ const PAGE_STATS: Record<string, PageStatConfig> = {
     liveLabel: "Active",
     pendingStatuses: ["expired", "disabled"],
     pendingLabel: "Expired / Disabled",
-    amountField: "value",
+    amountField: "discountValue",
     amountLabel: "Total Discount Value",
     icon: Ticket,
   },

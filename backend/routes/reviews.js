@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { Review } = require('../models');
 const genericController = require('../controllers/genericController')(Review);
+const { protect } = require('../middleware/auth');
 
 router.route('/').get(async (req, res) => {
 	try {
@@ -12,8 +13,7 @@ router.route('/').get(async (req, res) => {
 	} catch (error) {
 		res.status(500).json({ message: error.message });
 	}
-}).post(genericController.create);
-router.route('/:id').get(genericController.getById).put(genericController.update).delete(genericController.remove);
+}).post(protect, genericController.create);
+router.route('/:id').get(genericController.getById).put(protect, genericController.update).delete(protect, genericController.remove);
 
 module.exports = router;
-

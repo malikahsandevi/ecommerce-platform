@@ -51,8 +51,7 @@ interface DynamicEndpoint {
 }
 
 interface DynamicIntegration {
-  // category: string;
-  [key: string]: unknown; 
+  usageType: string;
   serviceSlug: string;
   title: string;
   baseUrl: string;
@@ -304,6 +303,7 @@ function StorePanel({ data, saving, onSave }: SectionPanelProps<ObjectData>) {
 }
 
 function PaymentPanel({ data, saving, onSave }: SectionPanelProps<Array<Record<string, unknown>>>) {
+  const [validationError, setValidationError] = useState("");
   const [methods, setMethods] = useState<PaymentMethod[]>(() =>
     (data ?? []).map((method) => ({
       name: String(method.name ?? ""),
@@ -354,7 +354,23 @@ function PaymentPanel({ data, saving, onSave }: SectionPanelProps<Array<Record<s
           Add payment method
         </Button>
       </div>
-      <SettingsSaveButton onSave={() => onSave(methods)} saving={saving} />
+      {validationError && (
+        <p className="mt-4 rounded-lg border border-red-300 bg-red-500/10 p-3 text-xs text-red-600" role="alert">
+          {validationError}
+        </p>
+      )}
+      <SettingsSaveButton
+        onSave={() => {
+          const blank = methods.findIndex((method) => !method.name.trim());
+          if (blank >= 0) {
+            setValidationError(`Payment method ${blank + 1} needs a name before saving.`);
+            return;
+          }
+          setValidationError("");
+          onSave(methods);
+        }}
+        saving={saving}
+      />
     </SettingsCard>
   );
 }
@@ -371,6 +387,7 @@ function ShippingPanel({ data, saving, onSave }: SectionPanelProps<ObjectData>) 
   );
   const [freeShippingThreshold, setFreeShippingThreshold] = useState(String(data?.freeShippingThreshold ?? ""));
   const [defaultShippingMethod, setDefaultShippingMethod] = useState(String(data?.defaultShippingMethod ?? ""));
+  const [validationError, setValidationError] = useState("");
   const updateZone = (index: number, patch: Partial<ShippingZone>) =>
     setZones(zones.map((zone, itemIndex) => (itemIndex === index ? { ...zone, ...patch } : zone)));
 
@@ -441,7 +458,23 @@ function ShippingPanel({ data, saving, onSave }: SectionPanelProps<ObjectData>) 
           onChange={setDefaultShippingMethod}
         />
       </div>
-      <SettingsSaveButton onSave={() => onSave({ zones, freeShippingThreshold, defaultShippingMethod })} saving={saving} />
+      {validationError && (
+        <p className="mt-4 rounded-lg border border-red-300 bg-red-500/10 p-3 text-xs text-red-600" role="alert">
+          {validationError}
+        </p>
+      )}
+      <SettingsSaveButton
+        onSave={() => {
+          const blank = zones.findIndex((zone) => !zone.name.trim());
+          if (blank >= 0) {
+            setValidationError(`Shipping zone ${blank + 1} needs a name before saving.`);
+            return;
+          }
+          setValidationError("");
+          onSave({ zones, freeShippingThreshold, defaultShippingMethod });
+        }}
+        saving={saving}
+      />
     </SettingsCard>
   );
 }
@@ -544,16 +577,43 @@ function SecurityPanel() {
   );
 }
 
-// NEW: Pure Zero-Selection Dynamic Integrations Panel
-// Category Type
-type ServiceCategory = "STORAGE" | "PAYMENT" | "SMS" | "EMAIL" | "AUTH" | "ANALYTICS" | "CUSTOM";
+// Dynamic integrations — the form mirrors the backend Setting schema:
+// `usageType` must be one of the schema enum values (an earlier version of
+// this panel sent a free-form `category` the API dropped, so saving an
+// integration always failed validation), and every auth type gets the
+// exact credential fields the integration runner actually sends.
+const USAGE_TYPE_OPTIONS = [
+  "STORAGE",
+  "PAYMENT",
+  "SMS_NOTIFICATION",
+  "EMAIL",
+  "AUTH",
+  "API",
+] as const;
+
+type UsageType = (typeof USAGE_TYPE_OPTIONS)[number];
+
+const slugifyTitle = (title: string): string =>
+  title
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+const usageTypeOf = (item: Record<string, unknown>): UsageType => {
+  const raw = String(item.usageType ?? item.category ?? "").toUpperCase();
+  if ((USAGE_TYPE_OPTIONS as readonly string[]).includes(raw)) return raw as UsageType;
+  if (raw === "SMS") return "SMS_NOTIFICATION";
+  if (raw === "ANALYTICS" || raw === "CUSTOM") return "API";
+  return "API";
+};
 
 function IntegrationsPanel({ data, saving, onSave }: SectionPanelProps<Array<Record<string, unknown>>>) {
   const [integrations, setIntegrations] = useState<DynamicIntegration[]>(() =>
     (data ?? []).map((item) => ({
+      usageType: usageTypeOf(item),
       serviceSlug: String(item.serviceSlug ?? ""),
       title: String(item.title ?? ""),
-      category: (item.category as ServiceCategory) || "CUSTOM",
       baseUrl: String(item.baseUrl ?? ""),
       authType: (item.authType as AuthType) || "NONE",
       authCredentials: {
@@ -566,14 +626,21 @@ function IntegrationsPanel({ data, saving, onSave }: SectionPanelProps<Array<Rec
       endpoints: Array.isArray(item.endpoints)
         ? (item.endpoints as DynamicEndpoint[])
         : [{ name: "default", path: "/", method: "POST" }],
+      webhooks: Array.isArray(item.webhooks) ? (item.webhooks as Webhook[]) : [],
       isConnected: item.isConnected !== false,
     })),
   );
+  const [validationError, setValidationError] = useState("");
 
   const updateIntegration = (index: number, patch: Partial<DynamicIntegration>) =>
     setIntegrations(
       integrations.map((item, itemIndex) => (itemIndex === index ? { ...item, ...patch } : item)),
     );
+
+  const updateCredentials = (index: number, patch: Partial<DynamicIntegration["authCredentials"]>) =>
+    updateIntegration(index, {
+      authCredentials: { ...integrations[index].authCredentials, ...patch },
+    });
 
   const addEndpoint = (integrationIndex: number) => {
     const updated = [...integrations];
@@ -602,10 +669,32 @@ function IntegrationsPanel({ data, saving, onSave }: SectionPanelProps<Array<Rec
     setIntegrations(updated);
   };
 
+  // The API rejects the whole save when a required field is blank, with a
+  // generic message — catch the problems here and name the field instead.
+  const validate = (): string => {
+    for (const [index, item] of integrations.entries()) {
+      const label = item.title || `Connector ${index + 1}`;
+      if (!item.title.trim()) return `Connector ${index + 1}: a service title is required.`;
+      if (!item.serviceSlug.trim()) return `${label}: a unique service slug is required.`;
+      if (!item.baseUrl.trim()) return `${label}: a base API URL is required.`;
+      for (const endpoint of item.endpoints) {
+        if (!endpoint.name.trim()) return `${label}: every endpoint needs an action name.`;
+        if (!endpoint.path.trim()) return `${label}: every endpoint needs a path.`;
+      }
+    }
+    return "";
+  };
+
+  const handleSave = () => {
+    const problem = validate();
+    setValidationError(problem);
+    if (!problem) onSave(integrations as unknown as Array<Record<string, unknown>>);
+  };
+
   return (
     <SettingsCard
       title="API / Integrations"
-      description="Connect any REST service directly using custom URL, API's, Auth headers, and Endpoints without preset categories."
+      description="Connect any REST service directly using a custom URL, auth credentials, and endpoints."
     >
       <div className="space-y-6">
         {integrations.map((item, index) => (
@@ -617,7 +706,7 @@ function IntegrationsPanel({ data, saving, onSave }: SectionPanelProps<Array<Rec
                   {item.title || "New Connector / API"}
                 </span>
                 <span className="ml-2 rounded-md bg-[var(--primary-light)]/20 px-2 py-0.5 text-xs text-[var(--primary)] border border-[var(--primary)]/30 font-medium">
-                  {String(item.category)}
+                  {item.usageType}
                 </span>
               </div>
               <div className="flex items-center gap-3">
@@ -635,19 +724,31 @@ function IntegrationsPanel({ data, saving, onSave }: SectionPanelProps<Array<Rec
               </div>
             </div>
 
-            {/* Service Main Fields with Category */}
+            {/* Service main fields */}
             <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
               <SettingsInput
                 label="Service Title"
                 placeholder="e.g. Cloudinary / Twilio"
                 value={item.title}
-                onChange={(e) => updateIntegration(index, { title: e.target.value })}
+                onChange={(e) => {
+                  const title = e.target.value;
+                  // Keep the unique slug in sync with the title until the
+                  // admin edits the slug field directly — requiring a
+                  // hand-typed slug made new connectors unsaveable.
+                  const slugEdited =
+                    item.serviceSlug.trim() !== "" &&
+                    item.serviceSlug !== slugifyTitle(item.title);
+                  updateIntegration(index, {
+                    title,
+                    ...(slugEdited ? {} : { serviceSlug: slugifyTitle(title) }),
+                  });
+                }}
               />
               <SettingsSelect
-                label="Service Category"
-                value={String(item.category)}
-                options={["STORAGE", "PAYMENT", "SMS", "EMAIL", "AUTH", "ANALYTICS", "API"]}
-                onChange={(category) => updateIntegration(index, { category: category as ServiceCategory })}
+                label="Usage Type"
+                value={item.usageType}
+                options={[...USAGE_TYPE_OPTIONS]}
+                onChange={(usageType) => updateIntegration(index, { usageType: usageType as UsageType })}
               />
               <SettingsInput
                 label="Service Slug (Unique)"
@@ -663,7 +764,8 @@ function IntegrationsPanel({ data, saving, onSave }: SectionPanelProps<Array<Rec
               />
             </div>
 
-            {/* Authentication Config */}
+            {/* Authentication — the fields follow the auth type, matching
+                exactly what the backend runner sends. */}
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3 bg-[var(--background)] p-3 rounded-lg border border-[var(--border)]">
               <SettingsSelect
                 label="Auth Type"
@@ -672,39 +774,67 @@ function IntegrationsPanel({ data, saving, onSave }: SectionPanelProps<Array<Rec
                 onChange={(authType) => updateIntegration(index, { authType: authType as AuthType })}
               />
 
-              {item.authType !== "NONE" && (
+              {item.authType === "API_KEY" && (
+                <>
+                  <SettingsInput
+                    label="Header Name"
+                    placeholder="X-API-Key"
+                    value={item.authCredentials.headerKey}
+                    onChange={(e) => updateCredentials(index, { headerKey: e.target.value })}
+                  />
+                  <SettingsInput
+                    label="API Key"
+                    type="password"
+                    value={item.authCredentials.apiKey}
+                    onChange={(e) => updateCredentials(index, { apiKey: e.target.value })}
+                  />
+                </>
+              )}
+
+              {item.authType === "BEARER_TOKEN" && (
                 <SettingsInput
-                  label={item.authType === "CUSTOM_HEADER" ? "Header Key Name" : "API Token / Key"}
-                  value={
-                    item.authType === "CUSTOM_HEADER"
-                      ? item.authCredentials.headerKey
-                      : item.authCredentials.apiKey
-                  }
-                  onChange={(e) =>
-                    updateIntegration(index, {
-                      authCredentials: {
-                        ...item.authCredentials,
-                        [item.authType === "CUSTOM_HEADER" ? "headerKey" : "apiKey"]: e.target.value,
-                      },
-                    })
-                  }
+                  label="Bearer Token"
+                  type="password"
+                  value={item.authCredentials.apiKey}
+                  onChange={(e) => updateCredentials(index, { apiKey: e.target.value })}
                 />
               )}
 
               {item.authType === "BASIC" && (
-                <SettingsInput
-                  label="Username"
-                  value={item.authCredentials.username}
-                  onChange={(e) =>
-                    updateIntegration(index, {
-                      authCredentials: { ...item.authCredentials, username: e.target.value },
-                    })
-                  }
-                />
+                <>
+                  <SettingsInput
+                    label="Username"
+                    value={item.authCredentials.username}
+                    onChange={(e) => updateCredentials(index, { username: e.target.value })}
+                  />
+                  <SettingsInput
+                    label="Password"
+                    type="password"
+                    value={item.authCredentials.password}
+                    onChange={(e) => updateCredentials(index, { password: e.target.value })}
+                  />
+                </>
+              )}
+
+              {item.authType === "CUSTOM_HEADER" && (
+                <>
+                  <SettingsInput
+                    label="Header Name"
+                    placeholder="X-Custom-Auth"
+                    value={item.authCredentials.headerKey}
+                    onChange={(e) => updateCredentials(index, { headerKey: e.target.value })}
+                  />
+                  <SettingsInput
+                    label="Header Value"
+                    type="password"
+                    value={item.authCredentials.apiKey}
+                    onChange={(e) => updateCredentials(index, { apiKey: e.target.value })}
+                  />
+                </>
               )}
             </div>
 
-            {/* Dynamic Endpoints Section */}
+            {/* Dynamic endpoints */}
             <div className="pt-2">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-semibold text-[var(--text-soft)] flex items-center gap-1">
@@ -752,7 +882,7 @@ function IntegrationsPanel({ data, saving, onSave }: SectionPanelProps<Array<Rec
         ))}
 
         {integrations.length === 0 && (
-          <p className="text-sm text-[var(--text-muted)]">No dynamic integration connectors configured.</p>
+          <p className="text-sm text-[var(--text-muted)]">No integration connectors configured.</p>
         )}
 
         <Button
@@ -762,13 +892,15 @@ function IntegrationsPanel({ data, saving, onSave }: SectionPanelProps<Array<Rec
             setIntegrations([
               ...integrations,
               {
+                usageType: "API",
                 serviceSlug: "",
                 title: "",
-                category: "CUSTOM",
                 baseUrl: "",
                 authType: "NONE",
-                authCredentials: {},
+                authCredentials: { apiKey: "", headerKey: "Authorization", username: "", password: "" },
+                globalHeaders: {},
                 endpoints: [{ name: "default", path: "/", method: "POST" }],
+                webhooks: [],
                 isConnected: true,
               },
             ])
@@ -778,7 +910,13 @@ function IntegrationsPanel({ data, saving, onSave }: SectionPanelProps<Array<Rec
         </Button>
       </div>
 
-      <SettingsSaveButton onSave={() => onSave(integrations)} saving={saving} />
+      {validationError && (
+        <p className="mt-4 rounded-lg border border-red-300 bg-red-500/10 p-3 text-xs text-red-600" role="alert">
+          {validationError}
+        </p>
+      )}
+
+      <SettingsSaveButton onSave={handleSave} saving={saving} />
     </SettingsCard>
   );
 }

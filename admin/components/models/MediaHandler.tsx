@@ -27,6 +27,8 @@ export interface MediaItem {
   date: string;
   previewUrl: string;
   mediaCategory: "image" | "video" | "audio" | "model3d" | "document";
+  /** Library status from the Media schema: published | draft | archived. */
+  status: string;
 }
 
 interface MediaHandlerModalProps {
@@ -67,6 +69,7 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
             date: initialData.date || new Date().toISOString().split("T")[0],
             previewUrl: initialData.previewUrl || initialData.url || "",
             mediaCategory: initialData.mediaCategory || "image",
+            status: initialData.status || "published",
           },
         ]);
         setSelectedIndex(0);
@@ -145,6 +148,7 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
         date: new Date().toISOString().split("T")[0],
         previewUrl: previewUrl,
         mediaCategory: category,
+        status: "published",
       };
 
       if (category === "image") {
@@ -378,6 +382,21 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
                         }
                         className="w-full rounded-md px-3 py-1.5 text-xs focus:outline-none resize-none bg-[var(--surface)] border border-[var(--border)] text-[var(--text)] focus:border-[var(--primary)]"
                       />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs mb-1 text-[var(--text-soft)]">
+                        Status
+                      </label>
+                      <select
+                        value={currentItem.status || "published"}
+                        onChange={(e) => handleInputChange("status", e.target.value)}
+                        className="w-full rounded-md px-3 py-1.5 text-xs focus:outline-none bg-[var(--surface)] border border-[var(--border)] text-[var(--text)] focus:border-[var(--primary)]"
+                      >
+                        <option value="published">Published</option>
+                        <option value="draft">Draft</option>
+                        <option value="archived">Archived</option>
+                      </select>
                     </div>
                   </div>
                 </div>

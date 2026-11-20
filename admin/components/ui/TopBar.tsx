@@ -76,6 +76,21 @@ export const TopBar = <T extends SearchableEntityRecord>({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // Breadcrumb visibility comes from Settings → Appearance (default on).
+  const [showBreadcrumbs, setShowBreadcrumbs] = useState(true);
+  useEffect(() => {
+    const sync = () => {
+      try {
+        setShowBreadcrumbs(localStorage.getItem("admin-breadcrumbs") !== "0");
+      } catch {
+        /* keep the default */
+      }
+    };
+    sync();
+    window.addEventListener("admin:breadcrumbs-pref", sync);
+    return () => window.removeEventListener("admin:breadcrumbs-pref", sync);
+  }, []);
+
   const unreadMsgCount = messages.filter((m) => m.isUnread).length;
   const unreadNotifCount = notifications.filter((n) => n.isUnread).length;
   const avatarSrc = user.avatar?.trim();
@@ -101,6 +116,12 @@ export const TopBar = <T extends SearchableEntityRecord>({
     <header className="w-full min-h-14 bg-(--background) rounded-2xl shadow-sm border border-(--border) px-3 flex items-center justify-between select-none">
       {/* Dynamic Page Title & Subtitle */}
       <div>
+        {showBreadcrumbs && (
+          <nav aria-label="Breadcrumb" className="text-[10px] font-medium text-(--text-muted) leading-tight">
+            Home <span aria-hidden="true" className="mx-0.5">/</span>{" "}
+            <span className="text-(--primary)">{title}</span>
+          </nav>
+        )}
         <h1 className="text-md md:text-xl font-bold text-(--text) leading-tight">
           {title}
         </h1>

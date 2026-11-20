@@ -3,6 +3,7 @@ const router = express.Router();
 const { Media, User } = require('../models');
 const genericController = require('../controllers/genericController')(Media);
 const cloudinary = require('../config/cloudinary');
+const { protect } = require('../middleware/auth');
 
 // Mime types the Media schema accepts.
 const ALLOWED_MIME_TYPES = [
@@ -16,12 +17,63 @@ const ALLOWED_MIME_TYPES = [
     'application/msword',
 ];
 
+// GET /api/media/storage — real storage picture for the Media page cards:
+// this library's usage grouped by provider, plus the Cloudinary account's
+// own usage/quota straight from the Cloudinary Admin API.
+router.get('/storage', protect, async (req, res) => {
+    try {
+        const records = await Media.find().select('size url storageType').lean();
+
+        const providerOf = (record) => {
+            const url = record.url || '';
+            if (url.includes('res.cloudinary.com')) return 'cloudinary';
+            if (url.includes('amazonaws.com')) return 'aws';
+            if (url.includes('firebasestorage') || url.includes('storage.googleapis.com')) return 'firebase';
+            if (record.storageType === 'cloud') return 'cloudinary';
+            return 'local';
+        };
+
+        const providers = {};
+        let libraryBytes = 0;
+        for (const record of records) {
+            const name = providerOf(record);
+            if (!providers[name]) providers[name] = { usedBytes: 0, files: 0 };
+            providers[name].usedBytes += record.size || 0;
+            providers[name].files += 1;
+            libraryBytes += record.size || 0;
+        }
+
+        let cloudinaryUsage = null;
+        try {
+            const usage = await cloudinary.api.usage();
+            cloudinaryUsage = {
+                plan: usage.plan || null,
+                storageUsedBytes: usage.storage?.usage ?? null,
+                creditsUsed: usage.credits?.usage ?? null,
+                creditsLimit: usage.credits?.limit ?? null,
+                creditsUsedPercent: usage.credits?.used_percent ?? null,
+                resources: usage.resources ?? null,
+            };
+        } catch {
+            cloudinaryUsage = null; // panel falls back to library-only numbers
+        }
+
+        res.json({
+            library: { files: records.length, usedBytes: libraryBytes },
+            providers,
+            cloudinary: cloudinaryUsage,
+        });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+});
+
 // POST /api/media/upload — accepts a base64 data URL, stores the file on
 // Cloudinary and registers a Media record. Mounted before /:id so "upload"
 // is never treated as a document id.
-router.post('/upload', express.json({ limit: '15mb' }), async (req, res) => {
+router.post('/upload', protect, express.json({ limit: '15mb' }), async (req, res) => {
     try {
-        const { dataUrl, filename, altText, title, description } = req.body || {};
+        const { dataUrl, filename, altText, title, description, status } = req.body || {};
 
         if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:')) {
             return res.status(400).json({ message: 'A file (base64 data URL) is required.' });
@@ -65,6 +117,7 @@ router.post('/upload', express.json({ limit: '15mb' }), async (req, res) => {
             title: title || originalName,
             altText: altText || '',
             description: description || '',
+            status: ['published', 'draft', 'archived'].includes(status) ? status : 'published',
         });
 
         res.status(201).json(media);
@@ -73,7 +126,35 @@ router.post('/upload', express.json({ limit: '15mb' }), async (req, res) => {
     }
 });
 
-router.route('/').get(genericController.getAll).post(genericController.create);
-router.route('/:id').get(genericController.getById).put(genericController.update).delete(genericController.remove);
+router.route('/').get(genericController.getAll).post(protect, genericController.create);
+router.route('/:id')
+    .get(genericController.getById)
+    .put(protect, genericController.update)
+    .delete(protect, async (req, res) => {
+        try {
+            const media = await Media.findById(req.params.id);
+            if (!media) return res.status(404).json({ message: 'Not found' });
+
+            // Best effort: remove the file from Cloudinary too, so deleting
+            // in the panel does not leave orphaned assets behind.
+            if (media.storageType === 'cloud' && media.path) {
+                try {
+                    const resourceType = media.mimeType?.startsWith('video/')
+                        ? 'video'
+                        : media.mimeType === 'application/pdf' || media.mimeType === 'application/msword'
+                          ? 'raw'
+                          : 'image';
+                    await cloudinary.uploader.destroy(media.path, { resource_type: resourceType });
+                } catch {
+                    /* the record is still deleted below */
+                }
+            }
+
+            await media.deleteOne();
+            res.json({ message: 'Deleted successfully' });
+        } catch (error) {
+            res.status(500).json({ message: error.message });
+        }
+    });
 
 module.exports = router;

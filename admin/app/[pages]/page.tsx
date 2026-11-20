@@ -7,6 +7,7 @@ import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
 
 import TopBar from "@/components/ui/TopBar";
 import StatsGrid from "@/components/models/StatsGrid";
+import MediaStats from "@/components/models/MediaStats";
 import TabsBar, { HeaderActionButton } from "@/components/models/TabsBar";
 import FilterBar from "@/components/models/FilterBar";
 import { CreateTable } from "@/components/models/CreateTable";
@@ -198,7 +199,15 @@ const PageLayout: React.FC = () => {
   const tabFilteredItems = useMemo(() => {
     if (activeTab === tablist[0]) return items;
     const wanted = normaliseStatus(activeTab);
-    return items.filter((item) => normaliseStatus(item.status) === wanted);
+    // "active" and "published" are the same live state in the product
+    // taxonomy (the schema accepts both) — a product in either must show
+    // under the Published tab instead of vanishing from every tab.
+    const STATUS_ALIASES: Record<string, string[]> = {
+      published: ["published", "active"],
+      active: ["active", "published"],
+    };
+    const wantedSet = STATUS_ALIASES[wanted] || [wanted];
+    return items.filter((item) => wantedSet.includes(normaliseStatus(item.status)));
   }, [items, activeTab, tablist]);
 
   const totalPages = Math.max(1, Math.ceil(displayItems.length / itemsPerPage));
@@ -457,6 +466,7 @@ const PageLayout: React.FC = () => {
             altText: mediaData.altText,
             title: mediaData.title,
             description: mediaData.description,
+            status: mediaData.status,
           });
           setNotice("Media uploaded.");
         } else if (mediaData.id || mediaData._id) {
@@ -466,6 +476,7 @@ const PageLayout: React.FC = () => {
             title: mediaData.title,
             altText: mediaData.altText,
             description: mediaData.description,
+            status: mediaData.status,
           });
           setNotice("Media updated.");
         } else {
@@ -502,10 +513,10 @@ const PageLayout: React.FC = () => {
           }}
           messages={[]}
           notifications={[]}
-          searchPlaceholder={`Search ${Route.toLowerCase()}...`}
-          searchData={tabFilteredItems as never}
-          searchFields={currentConfig.searchFields}
-          onSearchResults={(results) => setDisplayItems(results)}
+          // No TopBar search on list pages: the FilterBar below owns
+          // searching/filtering. Both used to write the displayed rows
+          // from independent search state, so typing in one box was
+          // silently overwritten by the other.
         />
       </header>
 
@@ -544,7 +555,11 @@ const PageLayout: React.FC = () => {
       <div className="flex flex-1 flex-col min-h-0 w-full overflow-y-auto lg:flex-row lg:overflow-hidden gap-3">
         <section className="flex flex-1 flex-col lg:min-w-158 min-h-0 bg-[var(--background)] space-y-3 lg:overflow-hidden">
           <div className="w-full shrink-0">
-            <StatsGrid pageUrl={Route.toLowerCase()} items={items} isLoading={isBusy} />
+            {isMediaPage ? (
+              <MediaStats items={items} isLoading={isBusy} />
+            ) : (
+              <StatsGrid pageUrl={Route.toLowerCase()} items={items} isLoading={isBusy} />
+            )}
           </div>
 
           <div className="flex flex-1 flex-col min-h-100 lg:min-h-0 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-sm lg:overflow-hidden">

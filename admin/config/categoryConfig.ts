@@ -12,6 +12,8 @@ export interface Category {
   /** Derived from isActive by the list adapter. */
   status?: string;
   sortOrder?: number;
+  /** Real usage count attached by GET /categories. */
+  productsCount?: number;
   createdAt?: string;
 }
 
@@ -65,6 +67,7 @@ export const categoryConfig = {
     name: "Category Name",
     slug: "Slug",
     sortOrder: "Sort Order",
+    productsCount: "Products",
     status: "Status",
   },
 
@@ -76,6 +79,8 @@ export const categoryConfig = {
     image: category.image || "",
     slug: category.slug,
     sortOrder: category.sortOrder ?? 0,
+    // Real count attached by the API (products actually using this category).
+    productsCount: category.productsCount ?? 0,
     status: category.status || (category.isActive === false ? "inactive" : "active"),
   }),
 
@@ -89,6 +94,7 @@ export const categoryConfig = {
     attributes: {
       Slug: category.slug,
       "Sort Order": category.sortOrder ?? 0,
+      Products: category.productsCount ?? 0,
       "Created Date": category.createdAt
         ? new Date(category.createdAt).toLocaleDateString()
         : "—",

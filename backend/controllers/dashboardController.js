@@ -5,20 +5,31 @@ const { User, Product, Order, ActivityLog, Analytics, Category } = require('../m
 // @access  Admin
 const getDashboardData = async (req, res) => {
     try {
-        const totalCustomers = await User.countDocuments();
-        const totalProducts = await Product.countDocuments();
-        const totalOrders = await Order.countDocuments();
-        
-        // Use total field from orders to sum revenue (ignoring status for now to match UI easily)
-        const orders = await Order.find({});
-        const totalRevenue = orders.reduce((acc, order) => acc + (order.total || 0), 0);
+        // Run every query in parallel — sequentially awaiting eight round
+        // trips made the serverless cold-start path needlessly slow.
+        const [
+            totalCustomers,
+            totalProducts,
+            totalOrders,
+            revenueAggregate,
+            recentOrders,
+            activityLogs,
+            topCategories,
+            existingAnalytics,
+        ] = await Promise.all([
+            User.countDocuments(),
+            Product.countDocuments(),
+            Order.countDocuments(),
+            Order.aggregate([{ $group: { _id: null, total: { $sum: '$total' } } }]),
+            Order.find().sort({ createdAt: -1 }).limit(5).populate('user', 'firstName lastName email'),
+            ActivityLog.find().sort({ createdAt: -1 }).limit(10),
+            Category.find().limit(5),
+            Analytics.findOne(),
+        ]);
 
-        const recentOrders = await Order.find().sort({ createdAt: -1 }).limit(5).populate('user', 'firstName lastName email');
-        const activityLogs = await ActivityLog.find().sort({ createdAt: -1 }).limit(10);
-        
-        const topCategories = await Category.find().limit(5); // Just a fallback if needed
-        
-        let analytics = await Analytics.findOne();
+        const totalRevenue = revenueAggregate[0]?.total || 0;
+
+        let analytics = existingAnalytics;
         if (!analytics) {
             analytics = await Analytics.create({});
         }

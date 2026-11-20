@@ -1,16 +1,23 @@
 // /app/layout.tsx
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
 import Sidebar from "@/components/layout/Sidebar";
 import AdminLoginPopup from "@/components/Login";
 import { AuthProvider, useAdminAuth } from "@/services/authContext";
+import { fetchAndApplyAppearance } from "@/services/appearance";
 import "./globals.css";
 
 // Renders the shell and gates the panel behind a session. Kept separate from
 // RootLayout because useAdminAuth must run *inside* the provider.
 function AdminShell({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isRestoring, sessionNotice, clearNotice } = useAdminAuth();
+
+  // Saved Appearance settings (theme, compact sidebar, breadcrumbs,
+  // animations) live in the settings document — apply them once signed in.
+  useEffect(() => {
+    if (isAuthenticated) void fetchAndApplyAppearance();
+  }, [isAuthenticated]);
 
   // Avoid flashing the login popup while the session probe is still running.
   const showLoginPopup = !isRestoring && !isAuthenticated;

@@ -13,6 +13,26 @@ const settingSections = new Set([
 
 const arraySections = new Set(['paymentMethods', 'integrations']);
 
+// The integration schema requires `usageType` from this enum. Older admin
+// builds sent a `category` field instead (with values like SMS / ANALYTICS /
+// CUSTOM), which the normalizer used to drop — making every integration
+// save fail schema validation. Accept both spellings and store the enum.
+const INTEGRATION_USAGE_TYPES = ['STORAGE', 'PAYMENT', 'SMS_NOTIFICATION', 'EMAIL', 'AUTH', 'API'];
+const LEGACY_CATEGORY_MAP = {
+    SMS: 'SMS_NOTIFICATION',
+    ANALYTICS: 'API',
+    CUSTOM: 'API',
+};
+
+const resolveUsageType = (item) => {
+    const raw = String(item.usageType || item.category || '').toUpperCase();
+    if (INTEGRATION_USAGE_TYPES.includes(raw)) return raw;
+    if (LEGACY_CATEGORY_MAP[raw]) return LEGACY_CATEGORY_MAP[raw];
+    throw new Error(
+        `Integration "${item.title || item.serviceSlug || 'unnamed'}" has an invalid usage type "${item.usageType || item.category || ''}". Use one of: ${INTEGRATION_USAGE_TYPES.join(', ')}`
+    );
+};
+
 const getSettings = async (req, res) => {
     try {
         const settings = await Setting.findOne().sort({ createdAt: 1 });
@@ -44,6 +64,7 @@ const normalizeSection = (section, value, currentValue) => {
                     throw new Error('Each integration must have serviceSlug, title, and baseUrl');
                 }
                 return {
+                    usageType: resolveUsageType(item),
                     serviceSlug: item.serviceSlug,
                     title: item.title,
                     baseUrl: item.baseUrl,
@@ -167,11 +188,34 @@ const executeIntegration = async (req, res) => {
 
         const url = `${service.baseUrl.replace(/\/$/, '')}/${endpoint.path.replace(/^\//, '')}`;
 
+        // SSRF guard: integrations may only call public http(s) services —
+        // never loopback / private-network addresses on the host.
+        let parsedUrl;
+        try {
+            parsedUrl = new URL(url);
+        } catch {
+            return res.status(400).json({ success: false, message: 'Integration URL is invalid.' });
+        }
+        const host = parsedUrl.hostname.toLowerCase();
+        const isPrivateHost =
+            host === 'localhost' ||
+            host.endsWith('.local') ||
+            /^127\./.test(host) ||
+            /^10\./.test(host) ||
+            /^192\.168\./.test(host) ||
+            /^172\.(1[6-9]|2\d|3[01])\./.test(host) ||
+            host === '::1';
+        if (!['http:', 'https:'].includes(parsedUrl.protocol) || isPrivateHost) {
+            return res.status(400).json({ success: false, message: 'Integration URL must be a public http(s) address.' });
+        }
+
         const response = await axios({
             method: endpoint.method,
             url,
             headers,
             params: queryParams,
+            timeout: 10000,
+            maxContentLength: 1024 * 1024,
             data: ['POST', 'PUT', 'PATCH'].includes(endpoint.method) ? payload : undefined
         });
 

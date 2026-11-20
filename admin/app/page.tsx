@@ -35,12 +35,13 @@ function customerNameOf(order: AnyRecord): string {
 }
 
 export default function Page() {
-  const { user } = useAdminAuth();
+  const { user, isAuthenticated } = useAdminAuth();
   const [statsCards, setStatsCards] = useState<StatCardProps[] | undefined>(undefined);
   const [recentOrders, setRecentOrders] = useState<DashboardOrder[] | undefined>(undefined);
   const [activityLogs, setActivityLogs] = useState<ActivityLogItem[] | undefined>(undefined);
   const [categories, setCategories] = useState<CategoryItem[] | undefined>(undefined);
   const [loadError, setLoadError] = useState(false);
+  const [slowLoad, setSlowLoad] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
 
   const [searchRecords, setSearchRecords] = useState<ProductSearchRecord[]>([]);
@@ -48,17 +49,27 @@ export default function Page() {
 
   const fetchData = useCallback(async () => {
     setLoadError(false);
+    setSlowLoad(false);
     setStatsCards(undefined);
     setRecentOrders(undefined);
     setActivityLogs(undefined);
     setCategories(undefined);
 
-    const [dashboard, productsResult] = await Promise.allSettled([
-      getDashboardAllData(),
-      apiClient.get("/products"),
-    ]);
+    // The dashboard payload drives the stat cards, orders and activity —
+    // render those as soon as IT lands instead of holding them hostage to
+    // the (independent) products request, which used to delay the whole
+    // page behind whichever call was slower on a cold start.
+    const slowTimer = setTimeout(() => setSlowLoad(true), 6000);
 
-    const data = dashboard.status === "fulfilled" ? dashboard.value : null;
+    const productsPromise = apiClient
+      .get("/products")
+      .then((res) => (Array.isArray(res.data) ? res.data : []))
+      .catch(() => [] as AnyRecord[]);
+
+    const data = await getDashboardAllData();
+    clearTimeout(slowTimer);
+    setSlowLoad(false);
+
     if (!data) {
       setLoadError(true);
       return;
@@ -138,10 +149,7 @@ export default function Page() {
     // Category share is computed from the real product catalog: the
     // dashboard endpoint returns the categories, the products endpoint
     // says how many products sit in each one.
-    const products: AnyRecord[] =
-      productsResult.status === "fulfilled" && Array.isArray(productsResult.value.data)
-        ? productsResult.value.data
-        : [];
+    const products: AnyRecord[] = await productsPromise;
 
     const counts = new Map<string, number>();
     for (const product of products) {
@@ -180,7 +188,12 @@ export default function Page() {
     );
   }, []);
 
+  // Only fetch once signed in (the dashboard API requires the token), and
+  // re-run when the session appears — the shell renders this page behind
+  // the login popup, so a mount-only fetch would fire unauthenticated and
+  // never recover after login.
   useEffect(() => {
+    if (!isAuthenticated) return;
     let cancelled = false;
     (async () => {
       if (!cancelled) await fetchData();
@@ -188,7 +201,7 @@ export default function Page() {
     return () => {
       cancelled = true;
     };
-  }, [fetchData, reloadToken]);
+  }, [fetchData, reloadToken, isAuthenticated]);
 
   return (
     <div className="flex-1 min-w-0 p-3 bg-[var(--background)] text-[var(--text)] transition-colors duration-200 flex flex-col gap-3">
@@ -258,6 +271,12 @@ export default function Page() {
         </div>
       ) : (
         <>
+          {slowLoad && statsCards === undefined && (
+            <div className="rounded-2xl border border-amber-500/25 bg-amber-500/5 px-4 py-3 text-xs text-(--text-muted)">
+              The server is waking up — the first load after a quiet period can
+              take a little longer. Your numbers will appear in a moment.
+            </div>
+          )}
           <StatsOverview statsData={statsCards} />
 
           <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">

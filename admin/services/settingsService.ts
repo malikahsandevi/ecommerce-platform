@@ -1,12 +1,13 @@
 import { apiClient } from "./api";
 
+// Mirrors the backend's section allowlist exactly — an earlier version
+// also declared an "apiSettings" section the API rejects as unknown.
 export type SettingsSection =
   | "general"
   | "storeInfo"
   | "paymentMethods"
   | "shipping"
   | "notifications"
-  | "apiSettings"
   | "integrations"
   | "appearance";
 
@@ -17,7 +18,6 @@ export interface SettingsDocument {
   paymentMethods?: Array<Record<string, unknown>>;
   shipping?: Record<string, unknown>;
   notifications?: Record<string, unknown>;
-  apiSettings?: Record<string, unknown>;
   integrations?: Array<Record<string, unknown>>;
   appearance?: Record<string, unknown>;
 }
