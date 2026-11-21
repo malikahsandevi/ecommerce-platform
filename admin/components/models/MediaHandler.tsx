@@ -847,13 +847,13 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
 
       {mediaList.length > 0 ? (
         <div
-          className={`mt-3 flex flex-1 items-stretch gap-3 overflow-x-auto overflow-y-hidden pb-2 ${SCROLLBAR_CLASSES}`}
+          className={`mt-3 flex gap-3 overflow-x-auto overflow-y-hidden pb-2 ${SCROLLBAR_CLASSES}`}
         >
           {mediaList.map((item, index) => (
             <div
               key={item.id}
               onClick={() => setSelectedIndex(index)}
-              className={`group relative aspect-square h-full shrink-0 cursor-pointer overflow-hidden rounded-lg border-2 transition-all bg-[var(--background)] ${
+              className={`group relative h-24 w-24 shrink-0 cursor-pointer overflow-hidden rounded-lg border-2 transition-all bg-[var(--background)] ${
                 selectedIndex === index
                   ? "border-[var(--primary)]"
                   : "border-[var(--border)]"
@@ -874,13 +874,13 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
                 <TickCircle on={!!item.ticked} />
               </button>
               {badgeOf(item)}
-              {/* Hover / active remove bar — sits just above the filename
-                  strip so both stay readable. */}
+              {/* Hover / active remove bar — parked below the card's
+                  bottom edge, it slides up over the filename strip. */}
               <div
-                className={`absolute inset-x-0 bottom-[17px] z-10 transition-all duration-150 ${
+                className={`absolute inset-x-0 bottom-0 z-10 transition-transform duration-200 ${
                   selectedIndex === index
-                    ? "translate-y-0 opacity-100"
-                    : "translate-y-1 opacity-0 group-hover:translate-y-0 group-hover:opacity-100"
+                    ? "translate-y-0"
+                    : "translate-y-full group-hover:translate-y-0"
                 }`}
               >
                 <button
@@ -951,10 +951,17 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
         ? Math.round((1 - displayEff.size / displayOriginalSize) * 100)
         : null;
 
+    // With no image in the queue the panel still renders in full — a
+    // light veil covers it until an image arrives.
+    const showOptimizerOverlay = imageItems.length === 0;
+
     return (
-      <div
-        className={`flex min-h-0 flex-col gap-3 overflow-y-auto rounded-xl border border-[var(--primary)] bg-[var(--primary)]/5 p-3 ${SCROLLBAR_CLASSES}`}
-      >
+      <div className="relative flex min-h-0 flex-col overflow-hidden rounded-xl border border-[var(--primary)] bg-[var(--primary)]/5">
+        <div
+          className={`flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3 ${SCROLLBAR_CLASSES} ${
+            showOptimizerOverlay ? "pointer-events-none" : ""
+          }`}
+        >
         <h3 className="flex shrink-0 items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-[var(--primary)]">
           <Zap size={14} className="fill-current" />
           Image Optimization
@@ -963,15 +970,6 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
           </span>
         </h3>
 
-        {mediaList.length === 0 ? (
-          <p className="text-xs text-[var(--text-muted)]">
-            Add an image to optimize it before upload.
-          </p>
-        ) : imageItems.length === 0 ? (
-          <p className="text-xs text-[var(--text-muted)]">
-            Optimization applies to images only.
-          </p>
-        ) : (
           <>
             {/* Scope */}
             <div className="flex flex-wrap items-center gap-2">
@@ -1069,12 +1067,14 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
             </div>
 
             {/* Before / after — shows the display image (the active
-                image, or the first queued image as a fallback). */}
+                image, or the first queued image as a fallback). With no
+                image queued, a placeholder box sits under the veil. */}
             {usingFallback && (
               <p className="text-[11px] text-[var(--text-muted)]">
                 Selected file is not an image — showing the first image.
               </p>
             )}
+            {displayItem ? (
             <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 text-xs">
               <div className="flex items-center justify-between gap-2">
                 <span className="max-w-[40%] truncate font-medium text-[var(--text)]">
@@ -1124,7 +1124,32 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
                 </span>
               </div>
             </div>
+            ) : (
+              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 text-xs">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium text-[var(--text-muted)]">
+                    No image
+                  </span>
+                  <span className="text-[var(--text-muted)]">—</span>
+                </div>
+                <div className="mt-2 flex items-center justify-between gap-2 border-t border-dashed border-[var(--border)] pt-2">
+                  <span className="font-semibold text-[var(--text)]">
+                    Total ({optimizedCount} optimized, {originalCount} original)
+                  </span>
+                  <span className="text-[var(--text-muted)]">—</span>
+                </div>
+              </div>
+            )}
           </>
+        </div>
+
+        {showOptimizerOverlay && (
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-[var(--surface)]/75 backdrop-blur-[1px]">
+            <ImageIcon className="h-8 w-8 text-[var(--text-muted)]" />
+            <p className="px-4 text-center text-sm font-medium text-[var(--text-soft)]">
+              Upload image to use Image Optimizer
+            </p>
+          </div>
         )}
       </div>
     );
@@ -1215,7 +1240,7 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
             )}
 
             {/* Row 1 — drop zone | uploaded images (50/50) */}
-            <div className="grid shrink-0 gap-3 md:grid-cols-2 md:h-[232px]">
+            <div className="grid shrink-0 gap-3 md:grid-cols-2">
               {renderDropZone("h-48 md:h-full")}
               {renderUploadedPanel()}
             </div>
