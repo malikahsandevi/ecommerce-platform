@@ -36,7 +36,7 @@ export const MonthlyTargetCard: React.FC<MonthlyTargetCardProps> = ({ data }) =>
     return (
       <div className="p-5 w-full h-full bg-(--background) rounded-2xl shadow-sm border border-(--border) animate-pulse flex flex-col">
         <div className="h-5 bg-(--primary-soft) rounded w-32 mb-4"></div>
-        <div className="mx-auto w-44 h-20 bg-(--primary-soft) rounded-t-full"></div>
+        <div className="mx-auto w-36 h-12 bg-(--primary-soft) rounded-t-full"></div>
         <div className="h-3 bg-(--primary-soft) rounded w-40 mx-auto mt-5"></div>
         <div className="h-14 bg-(--primary-soft) rounded-xl mt-5"></div>
       </div>
@@ -69,14 +69,16 @@ export const MonthlyTargetCard: React.FC<MonthlyTargetCardProps> = ({ data }) =>
       </div>
 
       {/* Semicircle gauge — geometry ported from the original design's
-          MonthlyTargetCard: the chart lives in a tall (h-35) box whose
+          MonthlyTargetCard: the chart lives in a taller (h-20) box whose
           lower half is clipped by the short overflow-hidden wrapper, so
           the arc sits DOWN in the card with the percentage under its
           centre. The previous PieChart version centred the full circle
           in a 128px box, which floated the arc at the top of the card
-          with dead space underneath it. */}
-      <div className="relative w-full h-20 md:h-22 flex items-center justify-center overflow-hidden mt-1">
-        <div className="absolute top-0 w-full h-35">
+          with dead space underneath it. The box heights were scaled
+          down (h-35/h-20 → h-20/h-12) to shorten this dashboard row;
+          the proportions are unchanged. */}
+      <div className="relative w-full h-12 flex items-center justify-center overflow-hidden mt-1">
+        <div className="absolute top-0 w-full h-20">
           <ResponsiveContainer width="100%" height="100%">
             <RadialBarChart
               cx="50%"
@@ -103,8 +105,8 @@ export const MonthlyTargetCard: React.FC<MonthlyTargetCardProps> = ({ data }) =>
           </ResponsiveContainer>
 
           {/* Centre text under the arc */}
-          <div className="absolute top-[28%] lg:top-[33%] md:top-[28%] left-1/2 -translate-x-1/2 flex flex-col items-center text-center">
-            <span className="text-[28px] leading-8 font-bold text-(--text)">
+          <div className="absolute top-[28%] left-1/2 -translate-x-1/2 flex flex-col items-center text-center">
+            <span className="text-2xl leading-6 font-bold text-(--text)">
               {hasTarget ? `${pct % 1 ? pct.toFixed(1) : pct}%` : "—"}
             </span>
             {data.vsLastMonthPct !== null && (
@@ -127,7 +129,7 @@ export const MonthlyTargetCard: React.FC<MonthlyTargetCardProps> = ({ data }) =>
           absorb the extra space and push the Target/Revenue strip to
           the bottom, leaving a dead gap under this text. The strip
           must follow the text with its normal mt-4 spacing. */}
-      <div className="text-center mt-3">
+      <div className="text-center mt-2">
         {encouragement ? (
           <>
             <p className="text-[13px] font-bold text-(--text)">{encouragement.title}</p>
@@ -151,13 +153,13 @@ export const MonthlyTargetCard: React.FC<MonthlyTargetCardProps> = ({ data }) =>
 
       {/* Target | Revenue boxes */}
       <div className="mt-4 grid grid-cols-2 rounded-xl overflow-hidden bg-(--primary-soft)">
-        <div className="py-3 text-center border-r border-(--background)">
+        <div className="py-2.5 text-center border-r border-(--background)">
           <p className="text-[11px] font-medium text-(--text-muted)">Target</p>
           <p className="text-sm font-bold text-(--text) mt-0.5">
             {hasTarget ? fmtMoney(data.target) : "Not set"}
           </p>
         </div>
-        <div className="py-3 text-center">
+        <div className="py-2.5 text-center">
           <p className="text-[11px] font-medium text-(--text-muted)">Revenue</p>
           <p className="text-sm font-bold text-(--text) mt-0.5">
             {fmtMoney(data.revenueThisMonth)}

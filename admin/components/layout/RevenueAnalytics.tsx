@@ -84,13 +84,13 @@ export const RevenueAnalytics: React.FC<RevenueAnalyticsProps> = ({
 
   if (dailyData === undefined || monthlyData === undefined) {
     return (
-      <div className="p-5 w-full h-full bg-(--background) rounded-2xl shadow-sm border border-(--border) animate-pulse">
+      <div className="p-4 w-full h-full bg-(--background) rounded-2xl shadow-sm border border-(--border) animate-pulse">
         <div className="flex items-center justify-between mb-4">
           <div className="h-5 bg-(--primary-soft) rounded w-40"></div>
           <div className="h-8 bg-(--primary-soft) rounded-lg w-28"></div>
         </div>
         <div className="h-3 bg-(--primary-soft) rounded w-48 mb-5"></div>
-        <div className="h-60 bg-(--primary-soft) rounded-xl"></div>
+        <div className="h-40 bg-(--primary-soft) rounded-xl"></div>
       </div>
     );
   }
@@ -109,7 +109,7 @@ export const RevenueAnalytics: React.FC<RevenueAnalyticsProps> = ({
         }));
 
   return (
-    <div className="p-5 w-full h-full bg-(--background) rounded-2xl shadow-sm border border-(--border) flex flex-col">
+    <div className="p-4 w-full h-full bg-(--background) rounded-2xl shadow-sm border border-(--border) flex flex-col">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-base font-bold text-(--text)">Revenue Analytics</h3>
@@ -118,7 +118,7 @@ export const RevenueAnalytics: React.FC<RevenueAnalyticsProps> = ({
             value={range}
             onChange={(event) => setRange(event.target.value as RangeKey)}
             aria-label="Chart range"
-            className="appearance-none bg-(--primary) hover:bg-(--primary-dark) transition-colors text-white text-xs font-semibold rounded-lg pl-3 pr-8 py-2 cursor-pointer outline-none"
+            className="appearance-none bg-(--primary) hover:bg-(--primary-dark) transition-colors text-white text-xs font-semibold rounded-lg pl-3 pr-8 py-1.5 cursor-pointer outline-none"
           >
             <option value="8days">Last 8 Days</option>
             <option value="6months">Last 6 Months</option>
@@ -128,7 +128,7 @@ export const RevenueAnalytics: React.FC<RevenueAnalyticsProps> = ({
       </div>
 
       {/* Legend — mirrors the reference (solid = Revenue, dashed = Order) */}
-      <div className="flex items-center gap-5 mt-3 mb-1 text-[11px] font-medium text-(--text-muted)">
+      <div className="flex items-center gap-5 mt-2 mb-1 text-[11px] font-medium text-(--text-muted)">
         <span className="inline-flex items-center gap-2">
           <span
             className="inline-block w-5 border-t-[2.5px] rounded"
@@ -145,7 +145,7 @@ export const RevenueAnalytics: React.FC<RevenueAnalyticsProps> = ({
         </span>
       </div>
 
-      <div className="w-full flex-1 min-h-60">
+      <div className="w-full flex-1 min-h-40">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 10, right: 6, left: 0, bottom: 0 }}>
             <CartesianGrid
