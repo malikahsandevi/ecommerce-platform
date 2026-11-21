@@ -886,12 +886,12 @@ function UsersPanel({
               <th className="px-4 py-3">Email</th>
               <th className="px-4 py-3">Role</th>
               <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3" />
+              <th className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
             {users.map((user) => (
-              <tr key={user._id} className="border-t border-[var(--border)]">
+              <tr key={user._id} className="group border-t border-[var(--border)]">
                 <td className="px-4 py-3 font-medium text-[var(--text)]">
                   <span className="flex items-center gap-2.5">
                     <UserAvatarTile user={user} />
@@ -930,14 +930,20 @@ function UsersPanel({
                   </button>
                 </td>
                 <td className="px-4 py-3 text-right">
+                  {/* Same row-action rule as the shared resource
+                      tables: always visible, muted at rest, full
+                      colour on the hovered row. (This table's row
+                      action is delete; role/status edit inline.) */}
                   {canDeleteUsers && (
-                    <Button
-                      variant="danger"
-                      size="sm"
-                      icon={Trash2}
+                    <button
+                      type="button"
                       aria-label={`Delete ${user.email}`}
+                      title="Delete"
                       onClick={() => onDeleteUser(user._id)}
-                    />
+                      className="rounded-md p-1.5 text-[var(--text-muted)] transition-colors duration-200 hover:bg-red-500/10 hover:text-red-500 group-hover:text-red-500"
+                    >
+                      <Trash2 size={16} />
+                    </button>
                   )}
                 </td>
               </tr>
