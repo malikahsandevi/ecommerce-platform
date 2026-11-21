@@ -87,6 +87,10 @@ export interface MediaItem {
   effSize?: number;
   effType?: string;
   effName?: string;
+  /** Object URL of the processed blob — what thumbnails/previews show
+   *  once processing produced the file that will actually be used, so
+   *  the user SEES the processed image, not the original. */
+  effUrl?: string;
   /** `${id}|${targetMime}` the eff* fields belong to — guards stale results. */
   procKey?: string;
   /** Processing was attempted for the current settings and failed. */
@@ -278,6 +282,14 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
   const [isPreparing, setIsPreparing] = useState(false);
   /** The optimizer's explicit Convert/Compress button is running. */
   const [isOptimizing, setIsOptimizing] = useState(false);
+  /** Per-file progress of the button's run: files finished / total,
+   *  plus whether one is currently in flight (its segment shows half
+   *  full). Drives the fill INSIDE the Convert & Compress button. */
+  const [optProgress, setOptProgress] = useState<{
+    done: number;
+    total: number;
+    active: boolean;
+  } | null>(null);
   /** Edit mode: everything using this media item ("Used In" panel). */
   const [usage, setUsage] = useState<MediaUsage>(EMPTY_USAGE);
   const [usageLoading, setUsageLoading] = useState(false);
@@ -461,6 +473,7 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
         if (it.id !== item.id) return it;
         if (`${it.id}|${targetMimeFor(it)}` !== key) return it;
         if (!blob) {
+          if (it.effUrl) URL.revokeObjectURL(it.effUrl);
           return {
             ...it,
             procKey: key,
@@ -468,9 +481,24 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
             effSize: undefined,
             effType: undefined,
             effName: undefined,
+            effUrl: undefined,
           };
         }
         const useProcessed = blob.size < file.size;
+        // The displayed image must BECOME the processed result: hand
+        // the thumbnails/previews an object URL for the processed blob
+        // (revoking the superseded one). Without this the panel's
+        // numbers changed but the picture never did, so the optimizer
+        // looked like it did nothing.
+        let effUrl: string | undefined;
+        if (useProcessed) {
+          effUrl = URL.createObjectURL(blob);
+          if (it.effUrl && it.effUrl !== effUrl) {
+            URL.revokeObjectURL(it.effUrl);
+          }
+        } else if (it.effUrl) {
+          URL.revokeObjectURL(it.effUrl);
+        }
         return {
           ...it,
           procKey: key,
@@ -478,6 +506,7 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
           effSize: useProcessed ? blob.size : undefined,
           effType: useProcessed ? mime : undefined,
           effName: useProcessed ? processedNameFor(file.name, mime) : undefined,
+          effUrl,
         };
       }),
     );
@@ -520,22 +549,34 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
     const work = items.filter((it) => it.file && targetMimeFor(it));
     if (!work.length || isOptimizing) return;
     setIsOptimizing(true);
+    // Progress is real, per file: items whose processing already
+    // finished (background run or an earlier click) count as done
+    // immediately; each remaining file moves the fill as it completes.
+    let done = work.filter(
+      (it) => it.procKey === `${it.id}|${targetMimeFor(it)}`,
+    ).length;
+    setOptProgress({ done, total: work.length, active: done < work.length });
     try {
       for (const item of work) {
         const mime = targetMimeFor(item);
         if (!mime) continue;
         const key = `${item.id}|${mime}`;
+        if (item.procKey === key) continue;
         if (
           processedBlobsRef.current.has(key) &&
           processedBlobsRef.current.get(key) === null
         ) {
           processedBlobsRef.current.delete(key);
         }
+        setOptProgress({ done, total: work.length, active: true });
         const blob = await getProcessedBlob(item, mime);
         applyProcessedResult(item, key, blob);
+        done += 1;
+        setOptProgress({ done, total: work.length, active: done < work.length });
       }
     } finally {
       setIsOptimizing(false);
+      setOptProgress(null);
     }
   };
 
@@ -738,6 +779,9 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
       if (item.previewUrl?.startsWith("blob:")) {
         URL.revokeObjectURL(item.previewUrl);
       }
+      if (item.effUrl) {
+        URL.revokeObjectURL(item.effUrl);
+      }
       clearProcessingCacheFor(item);
     }
     setMediaList((prev) => prev.filter((_, i) => i !== index));
@@ -755,6 +799,9 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
     mediaList.forEach((item) => {
       if (item.previewUrl?.startsWith("blob:")) {
         URL.revokeObjectURL(item.previewUrl);
+      }
+      if (item.effUrl) {
+        URL.revokeObjectURL(item.effUrl);
       }
     });
     processedBlobsRef.current.clear();
@@ -916,7 +963,7 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
       case "image":
         return (
           <img
-            src={item.previewUrl}
+            src={item.effUrl || item.previewUrl}
             alt={item.altText || item.title || ""}
             className="w-full h-full object-cover"
           />
@@ -1217,23 +1264,50 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
     opt: ImageOptimization,
     disabled: boolean,
     onRun: () => void,
-  ) => (
-    <div className="mt-auto pt-1">
-      <button
-        type="button"
-        disabled={disabled || isOptimizing}
-        onClick={onRun}
-        className="flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--primary)] px-4 py-2.5 text-sm font-semibold text-white transition-all hover:bg-[var(--primary-dark)] disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        {isOptimizing ? (
-          <Loader2 size={16} className="animate-spin" />
-        ) : (
-          <Zap size={16} className="fill-current" />
-        )}
-        {optButtonLabel(opt, isOptimizing)}
-      </button>
-    </div>
-  );
+  ) => {
+    // The progress fill lives INSIDE the button: a lighter shade of
+    // the button's own colour sweeping left → right behind the label,
+    // sized by the real per-file progress (an in-flight file holds
+    // its segment at half). The label carries the percentage.
+    const pct =
+      optProgress && optProgress.total > 0
+        ? Math.min(
+            100,
+            Math.round(
+              ((optProgress.done + (optProgress.active ? 0.5 : 0)) /
+                optProgress.total) *
+                100,
+            ),
+          )
+        : 0;
+    return (
+      <div className="mt-auto pt-1">
+        <button
+          type="button"
+          disabled={disabled || isOptimizing}
+          onClick={onRun}
+          className="relative flex w-full items-center justify-center overflow-hidden rounded-lg bg-[var(--primary)] px-4 py-2.5 text-sm font-semibold text-white transition-all hover:bg-[var(--primary-dark)] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {isOptimizing && (
+            <span
+              aria-hidden
+              className="absolute inset-y-0 left-0 bg-white/30 transition-[width] duration-500 ease-out"
+              style={{ width: `${pct}%` }}
+            />
+          )}
+          <span className="relative z-10 flex items-center justify-center gap-2">
+            {isOptimizing ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <Zap size={16} className="fill-current" />
+            )}
+            {optButtonLabel(opt, isOptimizing)}
+            {isOptimizing && optProgress ? ` ${pct}%` : ""}
+          </span>
+        </button>
+      </div>
+    );
+  };
 
   const renderOptimizationPanel = (forcedOverlayText?: string) => {
     const imageItems = mediaList.filter(
@@ -1505,7 +1579,7 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
       case "image":
         return (
           <img
-            src={item.previewUrl}
+            src={item.effUrl || item.previewUrl}
             alt={item.altText || item.title || ""}
             className="max-h-full max-w-full object-contain"
           />
@@ -1532,12 +1606,16 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
       <h3 className="shrink-0 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
         Media Preview
       </h3>
-      <div className="mt-3 flex h-44 min-h-0 flex-1 items-center justify-center overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface)] md:h-auto">
+      <div className="relative mt-3 flex h-44 min-h-0 flex-1 items-center justify-center overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface)] md:h-auto">
         {currentItem ? (
           renderEditPreview(currentItem)
         ) : (
           <ImageIcon className="h-10 w-10 opacity-40 text-[var(--text-muted)]" />
         )}
+        {/* The processed image carries the same ⚡ badge as the
+            upload strip, so the conversion is visibly marked on the
+            preview itself. */}
+        {currentItem && badgeOf(currentItem)}
       </div>
       {currentItem && (
         <p className="mt-2 shrink-0 truncate text-center text-[11px] text-[var(--text-muted)]">
