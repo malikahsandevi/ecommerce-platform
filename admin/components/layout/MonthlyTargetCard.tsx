@@ -72,47 +72,46 @@ export const MonthlyTargetCard: React.FC<MonthlyTargetCardProps> = ({ data }) =>
       {/* Semicircle gauge — explicit pixel geometry: outerRadius 57
           and innerRadius 30 render a ~114px wide arc with a ~27px
           thick band (the same proportions as the previous 84px arc,
-          moderately larger — not oversized). cy=57 puts the diameter
-          line 57px into the section; the 59px clip window shows the
-          full semicircle plus a 2px margin, and the chart box (130px)
-          overflows it, but the sector only draws the top semicircle,
-          so nothing renders below the diameter line. The percentage
-          sits fully UNDER the arc (label top 58px, just below the
-          diameter) inside the section's 100px flow height. The card
-          itself is content-height (no h-full): it no longer stretches
-          to the dashboard row, so no dead band sits under the strip. */}
-      <div className="relative w-full h-[100px]">
-        <div className="absolute inset-x-0 top-0 h-[59px] overflow-hidden">
-          <div className="absolute top-0 left-0 w-full h-[130px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <RadialBarChart
-                cx="50%"
-                cy={57}
-                innerRadius={30}
-                outerRadius={57}
-                data={chartData}
-                startAngle={180}
-                endAngle={0}
-              >
-                <PolarAngleAxis
-                  type="number"
-                  domain={[0, 100]}
-                  angleAxisId={0}
-                  tick={false}
-                />
-                <RadialBar
-                  background={{ fill: "var(--primary-light)" }}
-                  dataKey="value"
-                  cornerRadius={4}
-                  fill="var(--primary)"
-                />
-              </RadialBarChart>
-            </ResponsiveContainer>
-          </div>
+          moderately larger — not oversized). The chart box is exactly
+          as tall as the arc it holds: cy=57 puts the diameter line
+          57px down and the box is 59px, so the full semicircle renders
+          with a 2px margin and nothing below the diameter line (the
+          sector only ever draws the top semicircle). The percentage
+          sits in NORMAL FLOW underneath the chart box with a 4px gap —
+          it is not positioned over the chart, so it can never overlap
+          the arc whatever its text width. The card itself is
+          content-height (no h-full): it no longer stretches to the
+          dashboard row, so no dead band sits under the strip. */}
+      <div className="w-full">
+        <div className="relative w-full h-[59px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <RadialBarChart
+              cx="50%"
+              cy={57}
+              innerRadius={30}
+              outerRadius={57}
+              data={chartData}
+              startAngle={180}
+              endAngle={0}
+            >
+              <PolarAngleAxis
+                type="number"
+                domain={[0, 100]}
+                angleAxisId={0}
+                tick={false}
+              />
+              <RadialBar
+                background={{ fill: "var(--primary-light)" }}
+                dataKey="value"
+                cornerRadius={4}
+                fill="var(--primary)"
+              />
+            </RadialBarChart>
+          </ResponsiveContainer>
         </div>
 
-        {/* Percentage under the arc */}
-        <div className="absolute top-[58px] left-1/2 -translate-x-1/2 flex flex-col items-center text-center">
+        {/* Percentage in flow, fully below the arc */}
+        <div className="mt-[4px] flex flex-col items-center text-center">
           <span className="text-2xl leading-6 font-bold text-(--text)">
             {hasTarget ? `${pct % 1 ? pct.toFixed(1) : pct}%` : "—"}
           </span>
