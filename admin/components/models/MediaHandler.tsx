@@ -1378,7 +1378,7 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
       <h3 className="shrink-0 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
         Media Preview
       </h3>
-      <div className="mt-3 flex h-44 flex-1 items-center justify-center overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface)] md:h-auto">
+      <div className="mt-3 flex h-44 min-h-0 flex-1 items-center justify-center overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface)] md:h-auto">
         {currentItem ? (
           renderEditPreview(currentItem)
         ) : (
@@ -1471,11 +1471,11 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
 
         <div className={`mt-3 min-h-0 flex-1 overflow-y-auto ${SCROLLBAR_CLASSES}`}>
           {usageLoading ? (
-            <div className="flex h-full min-h-24 flex-col items-center justify-center text-center">
+            <div className="flex h-full min-h-0 flex-col items-center justify-center text-center">
               <p className="text-xs text-[var(--text-muted)]">Loading…</p>
             </div>
           ) : usageTotal === 0 ? (
-            <div className="flex h-full min-h-24 flex-col items-center justify-center rounded-xl border border-dashed border-[var(--border)] px-3 text-center">
+            <div className="flex h-full min-h-0 flex-col items-center justify-center rounded-xl border border-dashed border-[var(--border)] px-3 text-center">
               <p className="text-xs font-medium text-[var(--text)]">
                 Not used anywhere yet
               </p>
@@ -1696,10 +1696,13 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
             )}
 
             {/* Row 1 — media preview | Used In (50/50). The fixed
-                desktop height mirrors the drop-zone row in add mode:
-                without it the row grew to the preview image's natural
-                height and pushed Row 2 out of the panel. */}
-            <div className="grid shrink-0 gap-3 md:h-[300px] md:grid-cols-2">
+                desktop height is the SAME as add mode's Row 1 (145px —
+                the height the drop-zone/uploaded-images row renders at
+                when the upload panel opens), so both modes share one
+                geometry and Row 2 starts at the same Y in each. An
+                earlier 300px height made this row twice as tall as
+                add mode's and squeezed Row 2 at short viewports. */}
+            <div className="grid shrink-0 gap-3 md:h-[145px] md:grid-cols-2">
               {renderEditPreviewPanel()}
               {renderUsedInPanel()}
             </div>

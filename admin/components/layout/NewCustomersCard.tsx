@@ -14,6 +14,14 @@ interface NewCustomersCardProps {
   customers?: NewCustomer[];
 }
 
+/** Same thin styled scrollbar as the media panel's scroll areas. */
+const SCROLLBAR_CLASSES =
+  "[&::-webkit-scrollbar]:w-[6px] [&::-webkit-scrollbar]:h-[6px] [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[var(--primary)] [&::-webkit-scrollbar-thumb]:rounded-[4px] [&::-webkit-scrollbar-button]:hidden [scrollbar-width:thin] [scrollbar-color:var(--primary)_transparent]";
+
+/** One customer row is exactly 56px tall (h-14, border included), so
+ *  the list shows exactly 3 rows: 3 × 56 = 168px. */
+const ROW_H = 56;
+
 const initialsOf = (name: string, email: string) => {
   const source = name && name !== "—" ? name : email;
   const parts = source.split(/[\s@.]+/).filter(Boolean);
@@ -64,9 +72,12 @@ export const NewCustomersCard: React.FC<NewCustomersCardProps> = ({ customers })
           </p>
         </div>
       ) : (
-        <ul className="flex flex-col divide-y divide-(--border)">
+        <ul
+          className={`flex flex-col divide-y divide-(--border) overflow-y-auto ${SCROLLBAR_CLASSES}`}
+          style={{ maxHeight: ROW_H * 3 }}
+        >
           {customers.map((customer) => (
-            <li key={customer.id} className="flex items-center gap-3 py-2.5 first:pt-1 last:pb-0">
+            <li key={customer.id} className="flex h-14 shrink-0 items-center gap-3">
               <span className="w-9 h-9 rounded-full bg-(--primary-soft) text-(--primary-dark) flex items-center justify-center text-[11px] font-bold shrink-0">
                 {initialsOf(customer.name, customer.email)}
               </span>

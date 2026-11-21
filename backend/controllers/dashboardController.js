@@ -141,7 +141,7 @@ const getDashboardData = async (req, res) => {
             ]),
             User.find()
                 .sort({ createdAt: -1 })
-                .limit(5)
+                .limit(30)
                 .select('firstName lastName email createdAt')
                 .lean(),
             Setting.findOne().sort({ createdAt: 1 }).select('general.monthlyTarget').lean(),

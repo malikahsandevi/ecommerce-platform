@@ -122,8 +122,12 @@ export const MonthlyTargetCard: React.FC<MonthlyTargetCardProps> = ({ data }) =>
         </div>
       </div>
 
-      {/* Encouragement / hint */}
-      <div className="text-center mt-3 flex-1">
+      {/* Encouragement / hint — no flex-1 here: when the dashboard
+          grid stretches this card to the row height, flex-1 used to
+          absorb the extra space and push the Target/Revenue strip to
+          the bottom, leaving a dead gap under this text. The strip
+          must follow the text with its normal mt-4 spacing. */}
+      <div className="text-center mt-3">
         {encouragement ? (
           <>
             <p className="text-[13px] font-bold text-(--text)">{encouragement.title}</p>
