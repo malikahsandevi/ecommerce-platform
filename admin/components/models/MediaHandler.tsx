@@ -274,7 +274,6 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
   const currentItem = mediaList[selectedIndex];
   const tickedCount = mediaList.filter((item) => item.ticked).length;
   const allTicked = mediaList.length > 0 && tickedCount === mediaList.length;
-  const activeOpt: ImageOptimization = currentItem?.opt ?? DEFAULT_OPT;
 
   /**
    * The upload this item will actually produce once processing is taken
@@ -460,13 +459,16 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
     }
 
     if (validItems.length > 0) {
-      setMediaList((prev) => {
-        const updated = [...prev, ...validItems];
-        if (prev.length === 0) {
-          setSelectedIndex(0);
-        }
-        return updated;
-      });
+      if (mediaList.length === 0) {
+        // Land on the first IMAGE in the batch (not simply the first
+        // file) so the optimization panel opens on something it can
+        // actually optimize.
+        const firstImageIdx = validItems.findIndex(
+          (item) => item.mediaCategory === "image",
+        );
+        setSelectedIndex(firstImageIdx >= 0 ? firstImageIdx : 0);
+      }
+      setMediaList((prev) => [...prev, ...validItems]);
     }
     // Allow picking the same file again later.
     e.target.value = "";
@@ -494,21 +496,77 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
     setMediaList((prev) => prev.map((item) => ({ ...item, ticked: next })));
   };
 
+  /** Drops an item's cached processing state (add mode). */
+  const clearProcessingCacheFor = (item: MediaItem) => {
+    const prefix = `${item.id}|`;
+    processedBlobsRef.current.forEach((_, key) => {
+      if (key.startsWith(prefix)) processedBlobsRef.current.delete(key);
+    });
+    processingKeysRef.current.forEach((key) => {
+      if (key.startsWith(prefix)) processingKeysRef.current.delete(key);
+    });
+  };
+
+  /** Removes one queued file (add mode) and keeps the active index sane. */
+  const removeQueueItem = (index: number) => {
+    const item = mediaList[index];
+    if (item) {
+      if (item.previewUrl?.startsWith("blob:")) {
+        URL.revokeObjectURL(item.previewUrl);
+      }
+      clearProcessingCacheFor(item);
+    }
+    setMediaList((prev) => prev.filter((_, i) => i !== index));
+    setSelectedIndex((prev) => {
+      if (index < prev) return prev - 1;
+      if (index === prev) {
+        return Math.max(0, Math.min(prev, mediaList.length - 2));
+      }
+      return prev;
+    });
+  };
+
+  /** Clears the whole upload queue (add mode "Remove All"). */
+  const handleRemoveAll = () => {
+    mediaList.forEach((item) => {
+      if (item.previewUrl?.startsWith("blob:")) {
+        URL.revokeObjectURL(item.previewUrl);
+      }
+    });
+    processedBlobsRef.current.clear();
+    processingKeysRef.current.clear();
+    setMediaList([]);
+    setSelectedIndex(0);
+  };
+
   /** Writes a settings patch to every file in the current scope. */
   const applyOpt = (patch: Partial<ImageOptimization>) => {
     setMediaList((prev) => {
+      // "This Image" targets the active image; when the active file is
+      // not an image it falls back to the first queued image.
+      const activeItem = prev[selectedIndex];
+      const primaryIndex =
+        activeItem &&
+        activeItem.mediaCategory === "image" &&
+        activeItem.file
+          ? selectedIndex
+          : prev.findIndex(
+              (it) => it.mediaCategory === "image" && it.file,
+            );
       const targets = new Set<number>();
       if (scope === "active") {
-        targets.add(selectedIndex);
+        if (primaryIndex >= 0) targets.add(primaryIndex);
       } else if (scope === "all") {
         prev.forEach((_, i) => targets.add(i));
       } else {
         prev.forEach((item, i) => {
           if (item.ticked) targets.add(i);
         });
-        // Nothing ticked — fall back to the active image so the control
+        // Nothing ticked — fall back to the primary image so the control
         // the user is looking at still responds.
-        if (targets.size === 0) targets.add(selectedIndex);
+        if (targets.size === 0 && primaryIndex >= 0) {
+          targets.add(primaryIndex);
+        }
       }
       return prev.map((item, i) =>
         targets.has(i)
@@ -788,46 +846,62 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
       </div>
 
       {mediaList.length > 0 ? (
-        <>
-          <div
-            className={`mt-3 flex flex-1 items-stretch gap-3 overflow-x-auto overflow-y-hidden pb-2 ${SCROLLBAR_CLASSES}`}
-          >
-            {mediaList.map((item, index) => (
+        <div
+          className={`mt-3 flex flex-1 items-stretch gap-3 overflow-x-auto overflow-y-hidden pb-2 ${SCROLLBAR_CLASSES}`}
+        >
+          {mediaList.map((item, index) => (
+            <div
+              key={item.id}
+              onClick={() => setSelectedIndex(index)}
+              className={`group relative aspect-square h-full shrink-0 cursor-pointer overflow-hidden rounded-lg border-2 transition-all bg-[var(--background)] ${
+                selectedIndex === index
+                  ? "border-[var(--primary)]"
+                  : "border-[var(--border)]"
+              }`}
+            >
+              <div className="flex h-full w-full items-center justify-center overflow-hidden">
+                {renderThumbnail(item)}
+              </div>
+              <button
+                type="button"
+                aria-label={item.ticked ? "Deselect file" : "Select file"}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleTick(index);
+                }}
+                className="absolute left-1.5 top-1.5 z-10"
+              >
+                <TickCircle on={!!item.ticked} />
+              </button>
+              {badgeOf(item)}
+              {/* Hover / active remove bar — sits just above the filename
+                  strip so both stay readable. */}
               <div
-                key={item.id}
-                onClick={() => setSelectedIndex(index)}
-                className={`relative aspect-square h-full shrink-0 cursor-pointer overflow-hidden rounded-lg border-2 transition-all bg-[var(--background)] ${
+                className={`absolute inset-x-0 bottom-[17px] z-10 transition-all duration-150 ${
                   selectedIndex === index
-                    ? "border-[var(--primary)]"
-                    : "border-[var(--border)]"
+                    ? "translate-y-0 opacity-100"
+                    : "translate-y-1 opacity-0 group-hover:translate-y-0 group-hover:opacity-100"
                 }`}
               >
-                <div className="flex h-full w-full items-center justify-center overflow-hidden">
-                  {renderThumbnail(item)}
-                </div>
                 <button
                   type="button"
-                  aria-label={item.ticked ? "Deselect file" : "Select file"}
+                  aria-label={`Remove ${item.title}`}
                   onClick={(e) => {
                     e.stopPropagation();
-                    toggleTick(index);
+                    removeQueueItem(index);
                   }}
-                  className="absolute left-1.5 top-1.5 z-10"
+                  className="flex w-full items-center justify-center gap-1 bg-red-600/90 py-1 text-[10px] font-semibold text-white transition-colors hover:bg-red-600"
                 >
-                  <TickCircle on={!!item.ticked} />
+                  <Trash2 size={11} />
+                  Remove
                 </button>
-                {badgeOf(item)}
-                <div className="absolute bottom-0 inset-x-0 bg-black/80 px-1.5 py-0.5 text-center text-[9px] truncate text-[var(--text-soft)]">
-                  {item.title}
-                </div>
               </div>
-            ))}
-          </div>
-          <p className="mt-1 shrink-0 text-[11px] text-[var(--text-muted)]">
-            Tick = selected. Badges show optimization — optimized files show
-            their output format, Original stays as-is.
-          </p>
-        </>
+              <div className="absolute bottom-0 inset-x-0 bg-black/80 px-1.5 py-0.5 text-center text-[9px] truncate text-[var(--text-soft)]">
+                {item.title}
+              </div>
+            </div>
+          ))}
+        </div>
       ) : (
         <div className="mt-3 flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-[var(--border)] text-center">
           <ImageIcon className="mb-2 h-10 w-10 opacity-40 text-[var(--text-muted)]" />
@@ -843,11 +917,22 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
   );
 
   const renderOptimizationPanel = () => {
-    const activeIsImage =
-      currentItem && currentItem.mediaCategory === "image" && currentItem.file;
     const imageItems = mediaList.filter(
       (item) => item.mediaCategory === "image" && item.file,
     );
+    const activeIsImage = !!(
+      currentItem &&
+      currentItem.mediaCategory === "image" &&
+      currentItem.file
+    );
+    // The panel always works on an image when one is queued: the active
+    // image, or the first queued image when the active file is something
+    // else (video, document…). Only a queue with zero images shows the
+    // "images only" note.
+    const displayItem: MediaItem | null =
+      (activeIsImage ? currentItem : imageItems[0]) ?? null;
+    const usingFallback = !!displayItem && !activeIsImage;
+    const panelOpt: ImageOptimization = displayItem?.opt ?? DEFAULT_OPT;
     const optimizedCount = imageItems.filter(willOptimize).length;
     const originalCount = imageItems.length - optimizedCount;
     const totalOriginal = mediaList.reduce(
@@ -859,11 +944,11 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
       const eff = effectiveOf(item);
       return sum + (eff?.size ?? item.file.size);
     }, 0);
-    const activeEff = currentItem ? effectiveOf(currentItem) : null;
-    const activeOriginalSize = currentItem?.file?.size;
-    const activeSavedPct =
-      activeEff?.size !== undefined && activeOriginalSize
-        ? Math.round((1 - activeEff.size / activeOriginalSize) * 100)
+    const displayEff = displayItem ? effectiveOf(displayItem) : null;
+    const displayOriginalSize = displayItem?.file?.size;
+    const displaySavedPct =
+      displayEff?.size !== undefined && displayOriginalSize
+        ? Math.round((1 - displayEff.size / displayOriginalSize) * 100)
         : null;
 
     return (
@@ -878,11 +963,11 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
           </span>
         </h3>
 
-        {!currentItem ? (
+        {mediaList.length === 0 ? (
           <p className="text-xs text-[var(--text-muted)]">
             Add an image to optimize it before upload.
           </p>
-        ) : !activeIsImage ? (
+        ) : imageItems.length === 0 ? (
           <p className="text-xs text-[var(--text-muted)]">
             Optimization applies to images only.
           </p>
@@ -927,8 +1012,8 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
                 </p>
               </div>
               <Toggle
-                on={activeOpt.convert}
-                onToggle={() => applyOpt({ convert: !activeOpt.convert })}
+                on={panelOpt.convert}
+                onToggle={() => applyOpt({ convert: !panelOpt.convert })}
                 label="Convert to WebP"
               />
             </div>
@@ -937,16 +1022,16 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
                 <button
                   key={option.value}
                   type="button"
-                  disabled={!activeOpt.convert}
+                  disabled={!panelOpt.convert}
                   onClick={() => applyOpt({ format: option.value })}
                   className={`flex items-center gap-1 rounded-full border px-3 py-1 text-xs transition-all ${
-                    activeOpt.format === option.value
+                    panelOpt.format === option.value
                       ? "border-[var(--primary)] bg-[var(--primary)] font-semibold text-white"
                       : "border-[var(--border)] bg-[var(--surface)] text-[var(--text-soft)]"
-                  } ${!activeOpt.convert ? "cursor-not-allowed opacity-50" : ""}`}
+                  } ${!panelOpt.convert ? "cursor-not-allowed opacity-50" : ""}`}
                 >
                   {option.label}
-                  {activeOpt.format === option.value && (
+                  {panelOpt.format === option.value && (
                     <Check size={11} strokeWidth={3.5} />
                   )}
                 </button>
@@ -964,8 +1049,8 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
                 </p>
               </div>
               <Toggle
-                on={activeOpt.compress}
-                onToggle={() => applyOpt({ compress: !activeOpt.compress })}
+                on={panelOpt.compress}
+                onToggle={() => applyOpt({ compress: !panelOpt.compress })}
                 label="Compress Image"
               />
             </div>
@@ -983,37 +1068,43 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
               </div>
             </div>
 
-            {/* Before / after */}
+            {/* Before / after — shows the display image (the active
+                image, or the first queued image as a fallback). */}
+            {usingFallback && (
+              <p className="text-[11px] text-[var(--text-muted)]">
+                Selected file is not an image — showing the first image.
+              </p>
+            )}
             <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 text-xs">
               <div className="flex items-center justify-between gap-2">
                 <span className="max-w-[40%] truncate font-medium text-[var(--text)]">
-                  {currentItem.title}
+                  {displayItem?.title}
                 </span>
-                {currentItem.procFailed ? (
+                {displayItem?.procFailed ? (
                   <span className="rounded-full bg-black/10 px-2 py-0.5 text-[10px] font-semibold text-[var(--text-soft)]">
                     Original — processing failed
                   </span>
-                ) : activeEff ? (
+                ) : displayEff ? (
                   <span className="flex items-center gap-2">
                     <span className="text-[var(--text-muted)] line-through">
-                      {formatBytes(activeOriginalSize)}
+                      {formatBytes(displayOriginalSize)}
                     </span>
                     <span>→</span>
                     <span className="font-bold text-green-600">
-                      {activeEff.size !== undefined
-                        ? `~${formatBytes(activeEff.size)} ${MIME_LABEL[activeEff.type] || ""}`
-                        : `Converting to ${MIME_LABEL[activeEff.type] || "optimized"}…`}
+                      {displayEff.size !== undefined
+                        ? `~${formatBytes(displayEff.size)} ${MIME_LABEL[displayEff.type] || ""}`
+                        : `Converting to ${MIME_LABEL[displayEff.type] || "optimized"}…`}
                     </span>
-                    {activeSavedPct !== null && activeSavedPct > 0 && (
+                    {displaySavedPct !== null && displaySavedPct > 0 && (
                       <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-bold text-green-700">
-                        −{activeSavedPct}%
+                        −{displaySavedPct}%
                       </span>
                     )}
                   </span>
                 ) : (
                   <span className="flex items-center gap-2">
                     <span className="font-medium text-[var(--text-soft)]">
-                      {formatBytes(activeOriginalSize)}
+                      {formatBytes(displayOriginalSize)}
                     </span>
                     <span className="rounded-full bg-black/10 px-2 py-0.5 text-[10px] font-semibold text-[var(--text-soft)]">
                       Original
@@ -1036,45 +1127,6 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
           </>
         )}
       </div>
-    );
-  };
-
-  /* --------------------------- Footer note --------------------------- */
-
-  const renderFooterNote = () => {
-    if (mode !== "add") return null;
-    const imageItems = mediaList.filter(
-      (item) => item.mediaCategory === "image" && item.file,
-    );
-    if (!imageItems.length) return null;
-    const optimized = imageItems.filter(willOptimize);
-    const originals = imageItems.length - optimized.length;
-    const allWebp =
-      optimized.length > 0 &&
-      optimized.every(
-        (item) => (effectiveOf(item)?.type || targetMimeFor(item)) === "image/webp",
-      );
-    return (
-      <p className="hidden min-w-0 items-center gap-1.5 text-xs text-[var(--text-muted)] md:flex">
-        <Zap size={13} className="shrink-0 fill-current text-[var(--primary)]" />
-        <span className="truncate">
-          {optimized.length}{" "}
-          {optimized.length === 1 ? "image" : "images"} will upload{" "}
-          {allWebp ? (
-            <>
-              as <span className="font-semibold text-green-600">WebP</span> at
-              maximum quality
-            </>
-          ) : (
-            <>
-              <span className="font-semibold text-green-600">optimized</span>{" "}
-              at maximum quality
-            </>
-          )}
-          {originals > 0 &&
-            ` — ${originals} ${originals === 1 ? "stays" : "stay"} original`}
-        </span>
-      </p>
     );
   };
 
@@ -1179,16 +1231,27 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
         {/* Footer Actions */}
         <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-3 shrink-0 bg-[var(--surface)] border-t border-[var(--border)]">
           <div className="flex min-w-0 items-center gap-3">
-            <Button
-              variant="danger"
-              size="md"
-              icon={Trash2}
-              onClick={handleDeleteClick}
-              disabled={!currentItem}
-            >
-              Remove Media
-            </Button>
-            {renderFooterNote()}
+            {mode === "add" ? (
+              <Button
+                variant="danger"
+                size="md"
+                icon={Trash2}
+                onClick={handleRemoveAll}
+                disabled={mediaList.length === 0}
+              >
+                Remove All
+              </Button>
+            ) : (
+              <Button
+                variant="danger"
+                size="md"
+                icon={Trash2}
+                onClick={handleDeleteClick}
+                disabled={!currentItem}
+              >
+                Remove Media
+              </Button>
+            )}
           </div>
           <div className="flex shrink-0 items-center gap-3">
             <Button variant="ghost" size="md" onClick={onClose}>
