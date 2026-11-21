@@ -28,7 +28,7 @@ export const TopCategories: React.FC<TopCategoriesProps> = ({ categoriesData, to
   useStoreCurrency();
   if (loading) {
     return (
-      <div className="p-5 w-full bg-(--background) rounded-2xl shadow-sm flex flex-col h-full border border-(--border) animate-pulse">
+      <div className="p-5 w-full bg-(--background) rounded-2xl shadow-sm flex flex-col border border-(--border) animate-pulse">
         <div className="flex items-center justify-between mb-4">
           <div className="h-5 bg-(--primary-soft) rounded w-28"></div>
           <div className="h-4 bg-(--primary-soft) rounded w-12"></div>
@@ -53,7 +53,7 @@ export const TopCategories: React.FC<TopCategoriesProps> = ({ categoriesData, to
   const formattedTotalSales = formatMoney(totalSales || 0);
 
   return (
-    <div className="p-5 w-full bg-(--background) rounded-2xl shadow-sm flex flex-col h-full border border-(--border)">
+    <div className="p-5 w-full bg-(--background) rounded-2xl shadow-sm flex flex-col border border-(--border)">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-base font-bold text-(--text)">Top Categories</h3>
@@ -78,8 +78,10 @@ export const TopCategories: React.FC<TopCategoriesProps> = ({ categoriesData, to
         </div>
       ) : (
         <>
-          {/* Donut Chart — share of sales per category */}
-          <div className="relative w-full h-56 flex items-center justify-center">
+          {/* Donut Chart — share of sales per category. The wrapper is
+              sized to the donut itself (outerRadius 94 → 188px across),
+              so there is no slack above or below the graphic. */}
+          <div className="relative w-full h-48 flex items-center justify-center">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
@@ -111,8 +113,8 @@ export const TopCategories: React.FC<TopCategoriesProps> = ({ categoriesData, to
           </div>
 
           {/* Categories Legend List — rows sit tight (no gaps between
-              them); the mt-4 above the first row stays as it was. */}
-          <div className="mt-4 space-y-0">
+              them) and the first row sits directly under the donut. */}
+          <div className="space-y-0">
             {items.map((item, index) => (
               <div key={index} className="flex items-center justify-between text-xs">
                 <div className="flex items-center gap-2.5 min-w-0">
