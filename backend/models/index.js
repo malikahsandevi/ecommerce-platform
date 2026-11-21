@@ -10,6 +10,7 @@ const Media = require('./Media');
 const Setting = require('./Setting');
 const ActivityLog = require('./ActivityLog');
 const Analytics = require('./Analytics');
+const RolePermission = require('./RolePermission');
 
 module.exports = {
   User,
@@ -22,5 +23,6 @@ module.exports = {
   Media,
   Setting,
   ActivityLog,
-  Analytics
+  Analytics,
+  RolePermission
 };

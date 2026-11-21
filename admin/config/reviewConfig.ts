@@ -2,6 +2,7 @@ import { SelectOption, FormField } from "@/components/models/FormModal";
 import { Download, Plus, RefreshCcwDot } from "lucide-react";
 
 export interface ProductReview {
+  code?: string;
   _id?: string;
   id?: number;
   product?: string | { _id?: string; name?: string };
@@ -66,7 +67,7 @@ export const reviewConfig = {
   ],
 
   // Search Fields
-  searchFields: ["title", "content"],
+  searchFields: ["title", "content", "code"],
 
   // Table Column Labels
   columnHeaders: {
@@ -82,6 +83,7 @@ export const reviewConfig = {
   mapTableData: (review: ProductReview) => ({
     id: review._id || String(review.id),
     _id: review._id || String(review.id),
+    code: review.code,
     productName: referenceLabel(review.product) || review.productName || "",
     customerName: referenceLabel(review.user) || review.customerName || "",
     rating: `${review.rating} ★`,
@@ -92,6 +94,7 @@ export const reviewConfig = {
   // Map Data for DetailPanel Component
   mapDetailData: (review: ProductReview) => ({
     id: review._id || String(review.id),
+    code: review.code,
     title: review.title || `${review.rating} Star Review`,
     status: review.status,
     shortDescription: `By ${referenceLabel(review.user) || review.customerName || "Unknown customer"}`,

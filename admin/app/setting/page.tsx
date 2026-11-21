@@ -9,12 +9,15 @@ import {
   Link2,
   Palette,
   Settings,
+  ShieldAlert,
   ShieldCheck,
   Store,
   Truck,
   Users,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
+import TopBar from "@/components/ui/TopBar";
+import { confirmDialog } from "@/components/ui/ConfirmDialog";
 import { settingsService } from "@/services/settingsService";
 import type { SettingsDocument, SettingsSection, SettingsUser } from "@/services/settingsService";
 import { useAdminAuth } from "@/services/authContext";
@@ -46,7 +49,27 @@ const settingMenus: { name: SettingMenu; icon: LucideIcon }[] = [
 ];
 
 export default function SettingsPage() {
-  const { isAuthenticated } = useAdminAuth();
+  const { isAuthenticated, user, hasPermission } = useAdminAuth();
+
+  const canViewSettings =
+    typeof hasPermission !== "function" || hasPermission("Settings", "view");
+  const canViewUsers =
+    typeof hasPermission !== "function" || hasPermission("Users", "view");
+
+  const topBarUser = {
+    name: user?.name || "Admin",
+    role: user?.role
+      ? user.role.charAt(0).toUpperCase() + user.role.slice(1)
+      : "Admin",
+    email: user?.email,
+    avatar: user?.avatar || "",
+  };
+
+  // The Users & Roles section is account management — roles without
+  // Users view don't see the menu entry at all.
+  const visibleMenus = settingMenus.filter(
+    (menu) => menu.name !== "Users & Roles" || canViewUsers,
+  );
   const [activeMenu, setActiveMenu] = useState<SettingMenu>("General");
   const [settings, setSettings] = useState<SettingsDocument>({});
   const [users, setUsers] = useState<SettingsUser[]>([]);
@@ -116,7 +139,13 @@ export default function SettingsPage() {
   };
 
   const deleteUser = async (id: string) => {
-    if (!window.confirm("Delete this user?")) return;
+    const confirmed = await confirmDialog({
+      title: "Delete this user?",
+      message: "The account will be removed permanently. This cannot be undone.",
+      confirmLabel: "Delete",
+      variant: "danger",
+    });
+    if (!confirmed) return;
     setError("");
     try {
       await settingsService.deleteUser(id);
@@ -167,17 +196,53 @@ export default function SettingsPage() {
     }
   };
 
+  // Roles without Settings view get a clean notice, not a broken page
+  // (the settings API answers 403 for them anyway).
+  if (isAuthenticated && !canViewSettings) {
+    return (
+      <main className="min-h-full bg-[var(--background)] p-3">
+        <header className="mb-3 flex w-full items-center justify-between">
+          <TopBar
+            title="Settings"
+            subtitle="Manage your store settings and preferences"
+            user={topBarUser}
+            messages={[]}
+            notifications={[]}
+          />
+        </header>
+        <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
+          <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--primary-soft)] text-[var(--primary)]">
+            <ShieldAlert className="h-7 w-7" />
+          </span>
+          <h2 className="text-base font-bold text-[var(--text)]">
+            You don&apos;t have permission to view Settings
+          </h2>
+          <p className="max-w-sm text-xs text-[var(--text-muted)]">
+            Your role ({user?.role || "Staff"}) can&apos;t access this section. Ask a
+            Super Admin to change it in Settings → Users &amp; Roles.
+          </p>
+        </div>
+      </main>
+    );
+  }
+
   /* Full Page Theme-Matched Skeleton Component */
   if (loading) {
     return (
-      <main className="min-h-full bg-[var(--background)] p-3 animate-pulse flex flex-col gap-3">
-        {/* Page Header Skeleton */}
-        <header className="space-y-2">
-          <div className="h-7 w-36 rounded-md bg-[var(--primary-soft)] border border-[var(--border)]" />
-          <div className="h-4 w-72 rounded-md bg-[var(--primary-soft)] opacity-70" />
+      <main className="min-h-full bg-[var(--background)] p-3 flex flex-col gap-3">
+        {/* The same TopBar the loaded page shows — it used to be missing
+            here entirely, which is why Settings looked different. */}
+        <header className="flex w-full items-center justify-between">
+          <TopBar
+            title="Settings"
+            subtitle="Manage your store settings and preferences"
+            user={topBarUser}
+            messages={[]}
+            notifications={[]}
+          />
         </header>
 
-        <div className="grid grid-row-2 gap-3 flex-1">
+        <div className="grid grid-row-2 gap-3 flex-1 animate-pulse">
           {/* Navigation Tab Grid Skeleton */}
           <nav className="h-fit rounded-xl border border-[var(--border)] bg-[var(--background)] p-2 flex flex-wrap gap-3">
             {Array.from({ length: 10 }).map((_, index) => (
@@ -229,9 +294,14 @@ export default function SettingsPage() {
 
   return (
     <main className="min-h-full bg-[var(--background)] p-3">
-      <header className="mb-6">
-        <h1 className="text-2xl font-semibold text-[var(--text)]">Settings</h1>
-        <p className="mt-1 text-sm text-[var(--text-muted)]">Manage your store settings and preferences</p>
+      <header className="mb-3 flex w-full items-center justify-between">
+        <TopBar
+          title="Settings"
+          subtitle="Manage your store settings and preferences"
+          user={topBarUser}
+          messages={[]}
+          notifications={[]}
+        />
       </header>
 
       {(error || notice) && (
@@ -242,7 +312,7 @@ export default function SettingsPage() {
 
       <div className="grid grid-row-2 gap-3 ">
         <nav aria-label="Settings sections" className="h-fit rounded-xl border border-[var(--border)] bg-[var(--background)] p-2 flex flex-wrap gap-3">
-          {settingMenus.map(({ name, icon: Icon }) => {
+          {visibleMenus.map(({ name, icon: Icon }) => {
             const active = activeMenu === name;
             return (
               <Button

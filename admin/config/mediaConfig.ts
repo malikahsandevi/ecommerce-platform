@@ -2,6 +2,7 @@ import { Download, Plus, RefreshCcwDot } from "lucide-react";
 
 /** Shape of a record from GET /media (plus the derived `status` the list adapter adds). */
 export interface MediaItem {
+  code?: string;
   _id?: string;
   filename?: string;
   originalName?: string;
@@ -75,7 +76,7 @@ export const mediaConfig = {
     },
   ],
 
-  searchFields: ["originalName", "filename", "altText", "mimeType", "extension"],
+  searchFields: ["originalName", "filename", "altText", "mimeType", "extension", "code"],
 
   columnHeaders: {
     _id: "ID",
@@ -89,6 +90,7 @@ export const mediaConfig = {
   mapTableData: (media: MediaItem) => ({
     id: media._id,
     _id: media._id,
+    code: media.code,
     image: media.mimeType?.startsWith("image/") ? media.url || "" : "",
     name: displayName(media),
     type: media.mimeType || "—",
@@ -99,6 +101,7 @@ export const mediaConfig = {
 
   mapDetailData: (media: MediaItem) => ({
     id: media._id,
+    code: media.code,
     title: displayName(media),
     status: statusOf(media),
     image: media.mimeType?.startsWith("image/") ? media.url : undefined,

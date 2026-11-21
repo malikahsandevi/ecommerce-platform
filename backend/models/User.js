@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { addCodeSupport } = require("../utils/code");
 const bcrypt = require("bcryptjs");
 
 const userSchema = new mongoose.Schema(
@@ -150,5 +151,8 @@ userSchema.methods.comparePassword = async function (candidatePassword) {
 userSchema.virtual("fullName").get(function () {
   return `${this.firstName || ""} ${this.lastName || ""}`.trim();
 });
+
+// Short public code (6 chars, A–Z0–9) — see utils/code.js.
+addCodeSupport(userSchema);
 
 module.exports = mongoose.model("User", userSchema);

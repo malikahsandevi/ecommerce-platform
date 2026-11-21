@@ -29,6 +29,7 @@ const populateReview = (query) => query
 const getReviews = async (req, res) => {
     try {
         const reviews = await populateReview(Review.find());
+        await Review.withCodes(reviews);
         res.json(reviews);
     } catch (error) {
         res.status(500).json({ message: error.message });
@@ -42,6 +43,7 @@ const getReviewById = async (req, res) => {
     try {
         const review = await populateReview(Review.findById(req.params.id));
         if (!review) return res.status(404).json({ message: 'Review not found' });
+        await Review.withCodes(review);
         res.json(review);
     } catch (error) {
         res.status(500).json({ message: error.message });

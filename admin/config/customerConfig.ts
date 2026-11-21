@@ -11,6 +11,7 @@ export interface CustomerAddress {
 
 /** Shape of a record from GET /users (plus the derived `status` the list adapter adds). */
 export interface Customer {
+  code?: string;
   _id: string;
   username?: string;
   email: string;
@@ -74,7 +75,7 @@ export const customerConfig = {
     },
   ],
 
-  searchFields: ["firstName", "lastName", "email", "username", "phone"],
+  searchFields: ["firstName", "lastName", "email", "username", "phone", "code"],
 
   columnHeaders: {
     _id: "ID",
@@ -88,6 +89,7 @@ export const customerConfig = {
   mapTableData: (customer: Customer) => ({
     id: customer._id,
     _id: customer._id,
+    code: customer.code,
     name: fullName(customer),
     email: customer.email || "",
     phone: customer.phone || "—",
@@ -104,6 +106,7 @@ export const customerConfig = {
       : "";
     return {
       id: customer._id,
+    code: customer.code,
       title: fullName(customer),
       status: customer.status || (customer.isActive === false ? "inactive" : "active"),
       image:

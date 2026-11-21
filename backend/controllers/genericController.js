@@ -3,6 +3,9 @@ const genericController = (Model) => {
         getAll: async (req, res) => {
             try {
                 const items = await Model.find();
+                // Models with a public `code` backfill it lazily here, so
+                // legacy records gain one just by being listed.
+                if (typeof Model.withCodes === 'function') await Model.withCodes(items);
                 res.json(items);
             } catch (error) { res.status(500).json({ message: error.message }); }
         },
@@ -10,6 +13,7 @@ const genericController = (Model) => {
             try {
                 const item = await Model.findById(req.params.id);
                 if (!item) return res.status(404).json({ message: 'Not found' });
+                if (typeof Model.withCodes === 'function') await Model.withCodes(item);
                 res.json(item);
             } catch (error) { res.status(500).json({ message: error.message }); }
         },

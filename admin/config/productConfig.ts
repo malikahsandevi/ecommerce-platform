@@ -18,6 +18,7 @@ export interface ProductAttribute {
 }
 
 export interface Product {
+  code?: string;
   _id?: string;
   name: string;
   sku: string;
@@ -130,7 +131,7 @@ export const productConfig = {
   ],
 
   // Search Parameters (top-level fields of the API records)
-  searchFields: ["name", "sku", "status"],
+  searchFields: ["name", "sku", "status", "code"],
 
   // Table Column Labels
   columnHeaders: {
@@ -147,6 +148,7 @@ export const productConfig = {
   mapTableData: (product: Product) => ({
     id: product._id,
     _id: product._id,
+    code: product.code,
     name: product.name,
     image: primaryImage(product),
     sku: product.sku,
@@ -159,6 +161,7 @@ export const productConfig = {
   // Map Data for DetailPanel Component
   mapDetailData: (product: Product) => ({
     id: product._id,
+    code: product.code,
     title: product.name,
     status: product.status,
     image: primaryImage(product),

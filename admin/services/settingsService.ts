@@ -32,6 +32,20 @@ export interface SettingsUser {
   isActive?: boolean;
 }
 
+/** The role → module → action permission matrix (GET /permissions). */
+export type PermissionMatrixData = Record<
+  string,
+  Record<string, Record<string, boolean>>
+>;
+
+export interface RolePermissionsData {
+  modules: string[];
+  moduleActions: Record<string, string[]>;
+  roles: string[];
+  matrix: PermissionMatrixData;
+  canEdit: boolean;
+}
+
 export const settingsService = {
   async getSettings(): Promise<SettingsDocument> {
     const { data } = await apiClient.get<SettingsDocument>("/settings");
@@ -76,5 +90,22 @@ export const settingsService = {
   ): Promise<SettingsUser> {
     const { data } = await apiClient.put<SettingsUser>(`/users/${id}`, values);
     return data;
+  },
+
+  /** The full permission matrix + editor vocabulary. Any staff member
+   *  may read it; `canEdit` is true only for Super Admin. */
+  async getPermissions(): Promise<RolePermissionsData> {
+    const { data } = await apiClient.get<RolePermissionsData>("/permissions");
+    return data;
+  },
+
+  /** Replaces the matrix (Super Admin only — the API answers 403 for
+   *  anyone else). Returns the stored matrix as merged with defaults. */
+  async updatePermissions(matrix: PermissionMatrixData): Promise<PermissionMatrixData> {
+    const { data } = await apiClient.put<{ matrix: PermissionMatrixData }>(
+      "/permissions",
+      { matrix },
+    );
+    return data.matrix;
   },
 };

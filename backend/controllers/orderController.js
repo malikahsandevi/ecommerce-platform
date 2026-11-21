@@ -64,6 +64,7 @@ const logLowStockAlerts = async (items) => {
 const getOrders = async (req, res) => {
     try {
         const orders = await Order.find({}).populate('user', 'firstName lastName email');
+        await Order.withCodes(orders);
         res.json(orders);
     } catch (error) {
         res.status(500).json({ message: error.message });
@@ -79,6 +80,7 @@ const getOrderById = async (req, res) => {
         if (!order) {
             return res.status(404).json({ message: 'Order not found' });
         }
+        await Order.withCodes(order);
         res.json(order);
     } catch (error) {
         res.status(500).json({ message: error.message });

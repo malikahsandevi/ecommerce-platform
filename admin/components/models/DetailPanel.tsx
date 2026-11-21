@@ -11,6 +11,8 @@ export interface DetailSpecification {
 
 export interface DetailPanelData {
   id: string | number;
+  /** Short public code (6 chars, A–Z0–9) — shown instead of the raw id. */
+  code?: string;
   title: string;
   sku?: string;
   status?: string;
@@ -170,7 +172,7 @@ export function DetailPanel<T extends DetailPanelData>({
                       {selectedItem.title}
                     </h4>
                     <div className="text-[10px] text-[var(--text-muted)] flex items-center gap-2">
-                      <span>ID: #{selectedItem.id}</span>
+                      <span>ID: #{selectedItem.code || selectedItem.id}</span>
                       {selectedItem.sku && (
                         <>
                           <span>•</span>

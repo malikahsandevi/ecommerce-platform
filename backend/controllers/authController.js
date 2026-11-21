@@ -1,5 +1,6 @@
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
+const { getEffectivePermissions } = require('../utils/permissions');
 const { authenticator } = require('otplib');
 const QRCode = require('qrcode');
 
@@ -50,7 +51,7 @@ const generateTwoFactorTempToken = (id) => {
 
 // The payload a completed sign-in returns (shared by plain login and the
 // second step of a 2FA login, so both paths answer identically).
-const sessionPayload = (user) => ({
+const sessionPayload = async (user) => ({
     _id: user._id,
     name: `${user.firstName} ${user.lastName}`,
     email: user.email,
@@ -59,6 +60,10 @@ const sessionPayload = (user) => ({
     // user's role everywhere.
     role: user.role,
     avatar: user.avatar,
+    // The role's effective permission matrix, so the panel can hide what
+    // this user may not use. The backend re-checks every call anyway —
+    // this is for display only.
+    permissions: await getEffectivePermissions(user.role),
     token: generateToken(user._id),
 });
 
@@ -127,7 +132,7 @@ const loginAdmin = async (req, res) => {
                     });
                 }
 
-                return res.json(sessionPayload(adminUser));
+                return res.json(await sessionPayload(adminUser));
             }
         }
 
@@ -173,7 +178,7 @@ const verifyTwoFactorLogin = async (req, res) => {
             return res.status(400).json({ message: 'Invalid verification code — check your authenticator app and try again.' });
         }
 
-        res.json(sessionPayload(user));
+        res.json(await sessionPayload(user));
     } catch (error) {
         res.status(500).json({ message: error.message });
     }

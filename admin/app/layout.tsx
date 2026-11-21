@@ -4,6 +4,7 @@
 import React, { useEffect } from "react";
 import Sidebar from "@/components/layout/Sidebar";
 import AdminLoginPopup from "@/components/Login";
+import { ConfirmDialogHost } from "@/components/ui/ConfirmDialog";
 import { AuthProvider, useAdminAuth } from "@/services/authContext";
 import { fetchAndApplyAppearance } from "@/services/appearance";
 import "./globals.css";
@@ -45,6 +46,10 @@ function AdminShell({ children }: { children: React.ReactNode }) {
         notice={sessionNotice}
         onDismissNotice={clearNotice}
       />
+
+      {/* The panel's single confirmation-dialog host (replaces every
+          native confirm()/alert()). */}
+      <ConfirmDialogHost />
     </main>
   );
 }
@@ -57,7 +62,13 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        {/* Runs before paint so the saved theme is applied without a flash. */}
+        {/* Runs before paint so the saved theme AND the saved sidebar
+            state are applied without a flash: the sidebar used to render
+            expanded first and collapse only once React's effect read
+            localStorage. The CSS keyed on html[data-sidebar="collapsed"]
+            (globals.css) collapses the server-rendered sidebar from the
+            very first frame; the Sidebar component then initialises its
+            state from this same attribute and keeps it in sync. */}
         <script
           dangerouslySetInnerHTML={{
             __html: `
@@ -67,6 +78,10 @@ export default function RootLayout({
                   document.documentElement.setAttribute("data-theme", "dark");
                 } else {
                   document.documentElement.setAttribute("data-theme", "light");
+                }
+                const sidebar = localStorage.getItem("admin-sidebar");
+                if (sidebar === "collapsed" || (sidebar === null && window.innerWidth < 1024)) {
+                  document.documentElement.setAttribute("data-sidebar", "collapsed");
                 }
               } catch (e) {}
             `,

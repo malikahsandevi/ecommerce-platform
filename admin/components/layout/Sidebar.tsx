@@ -25,23 +25,39 @@ interface SidebarConfig {
   name: string;
   icon: LucideIcon;
   link: string;
+  /** Permission module that gates this entry (ITEM: role permissions). */
+  module: string;
 }
 
 const TOP_ITEMS: SidebarConfig[] = [
-  { name: "Dashboard", icon: LayoutDashboard, link: "/" },
-  { name: "Products", icon: Package, link: "/products" },
-  { name: "Orders", icon: ShoppingCart, link: "/orders" },
-  { name: "Customers", icon: Users, link: "/customers" },
-  { name: "Category", icon: FolderTree, link: "/categories" },
-  { name: "Brands", icon: Tag, link: "/brands" },
-  { name: "Coupons", icon: Ticket, link: "/coupons" },
-  { name: "Media", icon: ImageIcon, link: "/media" },
-  { name: "Reviews", icon: Star, link: "/reviews" },
+  { name: "Dashboard", icon: LayoutDashboard, link: "/", module: "Dashboard" },
+  { name: "Products", icon: Package, link: "/products", module: "Products" },
+  { name: "Orders", icon: ShoppingCart, link: "/orders", module: "Orders" },
+  { name: "Customers", icon: Users, link: "/customers", module: "Customers" },
+  { name: "Category", icon: FolderTree, link: "/categories", module: "Categories" },
+  { name: "Brands", icon: Tag, link: "/brands", module: "Brands" },
+  { name: "Coupons", icon: Ticket, link: "/coupons", module: "Coupons" },
+  { name: "Media", icon: ImageIcon, link: "/media", module: "Media" },
+  { name: "Reviews", icon: Star, link: "/reviews", module: "Reviews" },
 ];
 
 const BOTTOM_ITEMS: SidebarConfig[] = [
-  { name: "Settings", icon: Settings, link: "/setting" },
+  { name: "Settings", icon: Settings, link: "/setting", module: "Settings" },
 ];
+
+/** Keeps the pre-paint attribute (root layout inline script + globals.css)
+ *  in step with the React state, so the two never disagree. */
+function syncSidebarAttribute(collapsed: boolean) {
+  try {
+    if (collapsed) {
+      document.documentElement.setAttribute("data-sidebar", "collapsed");
+    } else {
+      document.documentElement.removeAttribute("data-sidebar");
+    }
+  } catch {
+    /* attribute sync is best-effort */
+  }
+}
 
 function initialsOf(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -52,8 +68,14 @@ function initialsOf(name: string): string {
 
 const Sidebar: React.FC = () => {
   const pathname = usePathname();
-  const { user } = useAdminAuth();
-  const [collapsed, setCollapsed] = useState(false);
+  const { user, hasPermission } = useAdminAuth();
+  // Initialise SYNCHRONOUSLY from the attribute the root layout's inline
+  // script set before first paint — the state is correct on the very
+  // first render, so the sidebar never flashes expanded-then-collapsed.
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    if (typeof document === "undefined") return false;
+    return document.documentElement.getAttribute("data-sidebar") === "collapsed";
+  });
 
   // Expanded by default on desktop; remember the admin's own choice.
   useEffect(() => {
@@ -62,8 +84,10 @@ const Sidebar: React.FC = () => {
         const saved = localStorage.getItem("admin-sidebar");
         if (saved !== null) {
           setCollapsed(saved === "collapsed");
+          syncSidebarAttribute(saved === "collapsed");
         } else if (window.innerWidth < 1024) {
           setCollapsed(true);
+          syncSidebarAttribute(true);
         }
       } catch {
         /* keep the default */
@@ -78,32 +102,42 @@ const Sidebar: React.FC = () => {
 
   const toggle = () => {
     setCollapsed((prev) => {
+      const next = !prev;
       try {
-        localStorage.setItem("admin-sidebar", prev ? "expanded" : "collapsed");
+        localStorage.setItem("admin-sidebar", next ? "collapsed" : "expanded");
       } catch {
         /* persistence is best-effort */
       }
-      return !prev;
+      syncSidebarAttribute(next);
+      return next;
     });
   };
+
+  // Modules the signed-in role cannot view are hidden. While permissions
+  // are still loading, hasPermission answers "yes" so nothing flickers.
+  const canView = (module: string): boolean =>
+    typeof hasPermission === "function" ? hasPermission(module, "view") : true;
+  const topItems = TOP_ITEMS.filter((item) => canView(item.module));
+  const bottomItems = BOTTOM_ITEMS.filter((item) => canView(item.module));
 
   const isActive = (link: string) =>
     link === "/" ? pathname === "/" : pathname.startsWith(link);
 
   return (
     <aside
-      className={`h-[calc(100dvh-24px)] sticky top-3 left-3 z-50 shrink-0 transition-all duration-300 ${
+      suppressHydrationWarning
+      className={`admin-sidebar h-[calc(100dvh-24px)] sticky top-3 left-3 z-50 shrink-0 transition-all duration-300 ${
         collapsed ? "w-[68px]" : "w-60"
       }`}
     >
       <div className="h-full flex flex-col shadow-xl px-3 py-2.5 bg-(--primary-light) rounded-2xl">
         {/* Brand Bar */}
-        <div className={`flex items-center ${collapsed ? "justify-center" : "gap-2.5"} px-1 pt-0.5 pb-2`}>
+        <div className={`sb-center flex items-center ${collapsed ? "justify-center" : "gap-2.5"} px-1 pt-0.5 pb-2`}>
           <span className="w-9 h-9 shrink-0 rounded-xl bg-(--primary) text-white flex items-center justify-center shadow-sm">
             <Store className="w-[18px] h-[18px]" />
           </span>
           {!collapsed && (
-            <span className="min-w-0 leading-tight">
+            <span className="sb-label min-w-0 leading-tight">
               <span className="block text-sm font-bold text-(--text) truncate">
                 Ecom Store
               </span>
@@ -120,11 +154,11 @@ const Sidebar: React.FC = () => {
         <div className="flex flex-col flex-1 justify-between min-h-0">
           <nav className="flex flex-col gap-0.5 overflow-y-auto no-scrollbar">
             {!collapsed && (
-              <span className="px-3 pb-0.5 text-[10px] font-bold uppercase tracking-widest text-(--text-soft)/80">
+              <span className="sb-label px-3 pb-0.5 text-[10px] font-bold uppercase tracking-widest text-(--text-soft)/80">
                 Main Menu
               </span>
             )}
-            {TOP_ITEMS.map((item) => (
+            {topItems.map((item) => (
               <SidebarItem
                 key={item.name}
                 name={item.name}
@@ -138,11 +172,11 @@ const Sidebar: React.FC = () => {
 
           <div className="flex flex-col gap-0.5 mt-2">
             {!collapsed && (
-              <span className="px-3 pb-0.5 text-[10px] font-bold uppercase tracking-widest text-(--text-soft)/80">
+              <span className="sb-label px-3 pb-0.5 text-[10px] font-bold uppercase tracking-widest text-(--text-soft)/80">
                 General
               </span>
             )}
-            {BOTTOM_ITEMS.map((item) => (
+            {bottomItems.map((item) => (
               <SidebarItem
                 key={item.name}
                 name={item.name}
@@ -156,7 +190,7 @@ const Sidebar: React.FC = () => {
             {/* Signed-in admin */}
             {user && (
               <div
-                className={`mt-1.5 flex items-center rounded-xl bg-(--background)/70 p-1.5 ${
+                className={`sb-center mt-1.5 flex items-center rounded-xl bg-(--background)/70 p-1.5 ${
                   collapsed ? "justify-center" : "gap-2.5"
                 }`}
                 title={collapsed ? user.name : undefined}
@@ -165,7 +199,7 @@ const Sidebar: React.FC = () => {
                   {initialsOf(user.name || "Admin")}
                 </span>
                 {!collapsed && (
-                  <span className="min-w-0 leading-tight">
+                  <span className="sb-label min-w-0 leading-tight">
                     <span className="block text-xs font-bold text-(--text) truncate">
                       {user.name}
                     </span>
@@ -181,12 +215,12 @@ const Sidebar: React.FC = () => {
               type="button"
               onClick={toggle}
               aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-              className={`mt-0.5 flex items-center gap-3 rounded-xl px-3 py-2 text-sm text-(--text-soft) transition-colors hover:bg-(--background)/60 hover:text-(--text) ${
+              className={`sb-center mt-0.5 flex items-center gap-3 rounded-xl px-3 py-2 text-sm text-(--text-soft) transition-colors hover:bg-(--background)/60 hover:text-(--text) ${
                 collapsed ? "justify-center px-0" : ""
               }`}
             >
               {collapsed ? <PanelLeftOpen size={20} /> : <PanelLeftClose size={20} />}
-              {!collapsed && <span>Collapse</span>}
+              {!collapsed && <span className="sb-label">Collapse</span>}
             </button>
           </div>
         </div>

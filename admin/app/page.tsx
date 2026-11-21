@@ -2,7 +2,7 @@
 "use client";
 import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { AlertCircle, CircleDollarSign, RefreshCcw, ShoppingBag, Users } from "lucide-react";
+import { AlertCircle, CircleDollarSign, RefreshCcw, ShieldAlert, ShoppingBag, Users } from "lucide-react";
 import DashboardStatCard from "@/components/layout/DashboardStatCard";
 import RevenueAnalytics, {
   DailyPoint,
@@ -78,7 +78,7 @@ const fmtJoinedDate = (iso: string) =>
   });
 
 export default function Page() {
-  const { user, isAuthenticated } = useAdminAuth();
+  const { user, isAuthenticated, hasPermission } = useAdminAuth();
   const [stats, setStats] = useState<DashboardStats | undefined>(undefined);
   const [comparisons, setComparisons] = useState<Comparisons | undefined>(undefined);
   const [recentOrders, setRecentOrders] = useState<DashboardOrder[] | undefined>(undefined);
@@ -293,6 +293,40 @@ export default function Page() {
   }, [fetchData, reloadToken, isAuthenticated]);
 
   const statsLoading = stats === undefined;
+
+  // Role gate: every shipped default grants Dashboard view, but a matrix
+  // edit can remove it — then show a clean notice instead of empty cards
+  // (the dashboard API answers 403 in that case anyway).
+  const canViewDashboard =
+    typeof hasPermission !== "function" || hasPermission("Dashboard", "view");
+  if (isAuthenticated && !canViewDashboard) {
+    return (
+      <div className="flex-1 min-w-0 p-3 bg-[var(--background)] text-[var(--text)] transition-colors duration-200 flex flex-col gap-3">
+        <TopBar
+          title="Dashboard"
+          subtitle="Manage inventory and store items"
+          user={{
+            name: user?.name || "Admin",
+            role: user?.role || "Admin",
+            email: user?.email,
+            avatar: user?.avatar || "",
+          }}
+        />
+        <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
+          <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--primary-soft)] text-[var(--primary)]">
+            <ShieldAlert className="h-7 w-7" />
+          </span>
+          <h2 className="text-base font-bold">
+            You don&apos;t have permission to view the Dashboard
+          </h2>
+          <p className="max-w-sm text-xs text-[var(--text-muted)]">
+            Your role ({user?.role || "Staff"}) can&apos;t access this section. Ask a
+            Super Admin to change it in Settings → Users &amp; Roles.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 min-w-0 p-3 bg-[var(--background)] text-[var(--text)] transition-colors duration-200 flex flex-col gap-3">

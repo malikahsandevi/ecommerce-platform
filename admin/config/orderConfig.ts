@@ -26,6 +26,7 @@ export interface OrderAddress {
 }
 
 export interface Order {
+  code?: string;
   _id?: string;
   orderNumber?: string;
   user?: OrderUser | string;
@@ -128,7 +129,7 @@ export const orderConfig = {
   ],
 
   // Search Fields (top-level scalar fields of the API records)
-  searchFields: ["orderNumber", "status", "paymentStatus", "trackingNumber"],
+  searchFields: ["orderNumber", "status", "paymentStatus", "trackingNumber", "code"],
 
   // Table Headers
   columnHeaders: {
@@ -144,6 +145,7 @@ export const orderConfig = {
   mapTableData: (order: Order) => ({
     id: order._id,
     _id: order._id,
+    code: order.code,
     orderNumber: order.orderNumber || "—",
     customer: customerName(order),
     totalAmount: `$${(order.total ?? 0).toFixed(2)}`,
@@ -155,6 +157,7 @@ export const orderConfig = {
   // Map Data for DetailPanel Component
   mapDetailData: (order: Order) => ({
     id: order._id,
+    code: order.code,
     title: `Order ${order.orderNumber || ""}`.trim(),
     status: order.status,
     shortDescription: `Customer: ${customerName(order)}${customerEmail(order) ? ` (${customerEmail(order)})` : ""}`,

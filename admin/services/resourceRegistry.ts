@@ -473,4 +473,13 @@ export const mediaService = {
     });
     return Array.isArray(res.data) ? res.data : [];
   },
+
+  /**
+   * Products using a media item (gallery mediaId match, or the legacy
+   * URL match) — feeds the Edit Media panel's "Used In" list.
+   */
+  usage: async (id: string) => {
+    const res = await apiClient.get(`/media/${id}/usage`);
+    return Array.isArray(res.data) ? res.data : [];
+  },
 };

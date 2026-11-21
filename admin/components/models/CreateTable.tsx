@@ -127,15 +127,19 @@ export function CreateTable<T extends Record<string, any>>({
                     const rawValue = item[colKey];
                     const colKeyStr = String(colKey).toLowerCase();
 
-                    // 1. ID Column (Truncate long IDs)
+                    // 1. ID Column — the short public code when the row
+                    // carries one, otherwise the truncated raw id.
                     if (colKeyStr === "_id" || colKeyStr === "id") {
+                      const displayId = item.code
+                        ? String(item.code)
+                        : formatId(rawValue);
                       return (
                         <td
                           key={String(colKey) + idx}
                           className="px-3 py-2.5 align-middle font-mono text-[11px] text-[var(--text-muted)] whitespace-nowrap"
-                          title={String(rawValue)}
+                          title={displayId}
                         >
-                          {formatId(rawValue)}
+                          {displayId}
                         </td>
                       );
                     }

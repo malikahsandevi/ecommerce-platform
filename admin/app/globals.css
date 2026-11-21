@@ -82,6 +82,22 @@ body {
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+/* Sidebar collapsed state applied BEFORE first paint: the root layout's
+   inline script sets html[data-sidebar="collapsed"] from localStorage
+   before the body parses, so the server-rendered sidebar is already
+   collapsed in the first frame — no expanded→collapsed flash on
+   refresh. The Sidebar component initialises from the same attribute
+   and keeps it in sync when toggled. */
+html[data-sidebar="collapsed"] .admin-sidebar {
+  width: 68px !important;
+}
+html[data-sidebar="collapsed"] .admin-sidebar .sb-label {
+  display: none !important;
+}
+html[data-sidebar="collapsed"] .admin-sidebar .sb-center {
+  justify-content: center !important;
+}
+
 /* Settings → Appearance → Animations off: neutralise transitions and
    animations panel-wide (the attribute is set by services/appearance.ts). */
 [data-animations="off"] *,

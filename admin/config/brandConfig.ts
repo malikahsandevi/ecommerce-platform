@@ -2,6 +2,7 @@ import { SelectOption, FormField } from "@/components/models/FormModal";
 import { Download, Plus, RefreshCcwDot } from "lucide-react";
 
 export interface Brand {
+  code?: string;
   _id?: string;
   name: string;
   slug: string;
@@ -48,7 +49,7 @@ export const brandConfig = {
     },
   ],
 
-  searchFields: ["name", "slug", "website"],
+  searchFields: ["name", "slug", "website", "code"],
 
   columnHeaders: {
     _id: "ID",
@@ -62,6 +63,7 @@ export const brandConfig = {
   mapTableData: (brand: Brand) => ({
     id: brand._id,
     _id: brand._id,
+    code: brand.code,
     name: brand.name,
     image: brand.logo || "",
     slug: brand.slug,
@@ -73,6 +75,7 @@ export const brandConfig = {
 
   mapDetailData: (brand: Brand) => ({
     id: brand._id,
+    code: brand.code,
     title: brand.name,
     status: brand.status || (brand.isActive === false ? "inactive" : "active"),
     image: brand.logo,

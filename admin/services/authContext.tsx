@@ -7,12 +7,16 @@ const AuthContext = createContext<any>(null);
 
 export const useAdminAuth = () => useContext(AuthContext);
 
+/** module → action → allowed, as returned by the API (login payload / GET /permissions/me). */
+export type PermissionMatrix = Record<string, Record<string, boolean>>;
+
 export interface AdminUser {
   id?: string;
   name: string;
   email?: string;
   role: string;
   avatar?: string;
+  permissions?: PermissionMatrix;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -57,12 +61,55 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       try {
         setUser(JSON.parse(storedUser));
         setIsAuthenticated(true);
+        // Permissions stored at login time can go stale when a Super
+        // Admin edits the matrix — refresh them from the API so the
+        // shell's gating matches the backend's current rules. Best
+        // effort: on failure the stored copy stays in place.
+        apiClient
+          .get('/permissions/me')
+          .then((res) => {
+            const fresh = res.data as { role?: string; permissions?: PermissionMatrix };
+            if (!fresh?.permissions) return;
+            setUser((current) => {
+              if (!current) return current;
+              const updated: AdminUser = {
+                ...current,
+                role: fresh.role || current.role,
+                permissions: fresh.permissions,
+              };
+              try {
+                localStorage.setItem('adminUser', JSON.stringify(updated));
+              } catch {
+                /* persistence is best-effort */
+              }
+              return updated;
+            });
+          })
+          .catch(() => {
+            /* keep the stored permissions */
+          });
       } catch {
         localStorage.removeItem('adminUser');
       }
     }
     setIsRestoring(false);
   }, []);
+
+  /**
+   * UI gating for the role permission matrix. The backend re-checks every
+   * call (403), so this only decides what to SHOW: Super Admin always
+   * passes; while permissions have not loaded yet the answer is "yes" so
+   * the shell never flickers or hides things spuriously.
+   */
+  const hasPermission = useCallback(
+    (module: string, action: string): boolean => {
+      if (!user) return true;
+      if (user.role === 'Super Admin') return true;
+      if (!user.permissions) return true;
+      return Boolean(user.permissions[module]?.[action]);
+    },
+    [user],
+  );
 
   // The API layer clears the stored token and fires this event when the
   // backend rejects it (401) — drop to the login popup with an explanation.
@@ -81,7 +128,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   // the identical shape.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const completeLogin = (data: any, fallbackEmail: string) => {
-    const { token, _id, name, email: userEmail, role, avatar } = data;
+    const { token, _id, name, email: userEmail, role, avatar, permissions } = data;
 
     localStorage.setItem('adminToken', token);
 
@@ -93,6 +140,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       // …) — show it exactly as stored.
       role: role || 'Admin',
       avatar: avatar && avatar !== 'default-avatar.png' ? avatar : undefined,
+      permissions: permissions as PermissionMatrix | undefined,
     };
     localStorage.setItem('adminUser', JSON.stringify(userData));
 
@@ -132,7 +180,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   return (
     <AuthContext.Provider
-      value={{ isAuthenticated, isRestoring, user, login, verifyTwoFactor, logout, sessionNotice, clearNotice }}
+      value={{ isAuthenticated, isRestoring, user, login, verifyTwoFactor, logout, sessionNotice, clearNotice, hasPermission }}
     >
       {children}
     </AuthContext.Provider>

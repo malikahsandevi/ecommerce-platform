@@ -1,10 +1,12 @@
 const express = require('express');
 const router = express.Router();
-const { Media, User } = require('../models');
+const { Media, User, Product } = require('../models');
 const genericController = require('../controllers/genericController')(Media);
 const cloudinary = require('../config/cloudinary');
 const { protect } = require('../middleware/auth');
 const { requireStaff } = require('../middleware/admin');
+const { requirePermission } = require('../middleware/permissions');
+
 
 const UPLOAD_FOLDER = 'ecommerce-media';
 
@@ -25,7 +27,7 @@ const ALLOWED_MIME_TYPES = [
 // GET /api/media/storage — real storage picture for the Media page cards:
 // this library's usage grouped by provider, plus the Cloudinary account's
 // own usage/quota straight from the Cloudinary Admin API.
-router.get('/storage', protect, async (req, res) => {
+router.get('/storage', protect, requirePermission('Media', 'view'), async (req, res) => {
     try {
         const records = await Media.find().select('size url storageType').lean();
 
@@ -76,7 +78,7 @@ router.get('/storage', protect, async (req, res) => {
 // POST /api/media/upload — accepts a base64 data URL, stores the file on
 // Cloudinary and registers a Media record. Mounted before /:id so "upload"
 // is never treated as a document id.
-router.post('/upload', protect, express.json({ limit: '15mb' }), async (req, res) => {
+router.post('/upload', protect, requirePermission('Media', 'create'), express.json({ limit: '15mb' }), async (req, res) => {
     try {
         const { dataUrl, filename, altText, title, description, status } = req.body || {};
 
@@ -139,7 +141,7 @@ router.post('/upload', protect, express.json({ limit: '15mb' }), async (req, res
 // so any real photo died with a 413. Now the browser uploads the file
 // straight to Cloudinary with this one-time signature and only the small
 // registration JSON (below) ever touches the serverless function.
-router.get('/upload-signature', protect, requireStaff, (req, res) => {
+router.get('/upload-signature', protect, requireStaff, requirePermission('Media', 'create'), (req, res) => {
     const timestamp = Math.round(Date.now() / 1000);
     const signature = cloudinary.utils.api_sign_request(
         { folder: UPLOAD_FOLDER, timestamp },
@@ -159,7 +161,7 @@ router.get('/upload-signature', protect, requireStaff, (req, res) => {
 // WHERE the file went (publicId); every fact stored (URL, size, format,
 // dimensions) is read back from Cloudinary's own API, so a client cannot
 // register a record that lies about the file.
-router.post('/register', protect, requireStaff, async (req, res) => {
+router.post('/register', protect, requireStaff, requirePermission('Media', 'create'), async (req, res) => {
     try {
         const { publicId, resourceType, originalName, mimeType, title, altText, description, status } = req.body || {};
 
@@ -246,11 +248,22 @@ const listMedia = async (req, res) => {
     try {
         if (req.query.search === undefined) {
             const items = await Media.find();
+            await Media.withCodes(items);
             return res.json(items);
         }
 
         const query = String(req.query.search || '').trim();
         const and = [];
+
+        // A query that could be a (partial) public code: make sure legacy
+        // records that never got a code have one before matching, or a
+        // code search could never find them.
+        if (/^[A-Za-z0-9]{1,6}$/.test(query)) {
+            const missing = await Media.find({
+                $or: [{ code: { $exists: false } }, { code: null }, { code: '' }],
+            }).select('_id code');
+            if (missing.length) await Media.withCodes(missing);
+        }
 
         if (req.query.kind === 'image') {
             and.push({ mimeType: { $regex: '^image/', $options: 'i' } });
@@ -265,6 +278,11 @@ const listMedia = async (req, res) => {
                 { originalName: rx },
                 { filename: rx },
                 { altText: rx },
+                // Public code match: codes are stored UPPERCASE, so the
+                // query is normalised to uppercase first — typing the code
+                // in lowercase still finds the file. Prefix match, so a
+                // partial code narrows the list as you type.
+                { code: { $regex: `^${escapeRegex(query.toUpperCase())}` } },
             ];
             // An ObjectId typed (or pasted) into the search box: match any
             // id that STARTS with the query's hex characters.
@@ -290,17 +308,56 @@ const listMedia = async (req, res) => {
         const items = await Media.find(and.length ? { $and: and } : {})
             .sort({ createdAt: -1 })
             .limit(limit);
+        await Media.withCodes(items);
         res.json(items);
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
 };
 
-router.route('/').get(listMedia).post(protect, genericController.create);
+// GET /api/media/:id/usage — the products using this media item, for the
+// Edit Media panel's "Used In" list. A product uses the media when a
+// gallery entry points at it by mediaId (the current contract) OR when a
+// URL matches — the legacy single-image field and gallery entries saved
+// before mediaId existed only have the URL to go on.
+router.get('/:id/usage', async (req, res) => {
+    try {
+        const media = await Media.findById(req.params.id).select('_id url');
+        if (!media) return res.status(404).json({ message: 'Not found' });
+
+        const or = [{ 'images.mediaId': media._id }];
+        if (media.url) {
+            or.push({ image: media.url }, { 'images.url': media.url });
+        }
+
+        const products = await Product.find({ $or: or })
+            .select('name image images status code')
+            .sort({ name: 1 })
+            .lean();
+
+        res.json(
+            products.map((product) => ({
+                _id: product._id,
+                code: product.code || null,
+                name: product.name,
+                image:
+                    product.image ||
+                    product.images?.find((entry) => entry.isMain)?.url ||
+                    product.images?.[0]?.url ||
+                    '',
+                status: product.status || 'draft',
+            })),
+        );
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+});
+
+router.route('/').get(listMedia).post(protect, requirePermission('Media', 'create'), genericController.create);
 router.route('/:id')
     .get(genericController.getById)
-    .put(protect, genericController.update)
-    .delete(protect, async (req, res) => {
+    .put(protect, requirePermission('Media', 'edit'), genericController.update)
+    .delete(protect, requirePermission('Media', 'delete'), async (req, res) => {
         try {
             const media = await Media.findById(req.params.id);
             if (!media) return res.status(404).json({ message: 'Not found' });

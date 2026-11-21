@@ -1,5 +1,6 @@
 // models/Media.js
 const mongoose = require('mongoose');
+const { addCodeSupport } = require('../utils/code');
 
 const mediaSchema = new mongoose.Schema({
   // File Information
@@ -149,5 +150,8 @@ mediaSchema.methods.isImage = function() {
 mediaSchema.methods.isVideo = function() {
   return this.mimeType.startsWith('video/');
 };
+
+// Short public code (6 chars, A–Z0–9) — see utils/code.js.
+addCodeSupport(mediaSchema);
 
 module.exports = mongoose.model('Media', mediaSchema);

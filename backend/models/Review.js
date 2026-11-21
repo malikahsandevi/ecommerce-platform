@@ -1,5 +1,6 @@
 // models/Review.js
 const mongoose = require('mongoose');
+const { addCodeSupport } = require('../utils/code');
 
 const reviewSchema = new mongoose.Schema({
   // Review Content
@@ -81,5 +82,8 @@ const reviewSchema = new mongoose.Schema({
 reviewSchema.index({ user: 1, product: 1 }, { unique: true });
 reviewSchema.index({ product: 1, status: 1 });
 reviewSchema.index({ rating: -1 });
+
+// Short public code (6 chars, A–Z0–9) — see utils/code.js.
+addCodeSupport(reviewSchema);
 
 module.exports = mongoose.model('Review', reviewSchema);

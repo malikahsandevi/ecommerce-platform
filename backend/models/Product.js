@@ -1,5 +1,6 @@
 // models/Product.js
 const mongoose = require('mongoose');
+const { addCodeSupport } = require('../utils/code');
 
 const productSchema = new mongoose.Schema({
   // Basic Info
@@ -161,5 +162,8 @@ productSchema.index({ price: 1 });
 productSchema.index({ averageRating: -1 });
 productSchema.index({ createdAt: -1 });
 productSchema.index({ name: 'text', description: 'text' }); // Text search
+
+// Short public code (6 chars, A–Z0–9) — see utils/code.js.
+addCodeSupport(productSchema);
 
 module.exports = mongoose.model('Product', productSchema);

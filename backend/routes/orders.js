@@ -8,16 +8,18 @@ const {
     deleteOrder
 } = require('../controllers/orderController');
 const { protect } = require('../middleware/auth');
+const { requirePermission } = require('../middleware/permissions');
+
 
 router.use(protect);
 
 router.route('/')
-    .get(getOrders)
-    .post(createOrder);
+    .get(requirePermission('Orders', 'view'), getOrders)
+    .post(requirePermission('Orders', 'create'), createOrder);
 
 router.route('/:id')
-    .get(getOrderById)
-    .put(updateOrder)
-    .delete(deleteOrder);
+    .get(requirePermission('Orders', 'view'), getOrderById)
+    .put(requirePermission('Orders', 'edit'), updateOrder)
+    .delete(requirePermission('Orders', 'delete'), deleteOrder);
 
 module.exports = router;

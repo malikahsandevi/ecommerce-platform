@@ -1,5 +1,6 @@
 // models/Order.js
 const mongoose = require('mongoose');
+const { addCodeSupport } = require('../utils/code');
 
 const orderSchema = new mongoose.Schema({
   // Order Information
@@ -132,5 +133,8 @@ orderSchema.index({ user: 1 });
 orderSchema.index({ status: 1 });
 orderSchema.index({ paymentStatus: 1 });
 orderSchema.index({ createdAt: -1 });
+
+// Short public code (6 chars, A–Z0–9) — see utils/code.js.
+addCodeSupport(orderSchema);
 
 module.exports = mongoose.model('Order', orderSchema);

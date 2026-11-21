@@ -132,6 +132,7 @@ const normalizeProductInput = async (data) => {
 const getProducts = async (req, res) => {
     try {
         const products = await Product.find({}).populate('category brand');
+        await Product.withCodes(products);
         res.json(products.map(shapeProduct));
     } catch (error) {
         res.status(500).json({ message: error.message });
@@ -147,6 +148,7 @@ const getProductById = async (req, res) => {
         if (!product) {
             return res.status(404).json({ message: 'Product not found' });
         }
+        await Product.withCodes(product);
         res.json(shapeProduct(product));
     } catch (error) {
         res.status(500).json({ message: error.message });

@@ -1,5 +1,6 @@
 // models/Category.js
 const mongoose = require('mongoose');
+const { addCodeSupport } = require('../utils/code');
 
 const categorySchema = new mongoose.Schema({
   name: { 
@@ -57,5 +58,8 @@ categorySchema.pre('validate', function () {
       .replace(/^-|-$/g, '');
   }
 });
+
+// Short public code (6 chars, A–Z0–9) — see utils/code.js.
+addCodeSupport(categorySchema);
 
 module.exports = mongoose.model('Category', categorySchema);

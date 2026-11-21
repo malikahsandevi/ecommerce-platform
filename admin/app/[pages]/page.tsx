@@ -2,8 +2,8 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { usePathname } from "next/navigation";
-import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { AlertCircle, CheckCircle2, Loader2, ShieldAlert } from "lucide-react";
 
 import TopBar from "@/components/ui/TopBar";
 import StatsGrid from "@/components/models/StatsGrid";
@@ -15,6 +15,7 @@ import Pagination from "@/components/models/Pagination";
 import { DetailPanel } from "@/components/models/DetailPanel";
 import FormModal, { FormField, ItemFormData } from "@/components/models/FormModal";
 import MediaHandlerModal from "@/components/models/MediaHandler";
+import { confirmDialog } from "@/components/ui/ConfirmDialog";
 
 import { getRouteConfigByPath } from "@/config";
 import { extractApiError, PaginationMeta } from "@/services/api";
@@ -93,9 +94,37 @@ function normaliseStatus(value: unknown): string {
   return String(value ?? "").toLowerCase().replace(/\s+/g, "_");
 }
 
+/** URL segment → permission module (role matrix). */
+const MODULE_BY_SEGMENT: Record<string, string> = {
+  products: "Products",
+  orders: "Orders",
+  customers: "Customers",
+  categories: "Categories",
+  brands: "Brands",
+  coupons: "Coupons",
+  media: "Media",
+  reviews: "Reviews",
+};
+
 const PageLayout: React.FC = () => {
   const pathname = usePathname();
-  const { isAuthenticated, isRestoring, user } = useAdminAuth();
+  const router = useRouter();
+  const { isAuthenticated, isRestoring, user, hasPermission } = useAdminAuth();
+
+  const moduleName = MODULE_BY_SEGMENT[pathname.split("/").filter(Boolean)[0] || ""] ?? null;
+  // UI gating only — the backend answers 403 for anything not allowed.
+  // While permissions are unloaded hasPermission says yes (no flicker).
+  const can = useCallback(
+    (action: string): boolean =>
+      !moduleName || typeof hasPermission !== "function"
+        ? true
+        : hasPermission(moduleName, action),
+    [moduleName, hasPermission],
+  );
+  const canView = can("view");
+  const canCreate = can("create");
+  const canEdit = can("edit");
+  const canDelete = can("delete");
 
   const currentConfig = useMemo(() => getRouteConfigByPath(pathname), [pathname]);
   const service = useMemo(() => getResourceService(pathname), [pathname]);
@@ -234,6 +263,7 @@ const PageLayout: React.FC = () => {
     if (detailMapper) return detailMapper(selectedRawRow);
     return {
       id: selectedRawRow._id || selectedRawRow.id,
+      code: selectedRawRow.code,
       title: selectedRawRow.name || "Details",
       status: selectedRawRow.status || "active",
       attributes: selectedRawRow,
@@ -245,7 +275,7 @@ const PageLayout: React.FC = () => {
     return currentConfig.buttons
       .filter((btn) => {
         if (!btn.show) return false;
-        if (btn.id === "new-item") return capabilities.canCreate || isMediaPage;
+        if (btn.id === "new-item") return (capabilities.canCreate || isMediaPage) && canCreate;
         return true;
       })
       .map((btn) => ({
@@ -255,7 +285,7 @@ const PageLayout: React.FC = () => {
         variant: btn.variant,
         disabled: btn.disabled,
       }));
-  }, [currentConfig, capabilities, isMediaPage]);
+  }, [currentConfig, capabilities, isMediaPage, canCreate]);
 
   const formFields = useMemo(() => {
     // Not every route config declares form fields (media uses its own modal).
@@ -422,7 +452,16 @@ const PageLayout: React.FC = () => {
         return;
       }
 
-      if (!window.confirm(`Delete this ${Route.replace(/s$/, "").toLowerCase()}? This cannot be undone.`)) {
+      // The panel's own confirmation dialog — never the browser's
+      // native confirm() (it showed the hosting domain and clashed
+      // with the design).
+      const confirmed = await confirmDialog({
+        title: `Delete this ${Route.replace(/s$/, "").toLowerCase()}?`,
+        message: "This cannot be undone.",
+        confirmLabel: "Delete",
+        variant: "danger",
+      });
+      if (!confirmed) {
         return;
       }
 
@@ -531,8 +570,66 @@ const PageLayout: React.FC = () => {
     [reload],
   );
 
+  // --- "Used In" navigation (Edit Media → product) -----------------------
+  // The media panel lists the products using the item being edited;
+  // clicking one hands the product id over via sessionStorage and lands
+  // on the Products page, which opens that product's edit form.
+  const handleOpenProduct = useCallback(
+    (productId: string) => {
+      try {
+        sessionStorage.setItem("openProductId", productId);
+      } catch {
+        /* navigation still happens; the edit form just won't auto-open */
+      }
+      setIsModalOpen(false);
+      router.push("/products");
+    },
+    [router],
+  );
+
+  useEffect(() => {
+    if (!pathname.startsWith("/products") || items.length === 0) return;
+    let target: string | null = null;
+    try {
+      target = sessionStorage.getItem("openProductId");
+    } catch {
+      /* storage unavailable */
+    }
+    if (!target) return;
+    try {
+      sessionStorage.removeItem("openProductId");
+    } catch {
+      /* ignore */
+    }
+    const row = items.find((item) => String(item._id || item.id) === target);
+    if (!row) return;
+    setSelectedRawRow(row);
+    setFormMode("edit");
+    setFormData(buildInitialFormValues(row));
+    setIsModalOpen(true);
+  }, [pathname, items, buildInitialFormValues]);
+
   const isBusy = isLoading || isRestoring;
   const isTruncated = Boolean(meta && meta.total > items.length);
+
+  // Direct access to a module the role cannot view: a clean notice
+  // instead of a broken page (the API would 403 the data anyway).
+  if (isAuthenticated && moduleName && !canView) {
+    return (
+      <div className="flex min-h-screen w-full flex-col items-center justify-center gap-2 bg-[var(--background)] p-6 text-center text-[var(--text)]">
+        <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--primary-soft)] text-[var(--primary)]">
+          <ShieldAlert className="h-7 w-7" />
+        </span>
+        <h2 className="text-base font-bold">
+          You don&apos;t have permission to view {moduleName}
+        </h2>
+        <p className="max-w-sm text-xs text-[var(--text-muted)]">
+          Your role ({user?.role || "Staff"}) can&apos;t access this section. Ask a
+          Super Admin to change it in Settings → Users &amp; Roles.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex gap-3 p-3 min-h-screen w-full flex-col text-[var(--text)] bg-[var(--background)] transition-colors duration-200 antialiased lg:h-screen lg:overflow-hidden">
@@ -636,8 +733,8 @@ const PageLayout: React.FC = () => {
                   selectedRawRow && tableMapper ? tableMapper(selectedRawRow) : null
                 }
                 onSelectItem={handleSelectRow}
-                onEditItem={handleRowEdit}
-                onDeleteItem={handleRowDelete}
+                onEditItem={canEdit ? handleRowEdit : undefined}
+                onDeleteItem={canDelete ? handleRowDelete : undefined}
                 columnHeaders={currentConfig.columnHeaders}
               />
             </div>
@@ -662,10 +759,14 @@ const PageLayout: React.FC = () => {
           selectedItem={selectedDetailData as never}
           panelTitle={`${Route} Details`}
           onClose={() => setSelectedRawRow(null)}
-          onEdit={handleEditItem}
-          onDelete={(id) => {
-            void handleDeleteItem(String(id));
-          }}
+          onEdit={canEdit ? handleEditItem : undefined}
+          onDelete={
+            canDelete
+              ? (id) => {
+                  void handleDeleteItem(String(id));
+                }
+              : undefined
+          }
           editLabel={`Edit ${Route}`}
           deleteLabel={`Delete ${Route}`}
         />
@@ -702,6 +803,7 @@ const PageLayout: React.FC = () => {
           }
           onClose={() => setIsModalOpen(false)}
           onSave={handleMediaSave}
+          onOpenProduct={handleOpenProduct}
         />
       ) : (
         <FormModal

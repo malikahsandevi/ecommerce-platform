@@ -139,8 +139,12 @@ export const MediaPickerModal: React.FC<MediaPickerModalProps> = ({
             <input
               type="text"
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search by name, alt text or ID…"
+              // Codes are UPPERCASE — normalise as the user types so the
+              // box itself shows the canonical form. The other matches
+              // (name, alt text) are case-insensitive on the server, so
+              // uppercasing the query loses nothing.
+              onChange={(e) => setQuery(e.target.value.toUpperCase())}
+              placeholder="Search by name, alt text or code…"
               autoFocus
               className="w-full pl-9 pr-3 py-2 bg-[var(--surface-muted)] border border-[var(--border)] rounded-xl outline-none text-xs text-[var(--text)] focus:border-[var(--primary)] transition-colors"
             />
@@ -170,7 +174,7 @@ export const MediaPickerModal: React.FC<MediaPickerModalProps> = ({
           ) : results.length === 0 ? (
             <p className="text-xs text-[var(--text-muted)] italic py-10 text-center">
               {query
-                ? "No media matches that search. Try a name, alt text or id."
+                ? "No media matches that search. Try a name, alt text or code."
                 : "The media library is empty — upload an image first."}
             </p>
           ) : (
@@ -218,7 +222,7 @@ export const MediaPickerModal: React.FC<MediaPickerModalProps> = ({
                         {media.originalName || media.filename || "Untitled file"}
                       </span>
                       <span className="block text-[9px] text-[var(--text-muted)] truncate">
-                        {alt}
+                        {media.code ? `${media.code} · ${alt}` : alt}
                       </span>
                     </span>
                   </button>

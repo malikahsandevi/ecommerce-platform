@@ -2,9 +2,15 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
-import { Copy, Eye, EyeOff, Plus, ShieldCheck, Trash2, Code2, Globe } from "lucide-react";
+import { Check, Copy, Eye, EyeOff, Plus, ShieldCheck, Trash2, Code2, Globe } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { apiClient, extractApiError } from "@/services/api";
+import { settingsService } from "@/services/settingsService";
+import { useAdminAuth } from "@/services/authContext";
+import type {
+  PermissionMatrixData,
+  RolePermissionsData,
+} from "@/services/settingsService";
 import {
   SettingsCard,
   SettingsInput,
@@ -603,6 +609,14 @@ function UsersPanel({
   onUpdateUser: (id: string, values: { role?: string; isActive?: boolean }) => void;
   onCreateUser: (values: NewUserValues) => Promise<void>;
 }) {
+  const { hasPermission } = useAdminAuth();
+  const canCreateUsers =
+    typeof hasPermission !== "function" || hasPermission("Users", "create");
+  const canEditUsers =
+    typeof hasPermission !== "function" || hasPermission("Users", "edit");
+  const canDeleteUsers =
+    typeof hasPermission !== "function" || hasPermission("Users", "delete");
+
   const [showAddForm, setShowAddForm] = useState(false);
   const [form, setForm] = useState<NewUserValues>({
     firstName: "",
@@ -656,15 +670,18 @@ function UsersPanel({
     "h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-sm text-[var(--text)] outline-none transition focus:border-[var(--primary)]";
 
   return (
+    <>
     <SettingsCard
       title="Users & Roles"
       description="Change a user's role or deactivate an account. Your own role and the last Super Admin are protected."
     >
-      <div className="mb-4 flex justify-end">
-        <Button variant="primary" icon={Plus} onClick={openAddForm}>
-          Add User
-        </Button>
-      </div>
+      {canCreateUsers && (
+        <div className="mb-4 flex justify-end">
+          <Button variant="primary" icon={Plus} onClick={openAddForm}>
+            Add User
+          </Button>
+        </div>
+      )}
 
       {showAddForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3">
@@ -771,8 +788,9 @@ function UsersPanel({
                   <select
                     aria-label={`Role for ${user.email}`}
                     value={user.role || "Customer"}
+                    disabled={!canEditUsers}
                     onChange={(event) => onUpdateUser(user._id, { role: event.target.value })}
-                    className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-[13px] text-[var(--text)] outline-none focus:border-[var(--primary)]"
+                    className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-[13px] text-[var(--text)] outline-none focus:border-[var(--primary)] disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {USER_ROLE_OPTIONS.map((role) => (
                       <option key={role} value={role}>
@@ -784,8 +802,9 @@ function UsersPanel({
                 <td className="px-4 py-3">
                   <button
                     type="button"
+                    disabled={!canEditUsers}
                     onClick={() => onUpdateUser(user._id, { isActive: user.isActive === false })}
-                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold disabled:cursor-not-allowed disabled:opacity-60 ${
                       user.isActive === false
                         ? "bg-red-500/10 text-red-500"
                         : "bg-emerald-500/10 text-emerald-600"
@@ -796,13 +815,15 @@ function UsersPanel({
                   </button>
                 </td>
                 <td className="px-4 py-3 text-right">
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    icon={Trash2}
-                    aria-label={`Delete ${user.email}`}
-                    onClick={() => onDeleteUser(user._id)}
-                  />
+                  {canDeleteUsers && (
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      icon={Trash2}
+                      aria-label={`Delete ${user.email}`}
+                      onClick={() => onDeleteUser(user._id)}
+                    />
+                  )}
                 </td>
               </tr>
             ))}
@@ -817,6 +838,241 @@ function UsersPanel({
         </table>
       </div>
     </SettingsCard>
+
+    <RolePermissionsPanel />
+    </>
+  );
+}
+
+const MATRIX_ACTIONS = ["view", "create", "edit", "delete"] as const;
+
+/** Circular tick — the same visual language as the media upload panel:
+ *  filled orange with a white check, or a hollow ring. */
+function MatrixTick({
+  on,
+  disabled,
+  label,
+  onToggle,
+}: {
+  on: boolean;
+  disabled: boolean;
+  label: string;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={on}
+      aria-label={label}
+      disabled={disabled}
+      onClick={onToggle}
+      className={disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer"}
+    >
+      <span
+        className={`flex h-5 w-5 items-center justify-center rounded-full border-2 transition-all ${
+          on
+            ? "border-[var(--primary)] bg-[var(--primary)] text-white"
+            : "border-[var(--text-muted)] bg-transparent text-transparent"
+        }`}
+      >
+        <Check size={12} strokeWidth={4} />
+      </span>
+    </button>
+  );
+}
+
+/**
+ * Role Permissions matrix editor. The matrix itself lives on the server
+ * (GET/PUT /api/permissions); only a Super Admin may change it — everyone
+ * else sees it read-only. Super Admin's own row is locked by design: that
+ * role always has full access, whatever the matrix says, so the store
+ * can never lock its top admin out.
+ */
+function RolePermissionsPanel() {
+  const [data, setData] = useState<RolePermissionsData | null>(null);
+  const [matrix, setMatrix] = useState<PermissionMatrixData>({});
+  const [selectedRole, setSelectedRole] = useState("Admin");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    settingsService
+      .getPermissions()
+      .then((loaded) => {
+        if (cancelled) return;
+        setData(loaded);
+        setMatrix(loaded.matrix);
+      })
+      .catch((loadError: unknown) => {
+        if (!cancelled) setError(extractApiError(loadError));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const canEdit = Boolean(data?.canEdit);
+  const roleLocked = selectedRole === "Super Admin";
+  const editable = canEdit && !roleLocked;
+
+  const toggleCell = (module: string, action: string) => {
+    if (!editable) return;
+    setNotice("");
+    setMatrix((current) => ({
+      ...current,
+      [selectedRole]: {
+        ...current[selectedRole],
+        [module]: {
+          ...current[selectedRole]?.[module],
+          [action]: !current[selectedRole]?.[module]?.[action],
+        },
+      },
+    }));
+  };
+
+  const saveMatrix = async () => {
+    setSaving(true);
+    setError("");
+    setNotice("");
+    try {
+      const saved = await settingsService.updatePermissions(matrix);
+      setMatrix(saved);
+      setNotice("Role permissions saved.");
+    } catch (saveError) {
+      setError(extractApiError(saveError));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="mt-3">
+      <SettingsCard
+        title="Role Permissions"
+        description="Control what each role can see and do in the admin panel. Changes apply to new sessions right away."
+      >
+        {loading ? (
+          <p className="text-sm text-[var(--text-muted)]">Loading permissions…</p>
+        ) : error && !data ? (
+          <p className="rounded-lg border border-red-300 bg-red-500/10 p-3 text-xs text-red-600" role="alert">
+            {error}
+          </p>
+        ) : data ? (
+          <>
+            {/* Role selector */}
+            <div className="mb-4 flex flex-wrap gap-2">
+              {data.roles.map((role) => (
+                <button
+                  key={role}
+                  type="button"
+                  onClick={() => {
+                    setSelectedRole(role);
+                    setNotice("");
+                  }}
+                  className={`flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs transition-all ${
+                    selectedRole === role
+                      ? "border-[var(--primary)] bg-[var(--primary)] font-semibold text-white"
+                      : "border-[var(--border)] bg-[var(--surface)] text-[var(--text-soft)]"
+                  }`}
+                >
+                  {role}
+                  {selectedRole === role && <Check size={11} strokeWidth={3.5} />}
+                </button>
+              ))}
+            </div>
+
+            {roleLocked ? (
+              <p className="mb-4 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 text-xs text-[var(--text-soft)]">
+                Super Admin always has full access to everything — this row
+                can&apos;t be changed, so the store&apos;s top admin can never be
+                locked out.
+              </p>
+            ) : !canEdit ? (
+              <p className="mb-4 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 text-xs text-[var(--text-soft)]">
+                Only a Super Admin can change role permissions. You&apos;re
+                viewing them read-only.
+              </p>
+            ) : null}
+
+            <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
+              <table className="w-full min-w-[520px] text-left text-sm">
+                <thead className="bg-[var(--surface)] text-xs text-[var(--text-muted)]">
+                  <tr>
+                    <th className="px-4 py-3">Module</th>
+                    {MATRIX_ACTIONS.map((action) => (
+                      <th key={action} className="px-4 py-3 text-center capitalize">
+                        {action}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.modules.map((module) => (
+                    <tr key={module} className="border-t border-[var(--border)]">
+                      <td className="px-4 py-2.5 font-medium text-[var(--text)]">
+                        {module}
+                      </td>
+                      {MATRIX_ACTIONS.map((action) => {
+                        const supported = (
+                          data.moduleActions[module] || []
+                        ).includes(action);
+                        const on = Boolean(matrix[selectedRole]?.[module]?.[action]);
+                        return (
+                          <td key={action} className="px-4 py-2.5 text-center">
+                            {supported ? (
+                              <MatrixTick
+                                on={on}
+                                disabled={!editable}
+                                label={`${selectedRole} can ${action} ${module}`}
+                                onToggle={() => toggleCell(module, action)}
+                              />
+                            ) : (
+                              <span className="text-[var(--text-muted)]">—</span>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {(error || notice) && (
+              <p
+                className={`mt-4 rounded-lg border p-3 text-xs ${
+                  error
+                    ? "border-red-300 bg-red-500/10 text-red-600"
+                    : "border-green-300 bg-green-500/10 text-green-700"
+                }`}
+                role={error ? "alert" : "status"}
+              >
+                {error || notice}
+              </p>
+            )}
+
+            {canEdit && (
+              <div className="mt-4 flex justify-end">
+                <Button
+                  variant="primary"
+                  onClick={() => void saveMatrix()}
+                  disabled={saving}
+                >
+                  {saving ? "Saving..." : "Save Permissions"}
+                </Button>
+              </div>
+            )}
+          </>
+        ) : null}
+      </SettingsCard>
+    </div>
   );
 }
 

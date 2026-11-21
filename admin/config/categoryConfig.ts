@@ -2,6 +2,7 @@ import { SelectOption, FormField } from "@/components/models/FormModal";
 import { Download, Plus, RefreshCcwDot } from "lucide-react";
 
 export interface Category {
+  code?: string;
   _id?: string;
   name: string;
   slug: string;
@@ -59,7 +60,7 @@ export const categoryConfig = {
   ],
 
   // Search Fields
-  searchFields: ["name", "slug", "description"],
+  searchFields: ["name", "slug", "description", "code"],
 
   // Table Column Labels
   columnHeaders: {
@@ -75,6 +76,7 @@ export const categoryConfig = {
   mapTableData: (category: Category) => ({
     id: category._id,
     _id: category._id,
+    code: category.code,
     name: category.name,
     image: category.image || "",
     slug: category.slug,
@@ -87,6 +89,7 @@ export const categoryConfig = {
   // Map Data for DetailPanel Component
   mapDetailData: (category: Category) => ({
     id: category._id,
+    code: category.code,
     title: category.name,
     status: category.status || (category.isActive === false ? "inactive" : "active"),
     image: category.image,
