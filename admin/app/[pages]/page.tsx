@@ -13,6 +13,7 @@ import FilterBar from "@/components/models/FilterBar";
 import { CreateTable } from "@/components/models/CreateTable";
 import Pagination from "@/components/models/Pagination";
 import { DetailPanel } from "@/components/models/DetailPanel";
+import { CustomerProfileSections } from "@/components/models/CustomerProfileSections";
 import FormModal, { FormField, ItemFormData } from "@/components/models/FormModal";
 import MediaHandlerModal from "@/components/models/MediaHandler";
 import { confirmDialog } from "@/components/ui/ConfirmDialog";
@@ -178,6 +179,8 @@ const PageLayout: React.FC = () => {
 
   const Route = currentConfig.routeTitle;
   const isMediaPage = pathname.includes("/media") || Route.toLowerCase() === "media";
+  const isCustomersPage =
+    pathname.includes("/customers") || Route.toLowerCase() === "customers";
 
   const tablist = useMemo(
     () => currentConfig.tabs || [`All ${Route}`],
@@ -881,6 +884,13 @@ const PageLayout: React.FC = () => {
           }
           editLabel={`Edit ${Route}`}
           deleteLabel={`Delete ${Route}`}
+          extraSections={
+            isCustomersPage && selectedRawRow ? (
+              <CustomerProfileSections
+                customerId={String(selectedRawRow._id || selectedRawRow.id)}
+              />
+            ) : undefined
+          }
         />
       </div>
 

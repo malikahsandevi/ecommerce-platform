@@ -126,6 +126,46 @@ const userSchema = new mongoose.Schema(
         ref: "Product",
       },
     ],
+
+    // Shopping Profile — the customer's OWN storefront data, stored on
+    // the record. (Transactional facts — purchased history, total
+    // spend, used coupons — are NOT stored here; they are derived from
+    // Orders by GET /api/users/:id/profile so they can never go stale.)
+    favorites: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Product",
+      },
+    ],
+    liked: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Product",
+      },
+    ],
+    cart: [
+      {
+        product: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Product",
+        },
+        quantity: { type: Number, default: 1, min: 1 },
+      },
+    ],
+    // At most 3 — enforced here as a backstop and, with a clearer
+    // message, in the user create/update controllers.
+    favoriteCategories: {
+      type: [
+        {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Category",
+        },
+      ],
+      validate: {
+        validator: (value) => !Array.isArray(value) || value.length <= 3,
+        message: "Favorite categories are limited to 3.",
+      },
+    },
   },
   {
     timestamps: true,

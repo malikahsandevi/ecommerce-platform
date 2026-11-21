@@ -5,7 +5,8 @@ const {
     getUserById,
     createUser,
     updateUser,
-    deleteUser
+    deleteUser,
+    getUserProfile
 } = require('../controllers/userController');
 const { protect } = require('../middleware/auth');
 const { requireStaff } = require('../middleware/admin');
@@ -62,5 +63,12 @@ router.route('/:id')
     .get(requireAnyPermission([['Users', 'view'], ['Customers', 'view']]), getUserById)
     .put(guardUpdate, updateUser)
     .delete(guardDelete, deleteUser);
+
+// The customer's shopping profile: stored lists + order-derived stats.
+router.get(
+    '/:id/profile',
+    requireAnyPermission([['Users', 'view'], ['Customers', 'view']]),
+    getUserProfile
+);
 
 module.exports = router;

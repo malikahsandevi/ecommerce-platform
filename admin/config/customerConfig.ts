@@ -25,6 +25,8 @@ export interface Customer {
   status?: string;
   addresses?: CustomerAddress[];
   createdAt?: string;
+  /** Stored shopping-profile category ids (max 3, backend-enforced). */
+  favoriteCategories?: string[];
 }
 
 const ROLE_OPTIONS = [
@@ -153,6 +155,7 @@ export const customerConfig = {
         role: "Customer",
         status: "active",
         isEmailVerified: false,
+        favoriteCategories: [] as string[],
       };
     }
 
@@ -171,6 +174,7 @@ export const customerConfig = {
       role: customer.role || "Customer",
       status: customer.isActive === false ? "inactive" : "active",
       isEmailVerified: customer.isVerified || false,
+      favoriteCategories: (customer.favoriteCategories || []).map(String),
     };
   },
 
@@ -283,6 +287,16 @@ export const customerConfig = {
       type: "switch",
       colSpan: 1,
       section: "Account & Permissions",
+    },
+
+    // Section 3: Shopping Profile — favorite categories (max 3) plus
+    // the customer's stored favorites / liked / cart, read-only.
+    {
+      name: "favoriteCategories",
+      label: "Shopping Profile",
+      type: "shopping-profile",
+      colSpan: 4,
+      section: "Shopping Profile",
     },
   ] as FormField[],
 };

@@ -520,3 +520,46 @@ export const mediaService = {
     };
   },
 };
+
+/** One populated product entry in a customer's shopping profile. */
+export interface ProfileProduct {
+  id: string;
+  name: string;
+  image: string;
+  price: number | null;
+  quantity?: number;
+}
+
+export interface CustomerProfile {
+  favorites: ProfileProduct[];
+  liked: ProfileProduct[];
+  cart: ProfileProduct[];
+  favoriteCategories: { id: string; name: string; image: string }[];
+  stats: {
+    totalSpend: number;
+    totalOrders: number;
+    averageOrderValue: number;
+    lastOrderDate: string | null;
+  };
+  purchased: {
+    id: string;
+    orderNumber: string;
+    status: string;
+    total: number;
+    date: string;
+    items: { name: string; quantity: number; price: number; image: string }[];
+  }[];
+  usedCoupons: { code: string; timesUsed: number }[];
+}
+
+/**
+ * The customer's shopping profile (GET /users/:id/profile): the stored
+ * lists populated from the User record plus the order-derived stats —
+ * the backend derives the transactional half from Orders per request.
+ */
+export const customerProfileService = {
+  getProfile: async (userId: string): Promise<CustomerProfile> => {
+    const res = await apiClient.get(`/users/${userId}/profile`);
+    return res.data as CustomerProfile;
+  },
+};

@@ -18,6 +18,7 @@ import ImageCropper from "@/components/models/ImageCropper";
 import ProductMediaManager, {
   GalleryImage,
 } from "@/components/models/ProductMediaManager";
+import CustomerShoppingProfile from "@/components/models/CustomerShoppingProfile";
 import { mediaService } from "@/services/resourceRegistry";
 import { extractApiError } from "@/services/api";
 
@@ -35,7 +36,8 @@ export type FormFieldType =
   | "tags"
   | "key-value"
   | "image"
-  | "media-gallery";
+  | "media-gallery"
+  | "shopping-profile";
 
 export interface FormField {
   name: string; // Key in formData (e.g. "title", "sku", "address.city")
@@ -653,6 +655,32 @@ export const FormModal: React.FC<FormModalProps> = ({
             )}
           </div>
         );
+
+      case "shopping-profile": {
+        // The customer form's Shopping Profile section: this field's
+        // value is the favorite-category id list (max 3, enforced in
+        // the component and again on the backend); the component also
+        // shows the stored favorites / liked / cart read-only.
+        const categoryIds: string[] = Array.isArray(rawValue)
+          ? rawValue.map(String)
+          : [];
+        return (
+          <div key={field.name} className={colClass}>
+            <CustomerShoppingProfile
+              customerId={
+                formData?._id ? String(formData._id) : undefined
+              }
+              value={categoryIds}
+              onChange={(ids) => handleFieldChange(field.name, ids)}
+            />
+            {field.helperText && (
+              <span className="text-[10px] text-[var(--text-muted)] mt-0.5 block">
+                {field.helperText}
+              </span>
+            )}
+          </div>
+        );
+      }
 
       default:
         return null;

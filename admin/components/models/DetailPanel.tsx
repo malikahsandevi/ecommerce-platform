@@ -97,6 +97,9 @@ export interface DetailPanelProps<T extends DetailPanelData> {
   editLabel?: string;
   deleteLabel?: string;
   renderCustomActions?: (item: T) => React.ReactNode;
+  /** Extra sections rendered at the end of the scrollable body, in the
+   *  panel's own section style (e.g. the customer shopping profile). */
+  extraSections?: React.ReactNode;
 }
 
 export function DetailPanel<T extends DetailPanelData>({
@@ -110,6 +113,7 @@ export function DetailPanel<T extends DetailPanelData>({
   editLabel = "Edit",
   deleteLabel = "Delete",
   renderCustomActions,
+  extraSections,
 }: DetailPanelProps<T>) {
   // Prices follow the store currency setting.
   useStoreCurrency();
@@ -386,6 +390,9 @@ export function DetailPanel<T extends DetailPanelData>({
                 )}
               </div>
             </div>
+
+            {/* Caller-supplied extra sections (e.g. customer profile) */}
+            {extraSections}
           </div>
 
           {/* Action Buttons */}

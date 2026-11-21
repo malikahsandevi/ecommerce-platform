@@ -1,4 +1,13 @@
 const User = require('../models/User');
+const Order = require('../models/Order');
+// Registered so Order's coupon populate can resolve its code.
+require('../models/Coupon');
+
+const FAVORITE_CATEGORY_LIMIT = 3;
+const favoriteCategoryError = (res) =>
+    res.status(400).json({
+        message: `Favorite categories are limited to ${FAVORITE_CATEGORY_LIMIT}. Remove one before adding another.`
+    });
 
 // @desc    Get all users (customers)
 // @route   GET /api/users
@@ -37,6 +46,11 @@ const USER_ROLES = ['Super Admin', 'Admin', 'Manager', 'Editor', 'Support', 'Cus
 const createUser = async (req, res) => {
     try {
         const { firstName, lastName, email, password, role, isActive } = req.body || {};
+
+        if (Array.isArray(req.body?.favoriteCategories)
+            && req.body.favoriteCategories.length > FAVORITE_CATEGORY_LIMIT) {
+            return favoriteCategoryError(res);
+        }
 
         if (!email || !String(email).trim()) {
             return res.status(400).json({ message: 'An email address is required.' });
@@ -80,6 +94,13 @@ const createUser = async (req, res) => {
             role: role || 'Customer',
             isActive: isActive === undefined ? true : Boolean(isActive),
             isVerified: true,
+            // Shopping profile lists, when the caller supplies them.
+            ...(Array.isArray(req.body.favoriteCategories)
+                ? { favoriteCategories: req.body.favoriteCategories }
+                : {}),
+            ...(Array.isArray(req.body.favorites) ? { favorites: req.body.favorites } : {}),
+            ...(Array.isArray(req.body.liked) ? { liked: req.body.liked } : {}),
+            ...(Array.isArray(req.body.cart) ? { cart: req.body.cart } : {}),
         });
         const createdUser = await user.save();
 
@@ -110,6 +131,11 @@ const updateUser = async (req, res) => {
     try {
         // Exclude password from updates in this route for safety
         const { password, ...updateData } = req.body;
+
+        if (Array.isArray(updateData.favoriteCategories)
+            && updateData.favoriteCategories.length > FAVORITE_CATEGORY_LIMIT) {
+            return favoriteCategoryError(res);
+        }
 
         const target = await User.findById(req.params.id);
         if (!target) {
@@ -179,11 +205,107 @@ const deleteUser = async (req, res) => {
     }
 };
 
+// @desc    Get a customer's full shopping profile
+// @route   GET /api/users/:id/profile
+// @access  Admin
+// The STORED lists (favorites, liked, cart, favoriteCategories) come
+// off the User record, populated with product/category names + images.
+// Everything transactional is DERIVED from the customer's Orders on
+// every request — purchased history, total spend (non-cancelled
+// orders), order count, average order value, last order date and the
+// distinct coupons used with their counts — so it can never go stale
+// and nothing is invented for customers without orders.
+const productBrief = (product) =>
+    product
+        ? {
+              id: product._id,
+              name: product.name || '',
+              image: product.image || '',
+              price: product.price ?? null,
+          }
+        : null;
+
+const getUserProfile = async (req, res) => {
+    try {
+        const user = await User.findById(req.params.id)
+            .select('-password')
+            .populate('favorites', 'name image price')
+            .populate('liked', 'name image price')
+            .populate('cart.product', 'name image price')
+            .populate('favoriteCategories', 'name image');
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        // Orders carry a required `user` ref — that is the match.
+        const orders = await Order.find({ user: user._id })
+            .sort({ createdAt: -1 })
+            .populate('coupon', 'code')
+            .lean();
+
+        const activeOrders = orders.filter((order) => order.status !== 'cancelled');
+        const totalSpend = activeOrders.reduce((sum, order) => sum + (order.total || 0), 0);
+        const totalOrders = activeOrders.length;
+        const averageOrderValue = totalOrders > 0 ? totalSpend / totalOrders : 0;
+        const lastOrderDate = activeOrders.length > 0 ? activeOrders[0].createdAt : null;
+
+        const couponCounts = new Map();
+        for (const order of activeOrders) {
+            const code = order.coupon?.code;
+            if (code) couponCounts.set(code, (couponCounts.get(code) || 0) + 1);
+        }
+
+        res.json({
+            favorites: (user.favorites || []).map(productBrief).filter(Boolean),
+            liked: (user.liked || []).map(productBrief).filter(Boolean),
+            cart: (user.cart || [])
+                .map((entry) => {
+                    const brief = productBrief(entry.product);
+                    return brief ? { ...brief, quantity: entry.quantity || 1 } : null;
+                })
+                .filter(Boolean),
+            favoriteCategories: (user.favoriteCategories || [])
+                .map((category) =>
+                    category
+                        ? { id: category._id, name: category.name || '', image: category.image || '' }
+                        : null,
+                )
+                .filter(Boolean),
+            stats: {
+                totalSpend,
+                totalOrders,
+                averageOrderValue,
+                lastOrderDate,
+            },
+            purchased: orders.slice(0, 5).map((order) => ({
+                id: order._id,
+                orderNumber: order.orderNumber,
+                status: order.status,
+                total: order.total,
+                date: order.createdAt,
+                items: (order.items || []).map((item) => ({
+                    name: item.name,
+                    quantity: item.quantity,
+                    price: item.price,
+                    image: item.image || '',
+                })),
+            })),
+            usedCoupons: [...couponCounts.entries()].map(([code, timesUsed]) => ({
+                code,
+                timesUsed,
+            })),
+        });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
 module.exports = {
     getUsers,
     getUserById,
     createUser,
     updateUser,
-    deleteUser
+    deleteUser,
+    getUserProfile
 };
 
