@@ -13,9 +13,11 @@ import {
   Lock,
   Zap,
   Loader2,
+  Package,
+  Award,
+  FolderTree,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
-import { StatusPill } from "@/components/models/CreateTable";
 import { mediaService } from "@/services/resourceRegistry";
 
 /** One product in the Edit Media panel's "Used In" list. */
@@ -33,6 +35,8 @@ export interface MediaUsageEntity {
   code?: string | null;
   name: string;
   image?: string;
+  /** "active" | "inactive" (derived from isActive by the API). */
+  status?: string;
 }
 
 /** Everything using the media item being edited ("Used In" panel). */
@@ -1557,59 +1561,127 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
     const canOpen = (type: MediaUsageType) =>
       Boolean(onOpenUsage || (type === "product" && onOpenProduct));
 
+    // One flat list, same order as before: products, brands, categories.
+    const entries: { type: MediaUsageType; entity: MediaUsageEntity }[] = [
+      ...usage.products.map((entity) => ({
+        type: "product" as MediaUsageType,
+        entity,
+      })),
+      ...usage.brands.map((entity) => ({
+        type: "brand" as MediaUsageType,
+        entity,
+      })),
+      ...usage.categories.map((entity) => ({
+        type: "category" as MediaUsageType,
+        entity,
+      })),
+    ];
+
+    const TYPE_META: Record<
+      MediaUsageType,
+      { label: string; Icon: React.ElementType }
+    > = {
+      product: { label: "Product", Icon: Package },
+      brand: { label: "Brand", Icon: Award },
+      category: { label: "Category", Icon: FolderTree },
+    };
+
+    // Status presentation: Published/Active get the filled orange tick
+    // (echoing the upload cards' ticks); everything else (Draft,
+    // Inactive, Pending Review…) gets the muted variant. The tooltip
+    // carries the human-readable status title.
+    const statusMeta = (type: MediaUsageType, raw?: string) => {
+      const status = (
+        raw || (type === "product" ? "draft" : "active")
+      ).toLowerCase();
+      return {
+        positive: status === "published" || status === "active",
+        label: status
+          .replace(/_/g, " ")
+          .replace(/\b\w/g, (c) => c.toUpperCase()),
+      };
+    };
+
+    const badgeTooltip = (text: string, align: "left" | "right") => (
+      <span
+        data-tooltip={text}
+        className={`pointer-events-none absolute top-full z-30 mt-1 whitespace-nowrap rounded bg-black/90 px-1.5 py-0.5 text-[9px] font-semibold text-white opacity-0 shadow transition-opacity duration-150 group-hover/badge:opacity-100 ${
+          align === "left" ? "left-0" : "right-0"
+        }`}
+      >
+        {text}
+      </span>
+    );
+
     const renderUsageCard = (
       type: MediaUsageType,
       entity: MediaUsageEntity,
-      status?: string,
-    ) => (
-      <button
-        key={`${type}-${entity._id}`}
-        type="button"
-        disabled={!canOpen(type)}
-        onClick={() => openUsage(type, entity._id)}
-        title={canOpen(type) ? `Open ${entity.name} for editing` : entity.name}
-        className={`flex items-center gap-2.5 rounded-lg border border-[var(--primary)]/30 bg-[var(--primary-soft)] p-2 text-left transition-colors ${
-          canOpen(type)
-            ? "cursor-pointer hover:border-[var(--primary)]"
-            : "cursor-default"
-        }`}
-      >
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--background)]">
-          {entity.image ? (
-            <img
-              src={entity.image}
-              alt=""
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <span className="text-xs font-bold text-[var(--text-muted)]">
-              {(entity.name || "?").trim().charAt(0).toUpperCase()}
+    ) => {
+      const { Icon: TypeIcon, label: typeLabel } = TYPE_META[type];
+      const status = statusMeta(type, entity.status);
+      return (
+        <button
+          key={`${type}-${entity._id}`}
+          type="button"
+          disabled={!canOpen(type)}
+          onClick={() => openUsage(type, entity._id)}
+          title={canOpen(type) ? `Open ${entity.name} for editing` : entity.name}
+          className={`relative h-24 w-24 shrink-0 overflow-hidden rounded-lg border-2 bg-[var(--background)] text-left transition-all ${
+            canOpen(type)
+              ? "cursor-pointer border-[var(--border)] hover:border-[var(--primary)]"
+              : "cursor-default border-[var(--border)]"
+          }`}
+        >
+          <span className="flex h-full w-full items-center justify-center overflow-hidden">
+            {entity.image ? (
+              <img
+                src={entity.image}
+                alt=""
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <span className="text-xl font-bold text-[var(--text-muted)]">
+                {(entity.name || "?").trim().charAt(0).toUpperCase()}
+              </span>
+            )}
+          </span>
+
+          {/* Status tick — top-left, where the upload cards keep theirs. */}
+          <span className="group/badge absolute left-1.5 top-1.5 z-10">
+            <span
+              data-status={status.label}
+              className={`flex h-5 w-5 items-center justify-center rounded-full border-2 transition-all ${
+                status.positive
+                  ? "border-[var(--primary)] bg-[var(--primary)] text-white"
+                  : "border-gray-400 bg-white/90 text-gray-500"
+              }`}
+            >
+              <Check size={12} strokeWidth={4} />
             </span>
-          )}
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-xs font-semibold text-[var(--text)]">
+            {badgeTooltip(status.label, "left")}
+          </span>
+
+          {/* Type chip — top-right corner icon. */}
+          <span className="group/badge absolute right-1.5 top-1.5 z-10">
+            <span className="flex h-5 w-5 items-center justify-center rounded-md bg-black/60 text-white">
+              <TypeIcon size={11} />
+            </span>
+            {badgeTooltip(typeLabel, "right")}
+          </span>
+
+          {/* Name strip — same as the upload cards' filename strip. */}
+          <span className="absolute inset-x-0 bottom-0 truncate bg-black/80 px-1.5 py-0.5 text-center text-[9px] text-[var(--text-soft)]">
             {entity.name}
           </span>
-          {entity.code && (
-            <span className="block text-[10px] text-[var(--text-muted)]">
-              #{entity.code}
-            </span>
-          )}
-        </span>
-        <span className="shrink-0 rounded-full bg-[var(--primary)]/15 px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-[var(--primary)]">
-          {type === "product"
-            ? "Product"
-            : type === "brand"
-              ? "Brand"
-              : "Category"}
-        </span>
-        {status !== undefined && <StatusPill status={status || "draft"} />}
-      </button>
-    );
+        </button>
+      );
+    };
 
     return (
-      <div className="flex h-full min-h-0 flex-col rounded-xl border border-[var(--border)] bg-[var(--background)] p-3">
+      // py-2 (not the usual p-3): Row 1 is fixed at 145px, and the
+      // 96px strip + its scrollbar padding needs the reclaimed 8px to
+      // render at full height like the upload strip does in add mode.
+      <div className="flex h-full min-h-0 flex-col rounded-xl border border-[var(--border)] bg-[var(--background)] px-3 py-2">
         <div className="flex shrink-0 items-center justify-between gap-2">
           <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
             Used In
@@ -1619,32 +1691,26 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
           </span>
         </div>
 
-        <div className={`mt-3 min-h-0 flex-1 overflow-y-auto ${SCROLLBAR_CLASSES}`}>
-          {usageLoading ? (
-            <div className="flex h-full min-h-0 flex-col items-center justify-center text-center">
-              <p className="text-xs text-[var(--text-muted)]">Loading…</p>
-            </div>
-          ) : usageTotal === 0 ? (
-            <div className="flex h-full min-h-0 flex-col items-center justify-center rounded-xl border border-dashed border-[var(--border)] px-3 text-center">
-              <p className="text-xs font-medium text-[var(--text)]">
-                Not used anywhere yet
-              </p>
-              <p className="mt-1 text-[11px] text-[var(--text-muted)]">
-                Products, brands and categories that use this media will appear here.
-              </p>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-2">
-              {usage.products.map((product) =>
-                renderUsageCard("product", product, product.status),
-              )}
-              {usage.brands.map((brand) => renderUsageCard("brand", brand))}
-              {usage.categories.map((category) =>
-                renderUsageCard("category", category),
-              )}
-            </div>
-          )}
-        </div>
+        {usageLoading ? (
+          <div className="mt-2 flex min-h-0 flex-1 items-center justify-center text-center">
+            <p className="text-xs text-[var(--text-muted)]">Loading…</p>
+          </div>
+        ) : usageTotal === 0 ? (
+          <div className="mt-2 flex min-h-0 flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-[var(--border)] px-3 text-center">
+            <p className="text-xs font-medium text-[var(--text)]">
+              Not used anywhere yet
+            </p>
+            <p className="mt-1 text-[11px] text-[var(--text-muted)]">
+              Products, brands and categories that use this media will appear here.
+            </p>
+          </div>
+        ) : (
+          <div
+            className={`mt-2 flex shrink-0 gap-3 overflow-x-auto overflow-y-hidden pb-2 ${SCROLLBAR_CLASSES}`}
+          >
+            {entries.map(({ type, entity }) => renderUsageCard(type, entity))}
+          </div>
+        )}
       </div>
     );
   };

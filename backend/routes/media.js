@@ -339,13 +339,13 @@ router.get('/:id/usage', async (req, res) => {
                 .lean(),
             media.url
                 ? Brand.find({ logo: media.url })
-                      .select('name logo code')
+                      .select('name logo code isActive')
                       .sort({ name: 1 })
                       .lean()
                 : [],
             media.url
                 ? Category.find({ image: media.url })
-                      .select('name image code')
+                      .select('name image code isActive')
                       .sort({ name: 1 })
                       .lean()
                 : [],
@@ -370,12 +370,16 @@ router.get('/:id/usage', async (req, res) => {
                 code: brand.code || null,
                 name: brand.name,
                 image: brand.logo || '',
+                // Brands/categories carry an isActive flag instead of a
+                // status string — expose it as one for the panel.
+                status: brand.isActive === false ? 'inactive' : 'active',
             })),
             categories: categories.map((category) => ({
                 _id: category._id,
                 code: category.code || null,
                 name: category.name,
                 image: category.image || '',
+                status: category.isActive === false ? 'inactive' : 'active',
             })),
         });
     } catch (error) {
