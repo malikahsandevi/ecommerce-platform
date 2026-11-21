@@ -26,6 +26,25 @@ export interface MediaUsageProduct {
   status?: string;
 }
 
+/** One brand or category in the Edit Media panel's "Used In" list. */
+export interface MediaUsageEntity {
+  _id: string;
+  code?: string | null;
+  name: string;
+  image?: string;
+}
+
+/** Everything using the media item being edited ("Used In" panel). */
+export interface MediaUsage {
+  products: MediaUsageProduct[];
+  brands: MediaUsageEntity[];
+  categories: MediaUsageEntity[];
+}
+
+export type MediaUsageType = "product" | "brand" | "category";
+
+const EMPTY_USAGE: MediaUsage = { products: [], brands: [], categories: [] };
+
 /** Per-file image optimization settings (add mode, images only). */
 export interface ImageOptimization {
   convert: boolean;
@@ -78,6 +97,8 @@ interface MediaHandlerModalProps {
   onDelete?: (mediaId: any) => void;
   /** Edit mode "Used In": open this product's edit form. */
   onOpenProduct?: (productId: string) => void;
+  /** Edit mode "Used In": open the edit form of any usage entry. */
+  onOpenUsage?: (type: MediaUsageType, id: string) => void;
 }
 
 type OptScope = "active" | "selected" | "all";
@@ -243,15 +264,18 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
   onSave,
   onDelete,
   onOpenProduct,
+  onOpenUsage,
 }) => {
   const [mediaList, setMediaList] = useState<MediaItem[]>([]);
   const [selectedIndex, setSelectedIndex] = useState<number>(0);
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [scope, setScope] = useState<OptScope>("selected");
   const [isPreparing, setIsPreparing] = useState(false);
-  /** Edit mode: products using this media item ("Used In" panel). */
-  const [usage, setUsage] = useState<MediaUsageProduct[]>([]);
+  /** Edit mode: everything using this media item ("Used In" panel). */
+  const [usage, setUsage] = useState<MediaUsage>(EMPTY_USAGE);
   const [usageLoading, setUsageLoading] = useState(false);
+  /** Edit mode: the saved image file could not be fetched for the optimizer. */
+  const [editFileFailed, setEditFileFailed] = useState(false);
 
   /** Processed blobs by `${itemId}|${targetMime}`; null = processing failed. */
   const processedBlobsRef = useRef<Map<string, Blob | null>>(new Map());
@@ -275,6 +299,7 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
             previewUrl: initialData.previewUrl || initialData.url || "",
             mediaCategory: initialData.mediaCategory || "image",
             status: initialData.status || "published",
+            opt: { ...DEFAULT_OPT },
           },
         ]);
         setSelectedIndex(0);
@@ -285,26 +310,28 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
       setErrorMessage("");
       setScope("selected");
       setIsPreparing(false);
+      setEditFileFailed(false);
+      setUsage(EMPTY_USAGE);
     }
   }, [isOpen, mode, initialData]);
 
-  // Edit mode: load the products using this media item for "Used In".
+  // Edit mode: load everything using this media item for "Used In".
   useEffect(() => {
     if (!isOpen || mode !== "edit") return;
     const mediaId = initialData?._id || initialData?.id;
     if (!mediaId) {
-      setUsage([]);
+      setUsage(EMPTY_USAGE);
       return;
     }
     let cancelled = false;
     setUsageLoading(true);
     mediaService
       .usage(String(mediaId))
-      .then((products) => {
-        if (!cancelled) setUsage(products as MediaUsageProduct[]);
+      .then((result) => {
+        if (!cancelled) setUsage(result);
       })
       .catch(() => {
-        if (!cancelled) setUsage([]);
+        if (!cancelled) setUsage(EMPTY_USAGE);
       })
       .finally(() => {
         if (!cancelled) setUsageLoading(false);
@@ -313,6 +340,54 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
       cancelled = true;
     };
   }, [isOpen, mode, initialData]);
+
+  // Edit mode: the optimizer works on the SAVED image, so fetch it into
+  // a File once — from then on the item flows through the exact same
+  // client-side processing pipeline as a freshly picked file in add
+  // mode (background processing effect below, before/after sizes, and
+  // the never-grow rule all apply unchanged).
+  useEffect(() => {
+    if (!isOpen || mode !== "edit") return;
+    const item = mediaList[0];
+    if (!item || item.mediaCategory !== "image" || item.file) return;
+    if (!item.previewUrl) {
+      setEditFileFailed(true);
+      return;
+    }
+    let cancelled = false;
+    const sourceUrl = item.previewUrl;
+    fetch(sourceUrl)
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.blob();
+      })
+      .then((blob) => {
+        if (cancelled) return;
+        const urlName = sourceUrl.split("/").pop()?.split("?")[0] || "";
+        const mime = blob.type || item.type || "image/png";
+        const fallbackName = `image.${
+          mime === "image/jpeg"
+            ? "jpg"
+            : mime === "image/webp"
+              ? "webp"
+              : mime === "image/gif"
+                ? "gif"
+                : "png"
+        }`;
+        const file = new File([blob], urlName.includes(".") ? urlName : fallbackName, {
+          type: mime,
+        });
+        setMediaList((prev) =>
+          prev.map((it) => (it.id === item.id ? { ...it, file } : it)),
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setEditFileFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, mode, mediaList]);
 
   const currentItem = mediaList[selectedIndex];
   const tickedCount = mediaList.filter((item) => item.ticked).length;
@@ -359,8 +434,9 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
 
   // Process queued images in the background whenever their settings make
   // them eligible, so the before/after sizes and badges show real numbers.
+  // Edit mode runs the same pipeline for its single (fetched) image.
   useEffect(() => {
-    if (!isOpen || mode !== "add") return;
+    if (!isOpen) return;
     mediaList.forEach((item) => {
       const mime = targetMimeFor(item);
       if (!mime || !item.file) return;
@@ -619,9 +695,78 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
     });
   };
 
+  /** Edit mode: optimization settings apply to the single edited image. */
+  const applyEditOpt = (patch: Partial<ImageOptimization>) => {
+    setMediaList((prev) =>
+      prev.map((item, i) =>
+        i === selectedIndex
+          ? { ...item, opt: { ...(item.opt ?? DEFAULT_OPT), ...patch } }
+          : item,
+      ),
+    );
+  };
+
   const handleSaveClick = async () => {
     if (mode === "edit") {
-      if (currentItem) onSave(currentItem);
+      if (!currentItem || isPreparing) return;
+      setIsPreparing(true);
+      setErrorMessage("");
+      try {
+        let itemToSave: MediaItem = currentItem;
+        // When the optimizer produced a SMALLER file, replace the saved
+        // file behind this record first: upload the processed file
+        // directly to Cloudinary, then swap it in via PUT /media/:id/file
+        // (same record, same code — every link keeps working, and the
+        // backend rewrites stored URL references + destroys the old
+        // asset). Only then does the normal details save proceed.
+        if (currentItem.mediaCategory === "image" && currentItem.file) {
+          const mime = targetMimeFor(currentItem);
+          if (mime) {
+            const blob = await getProcessedBlob(currentItem, mime);
+            if (blob && blob.size < currentItem.file.size) {
+              const optimizedFile = new File(
+                [blob],
+                processedNameFor(currentItem.file.name, mime),
+                { type: mime },
+              );
+              const uploaded = await mediaService.uploadAsset(optimizedFile);
+              const updated = await mediaService.replaceFile(
+                String(currentItem.id),
+                {
+                  url: uploaded.secure_url,
+                  publicId: uploaded.public_id,
+                  size: uploaded.bytes,
+                  mimeType: mime,
+                  format: uploaded.format,
+                  dimensions:
+                    uploaded.width && uploaded.height
+                      ? { width: uploaded.width, height: uploaded.height }
+                      : undefined,
+                  filename:
+                    String(uploaded.public_id || "").split("/").pop() ||
+                    undefined,
+                },
+              );
+              itemToSave = {
+                ...currentItem,
+                previewUrl: updated?.url || uploaded.secure_url,
+              };
+            }
+          }
+        }
+        // The fetched File must not travel upward — the page treats an
+        // item WITH a file as a brand-new upload.
+        const { file: _fetchedFile, ...details } = itemToSave;
+        onSave(details);
+      } catch (error) {
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "The optimized image could not be saved. Nothing was changed — please try again.",
+        );
+      } finally {
+        setIsPreparing(false);
+      }
       return;
     }
     if (!mediaList.length || isPreparing) return;
@@ -1229,7 +1374,7 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
   };
 
   const renderEditPreviewPanel = () => (
-    <div className="flex min-h-0 flex-col rounded-xl border border-[var(--border)] bg-[var(--background)] p-3">
+    <div className="flex h-full min-h-0 flex-col rounded-xl border border-[var(--border)] bg-[var(--background)] p-3">
       <h3 className="shrink-0 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
         Media Preview
       </h3>
@@ -1248,77 +1393,272 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
     </div>
   );
 
-  const renderUsedInPanel = () => (
-    <div className="flex min-h-0 flex-col rounded-xl border border-[var(--border)] bg-[var(--background)] p-3">
-      <div className="flex shrink-0 items-center justify-between gap-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
-          Used In
-        </h3>
-        <span className="text-[11px] text-[var(--text-muted)]">
-          {usage.length} {usage.length === 1 ? "product" : "products"}
-        </span>
-      </div>
+  const renderUsedInPanel = () => {
+    const usageTotal =
+      usage.products.length + usage.brands.length + usage.categories.length;
 
-      <div className={`mt-3 min-h-0 flex-1 overflow-y-auto ${SCROLLBAR_CLASSES}`}>
-        {usageLoading ? (
-          <div className="flex h-full min-h-24 flex-col items-center justify-center text-center">
-            <p className="text-xs text-[var(--text-muted)]">Loading…</p>
+    const openUsage = (type: MediaUsageType, id: string) => {
+      if (onOpenUsage) {
+        onOpenUsage(type, id);
+      } else if (type === "product") {
+        onOpenProduct?.(id);
+      }
+    };
+    const canOpen = (type: MediaUsageType) =>
+      Boolean(onOpenUsage || (type === "product" && onOpenProduct));
+
+    const renderUsageCard = (
+      type: MediaUsageType,
+      entity: MediaUsageEntity,
+      status?: string,
+    ) => (
+      <button
+        key={`${type}-${entity._id}`}
+        type="button"
+        disabled={!canOpen(type)}
+        onClick={() => openUsage(type, entity._id)}
+        title={canOpen(type) ? `Open ${entity.name} for editing` : entity.name}
+        className={`flex items-center gap-2.5 rounded-lg border border-[var(--primary)]/30 bg-[var(--primary-soft)] p-2 text-left transition-colors ${
+          canOpen(type)
+            ? "cursor-pointer hover:border-[var(--primary)]"
+            : "cursor-default"
+        }`}
+      >
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--background)]">
+          {entity.image ? (
+            <img
+              src={entity.image}
+              alt=""
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <span className="text-xs font-bold text-[var(--text-muted)]">
+              {(entity.name || "?").trim().charAt(0).toUpperCase()}
+            </span>
+          )}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-xs font-semibold text-[var(--text)]">
+            {entity.name}
+          </span>
+          {entity.code && (
+            <span className="block text-[10px] text-[var(--text-muted)]">
+              #{entity.code}
+            </span>
+          )}
+        </span>
+        <span className="shrink-0 rounded-full bg-[var(--primary)]/15 px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-[var(--primary)]">
+          {type === "product"
+            ? "Product"
+            : type === "brand"
+              ? "Brand"
+              : "Category"}
+        </span>
+        {status !== undefined && <StatusPill status={status || "draft"} />}
+      </button>
+    );
+
+    return (
+      <div className="flex h-full min-h-0 flex-col rounded-xl border border-[var(--border)] bg-[var(--background)] p-3">
+        <div className="flex shrink-0 items-center justify-between gap-2">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+            Used In
+          </h3>
+          <span className="text-[11px] text-[var(--text-muted)]">
+            {usageTotal} {usageTotal === 1 ? "link" : "links"}
+          </span>
+        </div>
+
+        <div className={`mt-3 min-h-0 flex-1 overflow-y-auto ${SCROLLBAR_CLASSES}`}>
+          {usageLoading ? (
+            <div className="flex h-full min-h-24 flex-col items-center justify-center text-center">
+              <p className="text-xs text-[var(--text-muted)]">Loading…</p>
+            </div>
+          ) : usageTotal === 0 ? (
+            <div className="flex h-full min-h-24 flex-col items-center justify-center rounded-xl border border-dashed border-[var(--border)] px-3 text-center">
+              <p className="text-xs font-medium text-[var(--text)]">
+                Not used anywhere yet
+              </p>
+              <p className="mt-1 text-[11px] text-[var(--text-muted)]">
+                Products, brands and categories that use this media will appear here.
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {usage.products.map((product) =>
+                renderUsageCard("product", product, product.status),
+              )}
+              {usage.brands.map((brand) => renderUsageCard("brand", brand))}
+              {usage.categories.map((category) =>
+                renderUsageCard("category", category),
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  /**
+   * Edit mode optimization panel — the SAME controls as add mode
+   * (convert, format, compress, locked max quality, before/after with
+   * real sizes), minus the scope chips: there is only one image. It
+   * works on the saved image fetched into a File, through the same
+   * processing pipeline; on save, a smaller processed file replaces
+   * the stored file behind the same record.
+   */
+  const renderEditOptimizationPanel = () => {
+    const item = currentItem;
+    const panelOpt: ImageOptimization = item?.opt ?? DEFAULT_OPT;
+    const eff = item ? effectiveOf(item) : null;
+    const originalSize = item?.file?.size;
+    const savedPct =
+      eff?.size !== undefined && originalSize
+        ? Math.round((1 - eff.size / originalSize) * 100)
+        : null;
+    const fileReady = Boolean(item?.file);
+    const replacementPending = Boolean(eff);
+
+    return (
+      <div className="relative flex min-h-0 flex-col overflow-hidden rounded-xl border border-[var(--primary)] bg-[var(--primary)]/5">
+        <div
+          className={`flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3 ${SCROLLBAR_CLASSES} ${
+            fileReady ? "" : "pointer-events-none"
+          }`}
+        >
+          <h3 className="flex shrink-0 items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-[var(--primary)]">
+            <Zap size={14} className="fill-current" />
+            Image Optimization
+            <span className="rounded-full bg-[var(--primary)] px-1.5 py-px text-[9px] font-bold text-white">
+              NEW
+            </span>
+          </h3>
+
+          {/* Convert */}
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium text-[var(--text)]">
+                Convert to WebP
+              </p>
+              <p className="text-[11px] text-[var(--text-muted)]">
+                Smaller size, same quality — pages load faster
+              </p>
+            </div>
+            <Toggle
+              on={panelOpt.convert}
+              onToggle={() => applyEditOpt({ convert: !panelOpt.convert })}
+              label="Convert to WebP"
+            />
           </div>
-        ) : usage.length === 0 ? (
-          <div className="flex h-full min-h-24 flex-col items-center justify-center rounded-xl border border-dashed border-[var(--border)] px-3 text-center">
-            <p className="text-xs font-medium text-[var(--text)]">
-              Not used in any product yet
-            </p>
-            <p className="mt-1 text-[11px] text-[var(--text-muted)]">
-              Products that include this media in their gallery will appear here.
-            </p>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {usage.map((product) => (
+          <div className="flex flex-wrap gap-2">
+            {FORMAT_OPTIONS.map((option) => (
               <button
-                key={product._id}
+                key={option.value}
                 type="button"
-                disabled={!onOpenProduct}
-                onClick={() => onOpenProduct?.(product._id)}
-                title={onOpenProduct ? `Open ${product.name} for editing` : product.name}
-                className={`flex items-center gap-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2 text-left transition-colors ${
-                  onOpenProduct
-                    ? "cursor-pointer hover:border-[var(--primary)]"
-                    : "cursor-default"
-                }`}
+                disabled={!panelOpt.convert}
+                onClick={() => applyEditOpt({ format: option.value })}
+                className={`flex items-center gap-1 rounded-full border px-3 py-1 text-xs transition-all ${
+                  panelOpt.format === option.value
+                    ? "border-[var(--primary)] bg-[var(--primary)] font-semibold text-white"
+                    : "border-[var(--border)] bg-[var(--surface)] text-[var(--text-soft)]"
+                } ${!panelOpt.convert ? "cursor-not-allowed opacity-50" : ""}`}
               >
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--background)]">
-                  {product.image ? (
-                    <img
-                      src={product.image}
-                      alt=""
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <span className="text-xs font-bold text-[var(--text-muted)]">
-                      {(product.name || "P").trim().charAt(0).toUpperCase()}
-                    </span>
-                  )}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-xs font-semibold text-[var(--text)]">
-                    {product.name}
-                  </span>
-                  {product.code && (
-                    <span className="block text-[10px] text-[var(--text-muted)]">
-                      #{product.code}
-                    </span>
-                  )}
-                </span>
-                <StatusPill status={product.status || "draft"} />
+                {option.label}
+                {panelOpt.format === option.value && (
+                  <Check size={11} strokeWidth={3.5} />
+                )}
               </button>
             ))}
           </div>
-        )}
+
+          {/* Compress */}
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium text-[var(--text)]">
+                Compress Image
+              </p>
+              <p className="text-[11px] text-[var(--text-muted)]">
+                Quality stays at MAX — only the size goes down
+              </p>
+            </div>
+            <Toggle
+              on={panelOpt.compress}
+              onToggle={() => applyEditOpt({ compress: !panelOpt.compress })}
+              label="Compress Image"
+            />
+          </div>
+
+          {/* Locked quality bar */}
+          <div>
+            <div className="h-1.5 rounded-full bg-[var(--primary)]" />
+            <div className="mt-1.5 flex items-center justify-between text-[10px] text-[var(--text-muted)]">
+              <span>Smaller size</span>
+              <span className="flex items-center gap-1 font-semibold text-[var(--primary)]">
+                Quality: MAXIMUM (100%)
+                <Lock size={10} />
+              </span>
+              <span>Full quality</span>
+            </div>
+          </div>
+
+          {/* Before / after for the edited image */}
+          <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 text-xs">
+            {!fileReady ? (
+              <p className="font-medium text-[var(--text-muted)]">
+                {editFileFailed
+                  ? "The image file could not be loaded, so optimization is unavailable."
+                  : "Loading image…"}
+              </p>
+            ) : (
+              <>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="max-w-[40%] truncate font-medium text-[var(--text)]">
+                    {item?.title}
+                  </span>
+                  {item?.procFailed ? (
+                    <span className="rounded-full bg-black/10 px-2 py-0.5 text-[10px] font-semibold text-[var(--text-soft)]">
+                      Original — processing failed
+                    </span>
+                  ) : eff ? (
+                    <span className="flex items-center gap-2">
+                      <span className="text-[var(--text-muted)] line-through">
+                        {formatBytes(originalSize)}
+                      </span>
+                      <span>→</span>
+                      <span className="font-bold text-green-600">
+                        {eff.size !== undefined
+                          ? `~${formatBytes(eff.size)} ${MIME_LABEL[eff.type] || ""}`
+                          : `Converting to ${MIME_LABEL[eff.type] || "optimized"}…`}
+                      </span>
+                      {savedPct !== null && savedPct > 0 && (
+                        <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-bold text-green-700">
+                          −{savedPct}%
+                        </span>
+                      )}
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-2">
+                      <span className="font-medium text-[var(--text-soft)]">
+                        {formatBytes(originalSize)}
+                      </span>
+                      <span className="rounded-full bg-black/10 px-2 py-0.5 text-[10px] font-semibold text-[var(--text-soft)]">
+                        Original
+                      </span>
+                    </span>
+                  )}
+                </div>
+                {replacementPending && (
+                  <p className="mt-2 border-t border-dashed border-[var(--border)] pt-2 text-[11px] text-[var(--text-muted)]">
+                    This image will be replaced with the optimized version on save.
+                  </p>
+                )}
+              </>
+            )}
+          </div>
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   /* ------------------------------ Render ------------------------------ */
 
@@ -1342,10 +1682,11 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
 
         {mode === "edit" ? (
           /* ------------- Edit mode — the SAME panel shell as add mode -------------
-             Only the four quadrants differ: preview instead of the drop
-             zone, "Used In" instead of the upload strip, and the
-             optimization panel under its veil (it applies to new
-             uploads only). No queue, no ticks, no Select All here. */
+             The same four blocks in the same 2×2 grid: media preview
+             instead of the drop zone, "Used In" instead of the upload
+             strip, a WORKING optimizer (it replaces the saved file on
+             save), and the media details. No queue, no ticks, no
+             Select All here. */
           <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-3 lg:overflow-hidden">
             {errorMessage && (
               <div className="flex shrink-0 items-center gap-2 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">
@@ -1354,15 +1695,20 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
               </div>
             )}
 
-            {/* Row 1 — media preview | Used In (50/50) */}
-            <div className="grid shrink-0 gap-3 md:grid-cols-2">
+            {/* Row 1 — media preview | Used In (50/50). The fixed
+                desktop height mirrors the drop-zone row in add mode:
+                without it the row grew to the preview image's natural
+                height and pushed Row 2 out of the panel. */}
+            <div className="grid shrink-0 gap-3 md:h-[300px] md:grid-cols-2">
               {renderEditPreviewPanel()}
               {renderUsedInPanel()}
             </div>
 
-            {/* Row 2 — optimization (veiled) | details (50/50) */}
+            {/* Row 2 — optimization | details (50/50) */}
             <div className="grid min-h-0 flex-1 gap-3 md:grid-cols-2">
-              {renderOptimizationPanel("Image optimization applies to new uploads")}
+              {currentItem?.mediaCategory === "image"
+                ? renderEditOptimizationPanel()
+                : renderOptimizationPanel("Image optimization applies to images only")}
               {renderDetailsColumn("min-h-0")}
             </div>
           </div>

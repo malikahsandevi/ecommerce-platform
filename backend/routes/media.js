@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { Media, User, Product } = require('../models');
+const { Media, User, Product, Brand, Category } = require('../models');
 const genericController = require('../controllers/genericController')(Media);
 const cloudinary = require('../config/cloudinary');
 const { protect } = require('../middleware/auth');
@@ -315,11 +315,13 @@ const listMedia = async (req, res) => {
     }
 };
 
-// GET /api/media/:id/usage — the products using this media item, for the
+// GET /api/media/:id/usage — everything using this media item, for the
 // Edit Media panel's "Used In" list. A product uses the media when a
 // gallery entry points at it by mediaId (the current contract) OR when a
 // URL matches — the legacy single-image field and gallery entries saved
-// before mediaId existed only have the URL to go on.
+// before mediaId existed only have the URL to go on. Brands and
+// categories keep a single image URL (Brand.logo, Category.image —
+// neither stores a mediaId), so for them the URL match is the only link.
 router.get('/:id/usage', async (req, res) => {
     try {
         const media = await Media.findById(req.params.id).select('_id url');
@@ -330,13 +332,29 @@ router.get('/:id/usage', async (req, res) => {
             or.push({ image: media.url }, { 'images.url': media.url });
         }
 
-        const products = await Product.find({ $or: or })
-            .select('name image images status code')
-            .sort({ name: 1 })
-            .lean();
+        const [products, brands, categories] = await Promise.all([
+            Product.find({ $or: or })
+                .select('name image images status code')
+                .sort({ name: 1 })
+                .lean(),
+            media.url
+                ? Brand.find({ logo: media.url })
+                      .select('name logo code')
+                      .sort({ name: 1 })
+                      .lean()
+                : [],
+            media.url
+                ? Category.find({ image: media.url })
+                      .select('name image code')
+                      .sort({ name: 1 })
+                      .lean()
+                : [],
+        ]);
+        await Brand.withCodes(brands);
+        await Category.withCodes(categories);
 
-        res.json(
-            products.map((product) => ({
+        res.json({
+            products: products.map((product) => ({
                 _id: product._id,
                 code: product.code || null,
                 name: product.name,
@@ -347,7 +365,101 @@ router.get('/:id/usage', async (req, res) => {
                     '',
                 status: product.status || 'draft',
             })),
-        );
+            brands: brands.map((brand) => ({
+                _id: brand._id,
+                code: brand.code || null,
+                name: brand.name,
+                image: brand.logo || '',
+            })),
+            categories: categories.map((category) => ({
+                _id: category._id,
+                code: category.code || null,
+                name: category.name,
+                image: category.image || '',
+            })),
+        });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+});
+
+// PUT /api/media/:id/file — replace the stored FILE behind a media
+// record (the Edit Media panel's optimizer save). The browser uploads
+// the optimized file directly to Cloudinary first (same signed flow as
+// /register) and sends only the new asset's facts here. The record is
+// updated IN PLACE — same _id, same public code — so every link to it
+// keeps working; stored URL references elsewhere are rewritten to the
+// new URL, and the old Cloudinary asset is destroyed.
+router.put('/:id/file', protect, requirePermission('Media', 'edit'), async (req, res) => {
+    try {
+        const media = await Media.findById(req.params.id);
+        if (!media) return res.status(404).json({ message: 'Not found' });
+
+        const { url, publicId, size, mimeType, format, dimensions, filename } = req.body || {};
+        if (!url || typeof url !== 'string' || !publicId || typeof publicId !== 'string') {
+            return res.status(400).json({ message: 'The new file url and publicId are required.' });
+        }
+        if (mimeType && !ALLOWED_MIME_TYPES.includes(mimeType)) {
+            return res.status(400).json({ message: `Unsupported file type: ${mimeType}` });
+        }
+
+        const oldUrl = media.url;
+        const oldPath = media.path;
+        const oldMimeType = media.mimeType;
+
+        media.url = url;
+        media.path = publicId;
+        if (typeof size === 'number' && size >= 0) media.size = size;
+        if (mimeType) media.mimeType = mimeType;
+        if (format) media.extension = String(format).toLowerCase();
+        if (filename) media.filename = String(filename);
+        if (dimensions && (dimensions.width || dimensions.height)) {
+            media.dimensions = {
+                width: dimensions.width || undefined,
+                height: dimensions.height || undefined,
+            };
+        }
+        media.storageType = 'cloud';
+        await media.save();
+
+        // Rewrite every stored reference to the old URL so nothing keeps
+        // pointing at the (about to be destroyed) old asset. Gallery
+        // entries are matched by mediaId as well as by URL — an entry
+        // linked by id must follow the record to its new URL.
+        if (oldUrl && oldUrl !== url) {
+            await Product.updateMany(
+                { 'images.mediaId': media._id },
+                { $set: { 'images.$[byId].url': url } },
+                { arrayFilters: [{ 'byId.mediaId': media._id }] },
+            );
+            await Product.updateMany(
+                { 'images.url': oldUrl },
+                { $set: { 'images.$[byUrl].url': url } },
+                { arrayFilters: [{ 'byUrl.url': oldUrl }] },
+            );
+            await Product.updateMany({ image: oldUrl }, { $set: { image: url } });
+            await Brand.updateMany({ logo: oldUrl }, { $set: { logo: url } });
+            await Category.updateMany({ image: oldUrl }, { $set: { image: url } });
+        }
+
+        // Best effort: remove the replaced file from Cloudinary. The
+        // record already points at the new asset, so a failure here only
+        // leaves an orphan behind — it must not fail the save.
+        if (oldPath && oldPath !== publicId) {
+            try {
+                const resourceType = oldMimeType?.startsWith('video/')
+                    ? 'video'
+                    : oldMimeType === 'application/pdf' || oldMimeType === 'application/msword'
+                      ? 'raw'
+                      : 'image';
+                await cloudinary.uploader.destroy(oldPath, { resource_type: resourceType });
+            } catch {
+                /* orphan cleanup is best effort */
+            }
+        }
+
+        await Media.withCodes([media]);
+        res.json(media);
     } catch (error) {
         res.status(500).json({ message: error.message });
     }

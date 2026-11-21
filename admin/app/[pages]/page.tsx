@@ -570,33 +570,62 @@ const PageLayout: React.FC = () => {
     [reload],
   );
 
-  // --- "Used In" navigation (Edit Media → product) -----------------------
-  // The media panel lists the products using the item being edited;
-  // clicking one hands the product id over via sessionStorage and lands
-  // on the Products page, which opens that product's edit form.
-  const handleOpenProduct = useCallback(
-    (productId: string) => {
+  // --- "Used In" navigation (Edit Media → product / brand / category) --
+  // The media panel lists everything using the item being edited;
+  // clicking an entry hands its type + id over via sessionStorage and
+  // lands on that resource's page, which opens its edit form.
+  const handleOpenUsage = useCallback(
+    (type: "product" | "brand" | "category", id: string) => {
+      const path =
+        type === "product"
+          ? "/products"
+          : type === "brand"
+            ? "/brands"
+            : "/categories";
       try {
-        sessionStorage.setItem("openProductId", productId);
+        sessionStorage.setItem("openEntity", JSON.stringify({ type, id }));
       } catch {
         /* navigation still happens; the edit form just won't auto-open */
       }
       setIsModalOpen(false);
-      router.push("/products");
+      router.push(path);
     },
     [router],
   );
 
+  const handleOpenProduct = useCallback(
+    (productId: string) => handleOpenUsage("product", productId),
+    [handleOpenUsage],
+  );
+
   useEffect(() => {
-    if (!pathname.startsWith("/products") || items.length === 0) return;
+    if (items.length === 0) return;
+    const pageType = pathname.startsWith("/products")
+      ? "product"
+      : pathname.startsWith("/brands")
+        ? "brand"
+        : pathname.startsWith("/categories")
+          ? "category"
+          : null;
+    if (!pageType) return;
+
     let target: string | null = null;
     try {
-      target = sessionStorage.getItem("openProductId");
+      const raw = sessionStorage.getItem("openEntity");
+      if (raw) {
+        const parsed = JSON.parse(raw) as { type?: string; id?: string };
+        if (parsed.type === pageType && parsed.id) target = parsed.id;
+      }
+      // Legacy key from when only products could be opened this way.
+      if (!target && pageType === "product") {
+        target = sessionStorage.getItem("openProductId");
+      }
     } catch {
       /* storage unavailable */
     }
     if (!target) return;
     try {
+      sessionStorage.removeItem("openEntity");
       sessionStorage.removeItem("openProductId");
     } catch {
       /* ignore */
@@ -804,6 +833,7 @@ const PageLayout: React.FC = () => {
           onClose={() => setIsModalOpen(false)}
           onSave={handleMediaSave}
           onOpenProduct={handleOpenProduct}
+          onOpenUsage={handleOpenUsage}
         />
       ) : (
         <FormModal

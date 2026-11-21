@@ -397,10 +397,15 @@ export const mediaService = {
    * one helper backs every upload entry point (Media page, product /
    * category / brand image fields), so all of them get the fix.
    */
+  /**
+   * Uploads a file DIRECTLY to Cloudinary with a backend-issued
+   * signature and returns Cloudinary's own facts about the asset —
+   * WITHOUT creating a Media record. `upload` registers a new record
+   * from these facts; the Edit Media optimizer instead hands them to
+   * `replaceFile`, which swaps the file behind an existing record.
+   */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  upload: async (data: any) => {
-    const file = data.file as File;
-
+  uploadAsset: async (file: File): Promise<any> => {
     const sigRes = await apiClient.get('/media/upload-signature');
     const { signature, timestamp, apiKey, cloudName, folder } = sigRes.data;
 
@@ -411,15 +416,13 @@ export const mediaService = {
     form.append('signature', signature);
     form.append('folder', folder);
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let uploaded: any;
     try {
       const res = await axios.post(
         `https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`,
         form,
         { timeout: 120000 },
       );
-      uploaded = res.data;
+      return res.data;
     } catch (uploadError) {
       // Surface Cloudinary's own explanation when it provides one.
       const cloudinaryMessage = (
@@ -428,6 +431,12 @@ export const mediaService = {
       if (cloudinaryMessage) throw new Error(`Upload failed: ${cloudinaryMessage}`);
       throw uploadError;
     }
+  },
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  upload: async (data: any) => {
+    const file = data.file as File;
+    const uploaded = await mediaService.uploadAsset(file);
 
     // Small JSON registration — the backend reads the file's real facts
     // (URL, size, format, dimensions) back from Cloudinary itself.
@@ -441,6 +450,28 @@ export const mediaService = {
       description: data.description || '',
       status: data.status || 'published',
     });
+    return res.data;
+  },
+
+  /**
+   * Replaces the file behind an existing media record with an asset
+   * already uploaded to Cloudinary (see `uploadAsset`). The backend
+   * updates the record in place — same id, same public code — rewrites
+   * stored URL references and destroys the old asset.
+   */
+  replaceFile: async (
+    id: string,
+    facts: {
+      url: string;
+      publicId: string;
+      size?: number;
+      mimeType?: string;
+      format?: string;
+      dimensions?: { width?: number; height?: number };
+      filename?: string;
+    },
+  ) => {
+    const res = await apiClient.put(`/media/${id}/file`, facts);
     return res.data;
   },
 
@@ -475,11 +506,17 @@ export const mediaService = {
   },
 
   /**
-   * Products using a media item (gallery mediaId match, or the legacy
-   * URL match) — feeds the Edit Media panel's "Used In" list.
+   * Everything using a media item — products (gallery mediaId match or
+   * the legacy URL match), brands (logo URL) and categories (image
+   * URL) — feeds the Edit Media panel's "Used In" list.
    */
   usage: async (id: string) => {
     const res = await apiClient.get(`/media/${id}/usage`);
-    return Array.isArray(res.data) ? res.data : [];
+    const data = res.data || {};
+    return {
+      products: Array.isArray(data.products) ? data.products : [],
+      brands: Array.isArray(data.brands) ? data.brands : [],
+      categories: Array.isArray(data.categories) ? data.categories : [],
+    };
   },
 };
