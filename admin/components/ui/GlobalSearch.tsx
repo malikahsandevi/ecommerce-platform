@@ -67,15 +67,23 @@ const SCOPE_LABEL: Record<Exclude<ScopeName, "all">, string> = {
 };
 
 /**
- * Split a raw query into search text + scope. A trailing `//word`
- * scopes the search when the word names a source ("home//products");
- * anything else after `//` leaves the whole input as a plain query.
+ * Split a raw query into search text + scope, splitting on the LAST
+ * `//`. Spaces around the `//` are plain whitespace, so "home//products",
+ * "home //products", "home// products" and "home // products" all parse
+ * the same. A known scope word after `//` scopes the search; NOTHING
+ * after `//` ("home//") is a plain all-sources search for the text
+ * before it; an unknown word after `//` leaves the whole input as a
+ * plain query.
  */
 function parseQuery(raw: string): { text: string; scope: ScopeName } {
-  const match = raw.match(/^(.*?)\/\/(.+)$/);
-  if (match) {
-    const scope = SCOPE_WORDS[match[2].trim().toLowerCase()];
-    if (scope) return { text: match[1].trim(), scope };
+  const idx = raw.lastIndexOf("//");
+  if (idx >= 0) {
+    const left = raw.slice(0, idx).trim();
+    const right = raw.slice(idx + 2).trim().toLowerCase();
+    if (!right) return { text: left, scope: "all" };
+    const scope = SCOPE_WORDS[right];
+    if (scope) return { text: left, scope };
+    return { text: raw.trim(), scope: "all" };
   }
   return { text: raw.trim(), scope: "all" };
 }
