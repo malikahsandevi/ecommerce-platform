@@ -8,11 +8,13 @@ import {
   PlusCircle,
   UploadCloud,
   Images,
+  Pencil,
   Trash2,
 } from "lucide-react";
 import Select, { SelectOption } from "@/components/ui/Select";
 import Button from "@/components/ui/Button";
 import MediaPickerModal from "@/components/models/MediaPickerModal";
+import ImageCropper from "@/components/models/ImageCropper";
 import ProductMediaManager, {
   GalleryImage,
 } from "@/components/models/ProductMediaManager";
@@ -138,6 +140,14 @@ export const FormModal: React.FC<FormModalProps> = ({
   });
   // Which image field the Media library picker is open for (Select button).
   const [pickerField, setPickerField] = useState<string | null>(null);
+  // "Set image" cropper target: the field being edited, the image it
+  // opens on, and whether it was launched from inside the media picker
+  // (then applying also confirms the cropped image as the pick).
+  const [cropTarget, setCropTarget] = useState<{
+    field: string;
+    url: string;
+    fromPicker: boolean;
+  } | null>(null);
 
   // Image fields accept a pasted URL or a real file — files go through the
   // media library upload endpoint and the field receives the hosted URL.
@@ -563,12 +573,29 @@ export const FormModal: React.FC<FormModalProps> = ({
                 Select
               </button>
               {rawValue && (
-                <img
-                  src={rawValue}
-                  alt="Preview"
-                  className="w-9 h-9 rounded-lg object-cover border border-[var(--border)]"
-                  onError={(e) => ((e.target as HTMLElement).style.display = "none")}
-                />
+                <span className="relative shrink-0">
+                  <img
+                    src={rawValue}
+                    alt="Preview"
+                    className="w-9 h-9 rounded-lg object-cover border border-[var(--border)]"
+                    onError={(e) => ((e.target as HTMLElement).style.display = "none")}
+                  />
+                  <button
+                    type="button"
+                    title="Set image"
+                    aria-label="Set image"
+                    onClick={() =>
+                      setCropTarget({
+                        field: field.name,
+                        url: String(rawValue),
+                        fromPicker: false,
+                      })
+                    }
+                    className="absolute -bottom-1.5 -right-1.5 flex h-[18px] w-[18px] items-center justify-center rounded-full border border-[var(--surface)] bg-[var(--primary)] text-white shadow transition-transform hover:scale-110 cursor-pointer"
+                  >
+                    <Pencil className="h-2.5 w-2.5" />
+                  </button>
+                </span>
               )}
             </div>
             {imageUpload.field === field.name && imageUpload.error && (
@@ -681,6 +708,28 @@ export const FormModal: React.FC<FormModalProps> = ({
           const url = picked[0]?.url;
           if (url && pickerField) handleFieldChange(pickerField, url);
           setPickerField(null);
+        }}
+        onEditSelected={(item) => {
+          if (pickerField && item.url) {
+            setCropTarget({ field: pickerField, url: item.url, fromPicker: true });
+          }
+        }}
+      />
+
+      {/* "Set image" cropper — opened from a field's pencil or from the
+          picker's Edit action. Applying uploads the cropped square and
+          puts its URL in the field (from the picker it also confirms
+          the cropped image as the pick and closes the picker). */}
+      <ImageCropper
+        isOpen={cropTarget !== null}
+        imageUrl={cropTarget?.url ?? null}
+        onClose={() => setCropTarget(null)}
+        onApply={({ url }) => {
+          if (cropTarget) {
+            handleFieldChange(cropTarget.field, url);
+            if (cropTarget.fromPicker) setPickerField(null);
+          }
+          setCropTarget(null);
         }}
       />
     </div>

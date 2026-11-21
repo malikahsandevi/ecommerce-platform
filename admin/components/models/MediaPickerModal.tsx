@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Check, Loader2, Search, X } from "lucide-react";
+import { Check, Loader2, Pencil, Search, X } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { effectiveMediaAlt, mediaService } from "@/services/resourceRegistry";
 import { extractApiError } from "@/services/api";
@@ -20,6 +20,10 @@ export interface MediaPickerModalProps {
   /** Single-pick mode (e.g. Settings logo/favicon): one image, generic
    *  wording instead of the product-gallery wording. */
   single?: boolean;
+  /** When given (image-field flow), an "Edit" action appears once an
+   *  item is selected — the caller opens the cropper for that item and
+   *  confirms the cropped result as the pick. */
+  onEditSelected?: (item: MediaItem) => void;
 }
 
 /**
@@ -36,6 +40,7 @@ export const MediaPickerModal: React.FC<MediaPickerModalProps> = ({
   existing,
   maxTotal,
   single = false,
+  onEditSelected,
 }) => {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<MediaItem[]>([]);
@@ -244,6 +249,17 @@ export const MediaPickerModal: React.FC<MediaPickerModalProps> = ({
 
         {/* ACTIONS */}
         <div className="p-3 sm:p-4 border-t border-[var(--border)] flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 sm:gap-3 bg-[var(--surface-muted)] shrink-0">
+          {single && onEditSelected && selected.length === 1 && (
+            <Button
+              variant="secondary"
+              size="md"
+              type="button"
+              icon={Pencil}
+              onClick={() => onEditSelected(selected[0])}
+            >
+              Edit
+            </Button>
+          )}
           <Button variant="outline" size="md" type="button" onClick={onClose}>
             Cancel
           </Button>
