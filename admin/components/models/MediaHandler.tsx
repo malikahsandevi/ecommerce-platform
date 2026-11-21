@@ -12,6 +12,7 @@ import {
   Check,
   Lock,
   Zap,
+  Loader2,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { StatusPill } from "@/components/models/CreateTable";
@@ -271,6 +272,8 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [scope, setScope] = useState<OptScope>("selected");
   const [isPreparing, setIsPreparing] = useState(false);
+  /** The optimizer's explicit Convert/Compress button is running. */
+  const [isOptimizing, setIsOptimizing] = useState(false);
   /** Edit mode: everything using this media item ("Used In" panel). */
   const [usage, setUsage] = useState<MediaUsage>(EMPTY_USAGE);
   const [usageLoading, setUsageLoading] = useState(false);
@@ -310,6 +313,7 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
       setErrorMessage("");
       setScope("selected");
       setIsPreparing(false);
+      setIsOptimizing(false);
       setEditFileFailed(false);
       setUsage(EMPTY_USAGE);
     }
@@ -432,6 +436,132 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
     return blob;
   };
 
+  /**
+   * Stores a finished processing run on its item. Guarded: if the
+   * item's settings moved on while processing, the newer key's run
+   * owns the item and this stale result is dropped. The never-grow
+   * rule lives here: a processed file that is not smaller than the
+   * original is discarded and the original is kept (eff* stay empty,
+   * which the panels read as "Already optimal — original kept").
+   */
+  const applyProcessedResult = (
+    item: MediaItem,
+    key: string,
+    blob: Blob | null,
+  ) => {
+    const file = item.file;
+    if (!file) return;
+    const mime = key.slice(key.lastIndexOf("|") + 1);
+    setMediaList((prev) =>
+      prev.map((it) => {
+        if (it.id !== item.id) return it;
+        if (`${it.id}|${targetMimeFor(it)}` !== key) return it;
+        if (!blob) {
+          return {
+            ...it,
+            procKey: key,
+            procFailed: true,
+            effSize: undefined,
+            effType: undefined,
+            effName: undefined,
+          };
+        }
+        const useProcessed = blob.size < file.size;
+        return {
+          ...it,
+          procKey: key,
+          procFailed: false,
+          effSize: useProcessed ? blob.size : undefined,
+          effType: useProcessed ? mime : undefined,
+          effName: useProcessed ? processedNameFor(file.name, mime) : undefined,
+        };
+      }),
+    );
+  };
+
+  /** Item indexes the current scope points at (same targeting as applyOpt). */
+  const scopeIndexes = (): number[] => {
+    const activeItem = mediaList[selectedIndex];
+    const primaryIndex =
+      activeItem && activeItem.mediaCategory === "image" && activeItem.file
+        ? selectedIndex
+        : mediaList.findIndex(
+            (it) => it.mediaCategory === "image" && it.file,
+          );
+    const targets = new Set<number>();
+    if (scope === "active") {
+      if (primaryIndex >= 0) targets.add(primaryIndex);
+    } else if (scope === "all") {
+      mediaList.forEach((_, i) => targets.add(i));
+    } else {
+      mediaList.forEach((item, i) => {
+        if (item.ticked) targets.add(i);
+      });
+      if (targets.size === 0 && primaryIndex >= 0) {
+        targets.add(primaryIndex);
+      }
+    }
+    return [...targets];
+  };
+
+  /**
+   * The optimizer panel's Convert/Compress button: runs the canvas
+   * pipeline for the given items NOW and waits for the results, so
+   * the sizes, savings and badges on screen are final when it
+   * finishes — not only at Save time. Results land in the same cache
+   * Save reads, so Save never reprocesses unchanged settings. A
+   * cached failure is retried (its cache entry is dropped first).
+   */
+  const runOptimizationNow = async (items: MediaItem[]) => {
+    const work = items.filter((it) => it.file && targetMimeFor(it));
+    if (!work.length || isOptimizing) return;
+    setIsOptimizing(true);
+    try {
+      for (const item of work) {
+        const mime = targetMimeFor(item);
+        if (!mime) continue;
+        const key = `${item.id}|${mime}`;
+        if (
+          processedBlobsRef.current.has(key) &&
+          processedBlobsRef.current.get(key) === null
+        ) {
+          processedBlobsRef.current.delete(key);
+        }
+        const blob = await getProcessedBlob(item, mime);
+        applyProcessedResult(item, key, blob);
+      }
+    } finally {
+      setIsOptimizing(false);
+    }
+  };
+
+  /** True when processing already ran for the item's CURRENT settings
+   *  and the original was kept because the result was not smaller. */
+  const keptOriginal = (item: MediaItem): boolean => {
+    const mime = targetMimeFor(item);
+    if (!mime || item.procFailed || item.effType) return false;
+    return item.procKey === `${item.id}|${mime}`;
+  };
+
+  /** The Convert/Compress button's label follows the panel's toggles. */
+  const optButtonLabel = (
+    opt: ImageOptimization,
+    running: boolean,
+  ): string => {
+    if (running) {
+      return opt.compress && !opt.convert ? "Compressing…" : "Converting…";
+    }
+    if (opt.convert && opt.compress) return "Convert & Compress";
+    if (opt.convert) {
+      if (opt.format === "original") return "Convert Image";
+      const label =
+        FORMAT_OPTIONS.find((f) => f.value === opt.format)?.label ?? "WebP";
+      return `Convert to ${label}`;
+    }
+    if (opt.compress) return "Compress Image";
+    return "Convert & Compress";
+  };
+
   // Process queued images in the background whenever their settings make
   // them eligible, so the before/after sizes and badges show real numbers.
   // Edit mode runs the same pipeline for its single (fetched) image.
@@ -447,36 +577,7 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
       canvasProcessImage(file, mime).then((blob) => {
         processingKeysRef.current.delete(key);
         processedBlobsRef.current.set(key, blob);
-        setMediaList((prev) =>
-          prev.map((it) => {
-            if (it.id !== item.id) return it;
-            // Settings moved on while this was processing — the newer
-            // key's run owns the item now.
-            if (`${it.id}|${targetMimeFor(it)}` !== key) return it;
-            if (!blob) {
-              return {
-                ...it,
-                procKey: key,
-                procFailed: true,
-                effSize: undefined,
-                effType: undefined,
-                effName: undefined,
-              };
-            }
-            // Optimization must never make a file BIGGER (a max-quality
-            // WebP of an already-tight JPEG can grow) — when the processed
-            // file is not smaller, the original uploads instead.
-            const useProcessed = blob.size < file.size;
-            return {
-              ...it,
-              procKey: key,
-              procFailed: false,
-              effSize: useProcessed ? blob.size : undefined,
-              effType: useProcessed ? mime : undefined,
-              effName: useProcessed ? processedNameFor(file.name, mime) : undefined,
-            };
-          }),
-        );
+        applyProcessedResult(item, key, blob);
       });
     });
   }, [isOpen, mode, mediaList]);
@@ -1101,6 +1202,35 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
     </div>
   );
 
+  /**
+   * The optimizer's explicit action button, pinned to the panel's
+   * bottom (mt-auto): pressing it runs the conversion/compression
+   * immediately for the panel's scope instead of waiting for Save.
+   * Its label follows the Convert/Compress toggles, and it shows
+   * progress while the pipeline runs.
+   */
+  const renderOptRunButton = (
+    opt: ImageOptimization,
+    disabled: boolean,
+    onRun: () => void,
+  ) => (
+    <div className="mt-auto pt-1">
+      <button
+        type="button"
+        disabled={disabled || isOptimizing}
+        onClick={onRun}
+        className="flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--primary)] px-4 py-2.5 text-sm font-semibold text-white transition-all hover:bg-[var(--primary-dark)] disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {isOptimizing ? (
+          <Loader2 size={16} className="animate-spin" />
+        ) : (
+          <Zap size={16} className="fill-current" />
+        )}
+        {optButtonLabel(opt, isOptimizing)}
+      </button>
+    </div>
+  );
+
   const renderOptimizationPanel = (forcedOverlayText?: string) => {
     const imageItems = mediaList.filter(
       (item) => item.mediaCategory === "image" && item.file,
@@ -1295,7 +1425,9 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
                       {formatBytes(displayOriginalSize)}
                     </span>
                     <span className="rounded-full bg-black/10 px-2 py-0.5 text-[10px] font-semibold text-[var(--text-soft)]">
-                      Original
+                      {displayItem && keptOriginal(displayItem)
+                        ? "Already optimal — original kept"
+                        : "Original"}
                     </span>
                   </span>
                 )}
@@ -1327,6 +1459,24 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
                   <span className="text-[var(--text-muted)]">—</span>
                 </div>
               </div>
+            )}
+
+            {/* Run button — pinned to the bottom of the panel: runs
+                the pipeline for the current scope right now. */}
+            {renderOptRunButton(
+              panelOpt,
+              !displayItem ||
+                (!panelOpt.convert && !panelOpt.compress) ||
+                !scopeIndexes().some((i) => {
+                  const it = mediaList[i];
+                  return it && it.file && targetMimeFor(it);
+                }),
+              () =>
+                runOptimizationNow(
+                  scopeIndexes()
+                    .map((i) => mediaList[i])
+                    .filter(Boolean),
+                ),
             )}
           </>
         </div>
@@ -1642,7 +1792,9 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
                         {formatBytes(originalSize)}
                       </span>
                       <span className="rounded-full bg-black/10 px-2 py-0.5 text-[10px] font-semibold text-[var(--text-soft)]">
-                        Original
+                        {item && keptOriginal(item)
+                          ? "Already optimal — original kept"
+                          : "Original"}
                       </span>
                     </span>
                   )}
@@ -1655,6 +1807,19 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
               </>
             )}
           </div>
+
+          {/* Run button — same as add mode: process the saved image
+              immediately and show the result; Save still commits the
+              replacement. */}
+          {renderOptRunButton(
+            panelOpt,
+            !fileReady ||
+              (!panelOpt.convert && !panelOpt.compress) ||
+              !(item && targetMimeFor(item)),
+            () => {
+              if (item) runOptimizationNow([item]);
+            },
+          )}
         </div>
       </div>
     );
