@@ -56,7 +56,9 @@ const getDashboardData = async (req, res) => {
             revenueAggregate,
             recentOrders,
             activityLogs,
-            topCategories,
+            allCategories,
+            categoryProductCounts,
+            categoryRevenueRows,
             existingAnalytics,
             revenueMonthly,
             revenueDaily,
@@ -84,7 +86,33 @@ const getDashboardData = async (req, res) => {
             ]),
             Order.find().sort({ createdAt: -1 }).limit(5).populate('user', 'firstName lastName email'),
             ActivityLog.find().sort({ createdAt: -1 }).limit(10),
-            Category.find().limit(6),
+            Category.find().select('name').lean(),
+            Product.aggregate([
+                { $group: { _id: '$category', count: { $sum: 1 } } },
+            ]),
+            // Per-category SALES: every line of a non-cancelled order
+            // counts price × quantity toward its product's category.
+            Order.aggregate([
+                { $match: nonCancelled },
+                { $unwind: '$items' },
+                {
+                    $lookup: {
+                        from: 'products',
+                        localField: 'items.product',
+                        foreignField: '_id',
+                        as: 'orderedProduct',
+                    },
+                },
+                { $unwind: '$orderedProduct' },
+                {
+                    $group: {
+                        _id: '$orderedProduct.category',
+                        revenue: {
+                            $sum: { $multiply: ['$items.price', '$items.quantity'] },
+                        },
+                    },
+                },
+            ]),
             Analytics.findOne(),
             Order.aggregate([
                 { $match: { createdAt: { $gte: sixMonthsStart }, ...nonCancelled } },
@@ -232,6 +260,38 @@ const getDashboardData = async (req, res) => {
             outOfStock: facetCount('outOfStock'),
         };
 
+        // Top Categories ranks by SALES, not by catalog size: revenue is
+        // summed from real (non-cancelled) order lines per category.
+        // Ties fall back to product count, then name, so the ranking is
+        // stable. Only the top 5 are returned; totalSales sums revenue
+        // across ALL categories so the donut centre is store-wide.
+        const productCountByCategory = new Map(
+            categoryProductCounts
+                .filter((row) => row._id)
+                .map((row) => [String(row._id), row.count])
+        );
+        const revenueByCategory = new Map(
+            categoryRevenueRows
+                .filter((row) => row._id)
+                .map((row) => [String(row._id), round2(row.revenue)])
+        );
+        const totalSales = round2(
+            [...revenueByCategory.values()].reduce((sum, value) => sum + value, 0)
+        );
+        const topCategories = allCategories
+            .map((category) => ({
+                name: category.name,
+                revenue: revenueByCategory.get(String(category._id)) || 0,
+                products: productCountByCategory.get(String(category._id)) || 0,
+            }))
+            .sort(
+                (a, b) =>
+                    b.revenue - a.revenue ||
+                    b.products - a.products ||
+                    a.name.localeCompare(b.name)
+            )
+            .slice(0, 5);
+
         // The legacy Analytics document (seeded traffic/conversion
         // counters) is reported when one exists, but a GET must never
         // WRITE — this handler used to create the document on first read.
@@ -248,6 +308,7 @@ const getDashboardData = async (req, res) => {
             activityLogs,
             analytics,
             topCategories,
+            totalSales,
             revenueSeries,
             dailySeries,
             comparisons,

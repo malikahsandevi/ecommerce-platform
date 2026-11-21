@@ -5,17 +5,24 @@ import { FolderTree } from "lucide-react";
 
 export interface CategoryItem {
   name: string;
+  // Donut segment size: the category's revenue share, or — while the
+  // store has no sales yet — its product-count share.
   value: number;
+  // Prominent legend figure: the category's sales ("$X").
   formattedValue: string;
+  // Smaller muted legend line: the category's product count.
+  detailValue: string;
   color: string;
 }
 
 interface TopCategoriesProps {
   categoriesData?: CategoryItem[];
+  // Store-wide sales across ALL categories (donut centre figure).
+  totalSales?: number;
   loading?: boolean;
 }
 
-export const TopCategories: React.FC<TopCategoriesProps> = ({ categoriesData, loading = false }) => {
+export const TopCategories: React.FC<TopCategoriesProps> = ({ categoriesData, totalSales, loading = false }) => {
   if (loading) {
     return (
       <div className="p-5 w-full bg-(--background) rounded-2xl shadow-sm flex flex-col h-full border border-(--border) animate-pulse">
@@ -39,7 +46,8 @@ export const TopCategories: React.FC<TopCategoriesProps> = ({ categoriesData, lo
   }
 
   const items = categoriesData || [];
-  const totalProducts = items.reduce((acc, item) => acc + item.value, 0);
+  const totalValue = items.reduce((acc, item) => acc + item.value, 0);
+  const formattedTotalSales = `$${Math.round(Number(totalSales || 0)).toLocaleString()}`;
 
   return (
     <div className="p-5 w-full bg-(--background) rounded-2xl shadow-sm flex flex-col h-full border border-(--border)">
@@ -54,20 +62,20 @@ export const TopCategories: React.FC<TopCategoriesProps> = ({ categoriesData, lo
         </Link>
       </div>
 
-      {items.length === 0 || totalProducts === 0 ? (
+      {items.length === 0 || totalValue === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center gap-1.5 py-8 text-center">
           <span className="w-11 h-11 rounded-2xl bg-(--primary-soft) text-(--primary) flex items-center justify-center">
             <FolderTree className="w-5 h-5" />
           </span>
           <p className="text-xs font-semibold text-(--text)">No category data yet</p>
           <p className="text-[11px] text-(--text-muted) max-w-55">
-            Add categories and products, and the product share per category will
-            appear here.
+            Add categories and products, and the categories generating the
+            most sales will appear here.
           </p>
         </div>
       ) : (
         <>
-          {/* Donut Chart — share of products per category */}
+          {/* Donut Chart — share of sales per category */}
           <div className="relative w-full h-56 flex items-center justify-center">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -91,10 +99,10 @@ export const TopCategories: React.FC<TopCategoriesProps> = ({ categoriesData, lo
             {/* Center Text */}
             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
               <span className="text-[11px] font-medium text-(--text-muted)">
-                Total Products
+                Total Sales
               </span>
               <span className="text-xl font-bold text-(--text)">
-                {totalProducts.toLocaleString()}
+                {formattedTotalSales}
               </span>
             </div>
           </div>
@@ -112,8 +120,13 @@ export const TopCategories: React.FC<TopCategoriesProps> = ({ categoriesData, lo
                     {item.name}
                   </span>
                 </div>
-                <span className="font-semibold text-(--text) shrink-0 ml-2">
-                  {item.formattedValue}
+                <span className="shrink-0 ml-2 text-right">
+                  <span className="block font-semibold text-(--text)">
+                    {item.formattedValue}
+                  </span>
+                  <span className="block text-[10px] text-(--text-muted)">
+                    {item.detailValue}
+                  </span>
                 </span>
               </div>
             ))}

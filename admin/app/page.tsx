@@ -84,6 +84,7 @@ export default function Page() {
   const [recentOrders, setRecentOrders] = useState<DashboardOrder[] | undefined>(undefined);
   const [activityLogs, setActivityLogs] = useState<ActivityLogItem[] | undefined>(undefined);
   const [categories, setCategories] = useState<CategoryItem[] | undefined>(undefined);
+  const [totalSales, setTotalSales] = useState<number | undefined>(undefined);
   const [monthlySeries, setMonthlySeries] = useState<RevenuePoint[] | undefined>(undefined);
   const [dailySeries, setDailySeries] = useState<DailyPoint[] | undefined>(undefined);
   const [monthlyTarget, setMonthlyTarget] = useState<MonthlyTargetData | undefined>(undefined);
@@ -105,6 +106,7 @@ export default function Page() {
     setRecentOrders(undefined);
     setActivityLogs(undefined);
     setCategories(undefined);
+    setTotalSales(undefined);
     setMonthlySeries(undefined);
     setDailySeries(undefined);
     setMonthlyTarget(undefined);
@@ -235,33 +237,27 @@ export default function Page() {
       }))
     );
 
-    // Category share is computed from the real product catalog: the
-    // dashboard endpoint returns the categories, the products endpoint
-    // says how many products sit in each one.
     const products: AnyRecord[] = await productsPromise;
 
-    const counts = new Map<string, number>();
-    for (const product of products) {
-      const categoryId =
-        typeof product.category === "object"
-          ? product.category?._id
-          : product.category;
-      if (categoryId) counts.set(categoryId, (counts.get(categoryId) || 0) + 1);
-    }
-
+    // Top Categories ranks by SALES: the dashboard endpoint returns the
+    // top 5 categories with their real revenue and product counts,
+    // already ordered by revenue. The donut follows the revenue share;
+    // while the store has no sales at all it falls back to the
+    // product-count share so the chart is never blank.
+    const salesTotal = Number(data.totalSales || 0);
+    setTotalSales(salesTotal);
     setCategories(
-      (data.topCategories || [])
-        .map((category: AnyRecord, index: number) => {
-          const count = counts.get(category._id) || 0;
-          return {
-            name: category.name,
-            value: count,
-            formattedValue: `${count} product${count === 1 ? "" : "s"}`,
-            color: CATEGORY_COLORS[index % CATEGORY_COLORS.length],
-          };
-        })
-        .filter((category: CategoryItem) => category.value > 0)
-        .sort((a: CategoryItem, b: CategoryItem) => b.value - a.value)
+      (data.topCategories || []).map((category: AnyRecord, index: number) => {
+        const revenue = Number(category.revenue || 0);
+        const productCount = Number(category.products || 0);
+        return {
+          name: category.name,
+          value: salesTotal > 0 ? revenue : productCount,
+          formattedValue: fmtWholeMoney(revenue),
+          detailValue: `${productCount} product${productCount === 1 ? "" : "s"}`,
+          color: CATEGORY_COLORS[index % CATEGORY_COLORS.length],
+        };
+      })
     );
 
     setSearchRecords(
@@ -450,6 +446,7 @@ export default function Page() {
             <section className="min-w-0">
               <TopCategories
                 categoriesData={categories}
+                totalSales={totalSales}
                 loading={categories === undefined}
               />
             </section>
