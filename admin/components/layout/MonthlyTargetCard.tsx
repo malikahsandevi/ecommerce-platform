@@ -68,59 +68,65 @@ export const MonthlyTargetCard: React.FC<MonthlyTargetCardProps> = ({ data }) =>
         <Ellipsis className="w-5 h-5 text-(--text-muted)" />
       </div>
 
-      {/* Semicircle gauge — geometry ported from the original design's
-          MonthlyTargetCard: the chart lives in a taller (h-20) box whose
-          lower half is clipped by the short overflow-hidden wrapper, so
-          the arc sits DOWN in the card with the percentage under its
-          centre. The previous PieChart version centred the full circle
-          in a 128px box, which floated the arc at the top of the card
-          with dead space underneath it. The box heights were scaled
-          down (h-35/h-20 → h-20/h-12) to shorten this dashboard row;
-          the proportions are unchanged. */}
-      <div className="relative w-full h-12 flex items-center justify-center overflow-hidden mt-1">
-        <div className="absolute top-0 w-full h-20">
-          <ResponsiveContainer width="100%" height="100%">
-            <RadialBarChart
-              cx="50%"
-              cy="50%"
-              innerRadius="75%"
-              outerRadius="100%"
-              data={chartData}
-              startAngle={180}
-              endAngle={0}
-            >
-              <PolarAngleAxis
-                type="number"
-                domain={[0, 100]}
-                angleAxisId={0}
-                tick={false}
-              />
-              <RadialBar
-                background={{ fill: "var(--primary-light)" }}
-                dataKey="value"
-                cornerRadius={4}
-                fill="var(--primary)"
-              />
-            </RadialBarChart>
-          </ResponsiveContainer>
-
-          {/* Centre text under the arc */}
-          <div className="absolute top-[28%] left-1/2 -translate-x-1/2 flex flex-col items-center text-center">
-            <span className="text-2xl leading-6 font-bold text-(--text)">
-              {hasTarget ? `${pct % 1 ? pct.toFixed(1) : pct}%` : "—"}
-            </span>
-            {data.vsLastMonthPct !== null && (
-              <span
-                className={`text-[11px] font-semibold whitespace-nowrap ${
-                  data.vsLastMonthPct >= 0 ? "text-emerald-500" : "text-red-500"
-                }`}
+      {/* Semicircle gauge — explicit pixel geometry instead of the old
+          percentage radii (which Recharts derives from the box height
+          and capped the arc at ~68px wide / 7px thick): outerRadius 42
+          and innerRadius 22 render a ~80px wide arc with a ~16px thick
+          band, and cy=42 puts the diameter line 42px into the section
+          so the curve sits low with the percentage fully UNDER it
+          (label top 43px, just below the diameter) instead of inside
+          the hollow. The chart box (110px) overflows the 44px clip
+          window, but the sector only draws the top semicircle, so
+          nothing renders below the diameter line. The section's flow
+          height is 64px — measured as the tallest gauge area that
+          keeps this card at the dashboard row's shortened height with
+          both card bottoms aligned. */}
+      <div className="relative w-full h-16">
+        <div className="absolute inset-x-0 top-0 h-11 overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-[110px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <RadialBarChart
+                cx="50%"
+                cy={42}
+                innerRadius={22}
+                outerRadius={42}
+                data={chartData}
+                startAngle={180}
+                endAngle={0}
               >
-                {data.vsLastMonthPct >= 0 ? "+" : ""}
-                {data.vsLastMonthPct.toFixed(2)}%{" "}
-                <span className="text-(--text-muted) font-medium">from last month</span>
-              </span>
-            )}
+                <PolarAngleAxis
+                  type="number"
+                  domain={[0, 100]}
+                  angleAxisId={0}
+                  tick={false}
+                />
+                <RadialBar
+                  background={{ fill: "var(--primary-light)" }}
+                  dataKey="value"
+                  cornerRadius={4}
+                  fill="var(--primary)"
+                />
+              </RadialBarChart>
+            </ResponsiveContainer>
           </div>
+        </div>
+
+        {/* Percentage under the arc */}
+        <div className="absolute top-[43px] left-1/2 -translate-x-1/2 flex flex-col items-center text-center">
+          <span className="text-2xl leading-6 font-bold text-(--text)">
+            {hasTarget ? `${pct % 1 ? pct.toFixed(1) : pct}%` : "—"}
+          </span>
+          {data.vsLastMonthPct !== null && (
+            <span
+              className={`text-[11px] font-semibold whitespace-nowrap ${
+                data.vsLastMonthPct >= 0 ? "text-emerald-500" : "text-red-500"
+              }`}
+            >
+              {data.vsLastMonthPct >= 0 ? "+" : ""}
+              {data.vsLastMonthPct.toFixed(2)}%{" "}
+              <span className="text-(--text-muted) font-medium">from last month</span>
+            </span>
+          )}
         </div>
       </div>
 
@@ -129,7 +135,7 @@ export const MonthlyTargetCard: React.FC<MonthlyTargetCardProps> = ({ data }) =>
           absorb the extra space and push the Target/Revenue strip to
           the bottom, leaving a dead gap under this text. The strip
           must follow the text with its normal mt-4 spacing. */}
-      <div className="text-center mt-2">
+      <div className="text-center mt-1">
         {encouragement ? (
           <>
             <p className="text-[13px] font-bold text-(--text)">{encouragement.title}</p>
