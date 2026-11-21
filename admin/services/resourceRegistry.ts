@@ -72,12 +72,34 @@ function adaptRow(endpoint: string, row: any) {
 // 1:1. Translate before anything reaches the API so creates/updates do not
 // fail validation or silently drop data.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+/** The alt a media item is shown with: its written alt, else its name. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function effectiveMediaAlt(media: any): string {
+  return media?.altText || media?.originalName || media?.filename || '';
+}
+
 function transformProductPayload(data: any) {
   const payload = { ...data };
 
-  if (typeof payload.image === 'string') {
+  if (Array.isArray(payload.images)) {
+    // The gallery from the product form's media manager — send the
+    // canonical entry shape; the backend enforces the 7-image cap, the
+    // single main and the `image` mirror.
+    payload.images = payload.images
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .filter((entry: any) => entry && typeof entry.url === 'string' && entry.url.trim())
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .map((entry: any) => ({
+        url: entry.url,
+        publicId: entry.publicId || undefined,
+        mediaId: entry.mediaId || undefined,
+        alt: entry.alt ?? entry.altText ?? '',
+        isMain: Boolean(entry.isMain ?? entry.isPrimary),
+      }));
+    delete payload.image;
+  } else if (typeof payload.image === 'string') {
     const url = payload.image.trim();
-    payload.images = url ? [{ url, altText: payload.name || '', isPrimary: true }] : [];
+    payload.images = url ? [{ url, alt: payload.name || '', isMain: true }] : [];
     delete payload.image;
   }
 
@@ -438,5 +460,17 @@ export const mediaService = {
   storage: async () => {
     const res = await apiClient.get('/media/storage');
     return res.data;
+  },
+
+  /**
+   * Library search for the "Select Media" picker — the backend matches
+   * the query against file names, alt text and id prefixes, newest
+   * first. An empty query returns the newest page of the whole library.
+   */
+  search: async (query: string, limit = 60) => {
+    const res = await apiClient.get('/media', {
+      params: { search: query, limit, kind: 'image' },
+    });
+    return Array.isArray(res.data) ? res.data : [];
   },
 };

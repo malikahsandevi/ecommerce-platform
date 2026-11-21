@@ -10,6 +10,9 @@ import {
 } from "lucide-react";
 import Select, { SelectOption } from "@/components/ui/Select";
 import Button from "@/components/ui/Button";
+import ProductMediaManager, {
+  GalleryImage,
+} from "@/components/models/ProductMediaManager";
 import { mediaService } from "@/services/resourceRegistry";
 import { extractApiError } from "@/services/api";
 
@@ -26,7 +29,8 @@ export type FormFieldType =
   | "date"
   | "tags"
   | "key-value"
-  | "image";
+  | "image"
+  | "media-gallery";
 
 export interface FormField {
   name: string; // Key in formData (e.g. "title", "sku", "address.city")
@@ -522,6 +526,25 @@ export const FormModal: React.FC<FormModalProps> = ({
             </div>
             {imageUpload.field === field.name && imageUpload.error && (
               <p className="mt-1 text-[11px] text-red-500">{imageUpload.error}</p>
+            )}
+          </div>
+        );
+
+      case "media-gallery":
+        const gallery: GalleryImage[] = Array.isArray(rawValue) ? rawValue : [];
+        return (
+          <div key={field.name} className={colClass}>
+            <label className="font-bold text-[var(--text)] block mb-1 text-xs">
+              {field.label} {field.required && <span className="text-red-500">*</span>}
+            </label>
+            <ProductMediaManager
+              value={gallery}
+              onChange={(imgs) => handleFieldChange(field.name, imgs)}
+            />
+            {field.helperText && (
+              <span className="text-[10px] text-[var(--text-muted)] mt-0.5 block">
+                {field.helperText}
+              </span>
             )}
           </div>
         );

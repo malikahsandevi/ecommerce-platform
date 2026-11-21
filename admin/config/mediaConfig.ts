@@ -31,6 +31,10 @@ const formatSize = (bytes?: number): string => {
 const displayName = (media: MediaItem): string =>
   media.originalName || media.filename || "Untitled file";
 
+/** The alt a media item is shown with: its written alt, else its name. */
+const effectiveAlt = (media: MediaItem): string =>
+  media.altText || media.originalName || media.filename || "";
+
 const dimensionsText = (media: MediaItem): string =>
   media.dimensions?.width && media.dimensions?.height
     ? `${media.dimensions.width} × ${media.dimensions.height}`
@@ -98,7 +102,7 @@ export const mediaConfig = {
     title: displayName(media),
     status: statusOf(media),
     image: media.mimeType?.startsWith("image/") ? media.url : undefined,
-    shortDescription: media.altText || media.mimeType || "",
+    shortDescription: effectiveAlt(media) || media.mimeType || "",
     attributes: {
       "File Name": displayName(media),
       URL: media.url || "—",
@@ -107,7 +111,7 @@ export const mediaConfig = {
       Size: formatSize(media.size),
       Dimensions: dimensionsText(media),
       Storage: media.storageType || "—",
-      "Alt Text": media.altText || "—",
+      "Alt Text": effectiveAlt(media) || "—",
       Uploaded: media.createdAt ? new Date(media.createdAt).toLocaleDateString() : "—",
     },
     description: media.description || "",

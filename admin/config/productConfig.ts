@@ -3,6 +3,11 @@ import { Download, Plus, RefreshCcwDot } from "lucide-react";
 
 export interface ProductImage {
   url: string;
+  publicId?: string;
+  mediaId?: string;
+  alt?: string;
+  isMain?: boolean;
+  // Legacy names from before the gallery — still read for old records.
   altText?: string;
   isPrimary?: boolean;
 }
@@ -25,6 +30,8 @@ export interface Product {
   lowStockThreshold?: number;
   category: string | { _id?: string; name?: string };
   brand?: string | { _id?: string; name?: string };
+  /** Mirror of the main gallery image's URL (kept by the API). */
+  image?: string;
   images?: ProductImage[];
   status: string;
   weight?: number;
@@ -45,7 +52,39 @@ const referenceName = (reference: Reference): string =>
   typeof reference === "string" ? reference : reference?.name || "";
 
 const primaryImage = (product: Product): string =>
-  product.images?.find((img) => img.isPrimary)?.url || product.images?.[0]?.url || "";
+  product.images?.find((img) => img.isMain ?? img.isPrimary)?.url ||
+  product.images?.[0]?.url ||
+  product.image ||
+  "";
+
+/**
+ * The product's gallery in the form's canonical shape: legacy field
+ * names folded into alt/isMain, exactly one main, main first. A product
+ * that only carries the single `image` mirror becomes a 1-image gallery.
+ */
+const galleryOf = (product?: Product | null): ProductImage[] => {
+  const entries: ProductImage[] = (product?.images || [])
+    .filter((img) => img && img.url)
+    .map((img) => ({
+      url: img.url,
+      publicId: img.publicId,
+      mediaId: img.mediaId,
+      alt: img.alt ?? img.altText ?? "",
+      isMain: Boolean(img.isMain ?? img.isPrimary),
+    }));
+
+  if (entries.length === 0) {
+    return product?.image ? [{ url: product.image, alt: "", isMain: true }] : [];
+  }
+
+  if (!entries.some((entry) => entry.isMain)) entries[0].isMain = true;
+  const mainIndex = entries.findIndex((entry) => entry.isMain);
+  if (mainIndex > 0) {
+    const [main] = entries.splice(mainIndex, 1);
+    entries.unshift(main);
+  }
+  return entries;
+};
 
 const dimensionsText = (product: Product): string => {
   if (!product.dimensions) return "";
@@ -123,7 +162,7 @@ export const productConfig = {
     title: product.name,
     status: product.status,
     image: primaryImage(product),
-    gallery: (product.images || []).map((img) => img.url),
+    gallery: galleryOf(product).map((img) => img.url),
     salePrice: product.price ?? 0,
     price:
       product.comparePrice && product.comparePrice > (product.price ?? 0)
@@ -171,7 +210,7 @@ export const productConfig = {
         lowStockThreshold: 10,
         weight: "",
         dimensions: "",
-        image: "",
+        images: [],
         description: "",
         tags: [],
         specifications: [],
@@ -191,7 +230,7 @@ export const productConfig = {
       lowStockThreshold: product.lowStockThreshold ?? 10,
       weight: product.weight ?? "",
       dimensions: dimensionsText(product),
-      image: primaryImage(product),
+      images: galleryOf(product),
       description: product.description || "",
       tags: product.tags || [],
       specifications: (product.attributes || []).map((attr) => ({
@@ -366,10 +405,12 @@ export const productConfig = {
 
     // Section 4: Media & Description
     {
-      name: "image",
-      label: "Product Image URL",
-      type: "image",
-      colSpan: 2,
+      name: "images",
+      label: "Product Images",
+      type: "media-gallery",
+      colSpan: 4,
+      helperText:
+        "Up to 7 images — upload new files or select from the media library, and mark one as the main image.",
       section: "Media & Description",
     },
     {

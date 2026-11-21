@@ -121,7 +121,8 @@ router.post('/upload', protect, express.json({ limit: '15mb' }), async (req, res
             storageType: 'cloud',
             uploadedBy,
             title: title || originalName,
-            altText: altText || '',
+            // No alt written → the file's name becomes the alt text.
+            altText: (altText && String(altText).trim()) || originalName,
             description: description || '',
             status: ['published', 'draft', 'archived'].includes(status) ? status : 'published',
         });
@@ -204,9 +205,10 @@ router.post('/register', protect, requireStaff, async (req, res) => {
         }
 
         const fallbackName = publicId.split('/').pop() || 'file';
+        const storedOriginalName = originalName || fallbackName;
         const media = await Media.create({
             filename: fallbackName,
-            originalName: originalName || fallbackName,
+            originalName: storedOriginalName,
             url: resource.secure_url,
             path: publicId,
             mimeType: finalMime,
@@ -218,7 +220,8 @@ router.post('/register', protect, requireStaff, async (req, res) => {
             storageType: 'cloud',
             uploadedBy: req.user._id,
             title: title || originalName || fallbackName,
-            altText: altText || '',
+            // No alt written → the file's name becomes the alt text.
+            altText: (altText && String(altText).trim()) || storedOriginalName,
             description: description || '',
             status: ['published', 'draft', 'archived'].includes(status) ? status : 'published',
         });
@@ -229,7 +232,71 @@ router.post('/register', protect, requireStaff, async (req, res) => {
     }
 });
 
-router.route('/').get(genericController.getAll).post(protect, genericController.create);
+// GET /api/media — two modes:
+//  • No `search` param: the legacy list (every record, natural order) the
+//    Media page has always consumed.
+//  • `search` param present (even empty): the library-picker mode —
+//    case-insensitive partial match on the file NAME and ALT TEXT, plus an
+//    _id match when the query is the start of an ObjectId hex string.
+//    Newest first, capped by `limit` (default 60). `kind=image` narrows to
+//    images and `status` to one lifecycle state.
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const listMedia = async (req, res) => {
+    try {
+        if (req.query.search === undefined) {
+            const items = await Media.find();
+            return res.json(items);
+        }
+
+        const query = String(req.query.search || '').trim();
+        const and = [];
+
+        if (req.query.kind === 'image') {
+            and.push({ mimeType: { $regex: '^image/', $options: 'i' } });
+        }
+        if (['published', 'draft', 'archived'].includes(req.query.status)) {
+            and.push({ status: req.query.status });
+        }
+
+        if (query) {
+            const rx = { $regex: escapeRegex(query), $options: 'i' };
+            const or = [
+                { originalName: rx },
+                { filename: rx },
+                { altText: rx },
+            ];
+            // An ObjectId typed (or pasted) into the search box: match any
+            // id that STARTS with the query's hex characters.
+            if (/^[0-9a-fA-F]{1,24}$/.test(query)) {
+                or.push({
+                    $expr: {
+                        $regexMatch: {
+                            input: { $toString: '$_id' },
+                            regex: `^${query}`,
+                            options: 'i',
+                        },
+                    },
+                });
+            }
+            and.push({ $or: or });
+        }
+
+        const parsedLimit = Number.parseInt(req.query.limit, 10);
+        const limit = Number.isFinite(parsedLimit)
+            ? Math.min(Math.max(parsedLimit, 1), 200)
+            : 60;
+
+        const items = await Media.find(and.length ? { $and: and } : {})
+            .sort({ createdAt: -1 })
+            .limit(limit);
+        res.json(items);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+router.route('/').get(listMedia).post(protect, genericController.create);
 router.route('/:id')
     .get(genericController.getById)
     .put(protect, genericController.update)

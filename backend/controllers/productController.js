@@ -31,6 +31,83 @@ const createSlug = (name) => name
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');
 
+const MAX_PRODUCT_IMAGES = 7;
+
+// One gallery entry in the canonical shape the API speaks: `alt` and
+// `isMain`. The legacy names (altText / isPrimary) are mirrored alongside
+// so anything still reading the raw document sees the same values.
+const canonicalEntry = (entry, isMain) => {
+    const out = {
+        url: String(entry.url || '').trim(),
+        alt: entry.alt ?? entry.altText ?? '',
+        isMain: Boolean(isMain),
+        altText: entry.alt ?? entry.altText ?? '',
+        isPrimary: Boolean(isMain),
+    };
+    if (entry.publicId) out.publicId = entry.publicId;
+    if (entry.mediaId && mongoose.isValidObjectId(entry.mediaId)) {
+        out.mediaId = entry.mediaId;
+    }
+    return out;
+};
+
+// Turns whatever the client sent — a gallery array, or the legacy single
+// `image` string — into the stored contract: at most 7 entries, exactly
+// one main, the main entry FIRST, and the top-level `image` mirroring the
+// main URL. Keys absent from the request stay absent, so a partial update
+// cannot wipe the gallery by omission.
+const normalizeGallery = (data, normalized) => {
+    if (Array.isArray(data.images)) {
+        const entries = data.images
+            .filter((entry) => entry && typeof entry.url === 'string' && entry.url.trim())
+            .map((entry) => ({ entry, wantsMain: Boolean(entry.isMain ?? entry.isPrimary) }));
+
+        if (entries.length > MAX_PRODUCT_IMAGES) {
+            throw new Error(`A product can have at most ${MAX_PRODUCT_IMAGES} images.`);
+        }
+
+        const mainIndex = Math.max(0, entries.findIndex((e) => e.wantsMain));
+        const ordered = entries.length
+            ? [entries[mainIndex], ...entries.filter((_, i) => i !== mainIndex)]
+            : [];
+
+        normalized.images = ordered.map((e, i) => canonicalEntry(e.entry, i === 0));
+        normalized.image = normalized.images[0]?.url || '';
+        return;
+    }
+
+    if (typeof data.image === 'string') {
+        const url = data.image.trim();
+        normalized.image = url;
+        normalized.images = url
+            ? [canonicalEntry({ url, alt: data.imageAlt ?? '' }, true)]
+            : [];
+    }
+};
+
+// Responses speak the same contract the writes store. Records written
+// before the gallery (altText / isPrimary, main not first, no `image`
+// mirror) are reshaped on the way out instead of needing a migration.
+const shapeProduct = (product) => {
+    if (!product) return product;
+    const obj = typeof product.toObject === 'function'
+        ? product.toObject()
+        : { ...product };
+
+    const raw = Array.isArray(obj.images) ? obj.images : [];
+    const entries = raw
+        .filter((entry) => entry && entry.url)
+        .map((entry) => ({ entry, wantsMain: Boolean(entry.isMain ?? entry.isPrimary) }));
+    const mainIndex = Math.max(0, entries.findIndex((e) => e.wantsMain));
+    const ordered = entries.length
+        ? [entries[mainIndex], ...entries.filter((_, i) => i !== mainIndex)]
+        : [];
+
+    obj.images = ordered.map((e, i) => canonicalEntry(e.entry, i === 0));
+    obj.image = obj.images[0]?.url || (typeof obj.image === 'string' ? obj.image : '');
+    return obj;
+};
+
 const normalizeProductInput = async (data) => {
     const normalized = { ...data };
 
@@ -44,6 +121,8 @@ const normalizeProductInput = async (data) => {
         normalized.slug = createSlug(normalized.name);
     }
 
+    normalizeGallery(data, normalized);
+
     return normalized;
 };
 
@@ -53,7 +132,7 @@ const normalizeProductInput = async (data) => {
 const getProducts = async (req, res) => {
     try {
         const products = await Product.find({}).populate('category brand');
-        res.json(products);
+        res.json(products.map(shapeProduct));
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
@@ -68,7 +147,7 @@ const getProductById = async (req, res) => {
         if (!product) {
             return res.status(404).json({ message: 'Product not found' });
         }
-        res.json(product);
+        res.json(shapeProduct(product));
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
@@ -82,7 +161,7 @@ const createProduct = async (req, res) => {
         const product = new Product(await normalizeProductInput(req.body));
 
         const createdProduct = await product.save();
-        res.status(201).json(createdProduct);
+        res.status(201).json(shapeProduct(createdProduct));
     } catch (error) {
         res.status(400).json({ message: error.message });
     }
@@ -115,7 +194,7 @@ const updateProduct = async (req, res) => {
             );
         }
 
-        res.json(product);
+        res.json(shapeProduct(product));
     } catch (error) {
         res.status(400).json({ message: error.message });
     }

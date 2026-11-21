@@ -119,6 +119,16 @@ const mediaSchema = new mongoose.Schema({
   timestamps: true
 });
 
+// Alt text is the file's name when nobody wrote one — an image without
+// alt text is useless to screen readers and search, and every uploader
+// already gives the file a name, so fall back to it on EVERY create path
+// (register, legacy upload, generic create) instead of storing ''.
+mediaSchema.pre('save', function () {
+  if ((!this.altText || !String(this.altText).trim()) && this.originalName) {
+    this.altText = this.originalName;
+  }
+});
+
 // Indexes for better performance
 mediaSchema.index({ uploadedBy: 1 });
 mediaSchema.index({ entityType: 1, entityId: 1 });

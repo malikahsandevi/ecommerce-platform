@@ -218,7 +218,7 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
         return (
           <img
             src={item.previewUrl}
-            alt={item.altText}
+            alt={item.altText || item.title || ""}
             className="w-full h-full object-cover"
           />
         );

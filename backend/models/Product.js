@@ -78,9 +78,20 @@ const productSchema = new mongoose.Schema({
     ref: 'Brand' 
   },
   
-  // Images
+  // Images — a gallery of at most 7 (enforced in the product controller).
+  // Contract: the MAIN image is always the first entry and also carries
+  // isMain: true; the top-level `image` below mirrors its URL so older
+  // consumers (cards, order snapshots) keep working with one field.
+  // altText/isPrimary are the pre-gallery field names — kept so records
+  // written before the gallery still load; the controller normalises
+  // them into alt/isMain on every read and write.
+  image: { type: String, default: '' },
   images: [{
     url: { type: String, required: true },
+    publicId: { type: String },
+    mediaId: { type: mongoose.Schema.Types.ObjectId, ref: 'Media' },
+    alt: { type: String },
+    isMain: { type: Boolean, default: false },
     altText: { type: String },
     isPrimary: { type: Boolean, default: false }
   }],
