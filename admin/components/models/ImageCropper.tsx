@@ -32,6 +32,9 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({
   onApply,
 }) => {
   const frameRef = useRef<HTMLDivElement>(null);
+  // Backdrop dismissal (same pattern as FormModal): only a press that
+  // starts AND ends on this overlay closes the cropper.
+  const backdropPressRef = useRef(false);
   const imgRef = useRef<HTMLImageElement | null>(null);
   const dragRef = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
 
@@ -144,7 +147,18 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200"
+      onMouseDown={(event) => {
+        backdropPressRef.current = event.target === event.currentTarget;
+      }}
+      onClick={(event) => {
+        if (backdropPressRef.current && event.target === event.currentTarget) {
+          onClose();
+        }
+        backdropPressRef.current = false;
+      }}
+    >
       <div className="bg-[var(--surface)] rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col border border-[var(--border)]">
         {/* HEADER */}
         <div className="p-4 sm:p-5 border-b border-[var(--border)] flex items-start justify-between gap-3 bg-[var(--surface-muted)] shrink-0">

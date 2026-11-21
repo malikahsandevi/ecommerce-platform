@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   X,
@@ -148,6 +148,34 @@ export const FormModal: React.FC<FormModalProps> = ({
     url: string;
     fromPicker: boolean;
   } | null>(null);
+
+  // Backdrop dismissal: a click closes the form only when the press
+  // BOTH started and ended on the overlay itself — clicks inside the
+  // panel (and drags that start inside, e.g. selecting text) never
+  // close it. Child popups (picker, cropper) render their own overlays
+  // above this one, so a click on their backdrop targets their overlay,
+  // not this one, and only closes the child.
+  const backdropPressRef = useRef(false);
+
+  // Esc follows the same stacking: cropper first, then the picker,
+  // then the form itself.
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (cropTarget) {
+        setCropTarget(null);
+        return;
+      }
+      if (pickerField) {
+        setPickerField(null);
+        return;
+      }
+      onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isOpen, cropTarget, pickerField, onClose]);
 
   // Image fields accept a pasted URL or a real file — files go through the
   // media library upload endpoint and the field receives the hosted URL.
@@ -629,7 +657,18 @@ export const FormModal: React.FC<FormModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-200">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-200"
+      onMouseDown={(event) => {
+        backdropPressRef.current = event.target === event.currentTarget;
+      }}
+      onClick={(event) => {
+        if (backdropPressRef.current && event.target === event.currentTarget) {
+          onClose();
+        }
+        backdropPressRef.current = false;
+      }}
+    >
       <div className="bg-[var(--surface)] rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] overflow-hidden flex flex-col border border-[var(--border)]">
         {/* MODAL HEADER */}
         <div className="p-4 sm:p-5 border-b border-[var(--border)] flex items-start justify-between gap-3 bg-[var(--surface-muted)] shrink-0">

@@ -48,6 +48,10 @@ export const MediaPickerModal: React.FC<MediaPickerModalProps> = ({
   const [error, setError] = useState("");
   const [selected, setSelected] = useState<MediaItem[]>([]);
   const requestSeq = useRef(0);
+  // Backdrop dismissal (same pattern as FormModal): only a press that
+  // starts AND ends on this overlay closes the picker — never a click
+  // inside the panel, and never the form underneath.
+  const backdropPressRef = useRef(false);
 
   const remaining = Math.max(0, maxTotal - existing.length);
   const limitHit = selected.length >= remaining;
@@ -128,7 +132,18 @@ export const MediaPickerModal: React.FC<MediaPickerModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-2 sm:p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-200">
+    <div
+      className="fixed inset-0 z-[70] flex items-center justify-center p-2 sm:p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-200"
+      onMouseDown={(event) => {
+        backdropPressRef.current = event.target === event.currentTarget;
+      }}
+      onClick={(event) => {
+        if (backdropPressRef.current && event.target === event.currentTarget) {
+          onClose();
+        }
+        backdropPressRef.current = false;
+      }}
+    >
       <div className="bg-[var(--surface)] rounded-2xl shadow-2xl w-full max-w-3xl max-h-[92vh] overflow-hidden flex flex-col border border-[var(--border)]">
         {/* HEADER */}
         <div className="p-4 sm:p-5 border-b border-[var(--border)] flex items-start justify-between gap-3 bg-[var(--surface-muted)] shrink-0">
