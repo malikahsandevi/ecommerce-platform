@@ -10,6 +10,47 @@ export interface AppearanceSettings {
 export const SIDEBAR_PREF_EVENT = 'admin:sidebar-pref';
 export const BREADCRUMBS_PREF_EVENT = 'admin:breadcrumbs-pref';
 
+export type DeviceTheme = 'dark' | 'light';
+
+/** The device's stored theme — the single source of truth for the theme. */
+export function getDeviceTheme(): DeviceTheme | null {
+  try {
+    const stored = localStorage.getItem('theme');
+    return stored === 'dark' || stored === 'light' ? stored : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Writes a theme choice to every store at once — the <html> attribute
+ * (what the CSS reads), localStorage (what the pre-paint script reads)
+ * and the "theme" cookie (what the server layout renders into the SSR
+ * html tag) — so the three can never disagree and the stored theme is
+ * always the first paint, on this load and every later one.
+ */
+export function persistTheme(theme: DeviceTheme): void {
+  if (typeof window === 'undefined') return;
+  try {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('theme', theme);
+    document.cookie = `theme=${theme}; path=/; max-age=31536000; SameSite=Lax`;
+  } catch {
+    /* theme is cosmetic — never let it break the panel */
+  }
+}
+
+/**
+ * Re-asserts the stored device theme onto <html>. Used as a safety net
+ * after hydration and after the appearance fetch: whatever the DOM
+ * attribute currently says, the device store wins.
+ */
+export function reassertDeviceTheme(): void {
+  if (typeof window === 'undefined') return;
+  const deviceTheme = getDeviceTheme();
+  if (deviceTheme) persistTheme(deviceTheme);
+}
+
 /**
  * Applies the saved Appearance settings to the running panel. Before this
  * existed, Settings → Appearance wrote to the database but nothing ever
@@ -21,15 +62,15 @@ export function applyAppearance(appearance: AppearanceSettings | undefined): voi
   if (!appearance || typeof window === 'undefined') return;
 
   try {
-    // Theme — share the header toggle's storage key so both stay in sync.
+    // Theme — routed through persistTheme so the attribute, localStorage
+    // and the SSR cookie always move together.
     if (appearance.theme === 'Dark') {
-      localStorage.setItem('theme', 'dark');
-      document.documentElement.setAttribute('data-theme', 'dark');
+      persistTheme('dark');
     } else if (appearance.theme === 'Light') {
-      localStorage.setItem('theme', 'light');
-      document.documentElement.setAttribute('data-theme', 'light');
+      persistTheme('light');
     } else if (appearance.theme === 'System') {
       localStorage.removeItem('theme');
+      document.cookie = 'theme=; path=/; max-age=0; SameSite=Lax';
       const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
       document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
     }
@@ -66,28 +107,20 @@ export async function fetchAndApplyAppearance(): Promise<void> {
     const appearance = data?.appearance as AppearanceSettings | undefined;
     if (!appearance) return;
 
-    // Theme precedence — this is what stops the light<->dark flash on
-    // refresh. The pre-paint script in the root layout paints the theme
-    // stored in localStorage ("theme") before first paint. If this fetch
-    // then overwrote it with a *different* server-side Appearance theme,
-    // the panel visibly flipped a moment after loading (and the server
-    // value rewrote localStorage, so the fight repeated every visit).
-    // A theme already stored on this device is the user's most recent
-    // choice here (header toggle, Settings save, or an earlier seed), so
-    // the server copy is applied WITHOUT its theme. Only a device with
-    // no stored theme is seeded from the server value — applyAppearance
-    // persists it to localStorage, so the next load paints it from the
-    // first frame.
-    let localTheme: string | null = null;
-    try {
-      localTheme = localStorage.getItem('theme');
-    } catch {
-      /* storage unavailable — fall through to the server value */
-    }
-    if (localTheme === 'dark' || localTheme === 'light') {
+    // Theme precedence — the device store is the single source of truth.
+    // The server-side Appearance theme may only SEED a device that has no
+    // stored theme; it must never overwrite one. And when a device theme
+    // exists, it is actively RE-ASSERTED onto <html> here (not merely
+    // left alone): the pre-paint script paints it, and this fetch is the
+    // last writer in the load sequence, so the attribute ends the load
+    // exactly as the device store says — even if anything earlier in the
+    // load disturbed it.
+    const deviceTheme = getDeviceTheme();
+    if (deviceTheme) {
       const withoutTheme: AppearanceSettings = { ...appearance };
       delete withoutTheme.theme;
       applyAppearance(withoutTheme);
+      persistTheme(deviceTheme);
     } else {
       applyAppearance(appearance);
     }

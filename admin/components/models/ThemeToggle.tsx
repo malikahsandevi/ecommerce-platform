@@ -3,23 +3,32 @@
 import React, { useEffect, useState } from "react";
 import { Sun, Moon } from "lucide-react";
 import { settingsService } from "@/services/settingsService";
+import { getDeviceTheme, persistTheme } from "@/services/appearance";
 
 export default function ThemeToggle() {
-  const [theme, setTheme] = useState<"light" | "dark">("light");
+  // Initialise from the already-applied document attribute (set pre-paint
+  // by the inline script / SSR cookie) so the icon never disagrees with
+  // the painted theme, even for a click that lands before effects run.
+  const [theme, setTheme] = useState<"light" | "dark">(
+    () =>
+      (typeof document !== "undefined" &&
+        (document.documentElement.getAttribute("data-theme") as "light" | "dark" | null)) ||
+      "light",
+  );
 
   useEffect(() => {
-    // Current DOM attribute ya localStorage se theme synchronize karein
-    const currentTheme = document.documentElement.getAttribute("data-theme") as "light" | "dark" | null;
-    if (currentTheme) {
-      setTheme(currentTheme);
-    }
+    // Keep the icon in sync if the theme changes elsewhere (Settings →
+    // Appearance applies it without remounting this toggle).
+    const deviceTheme = getDeviceTheme();
+    if (deviceTheme) setTheme(deviceTheme);
   }, []);
 
   const toggleTheme = () => {
     const nextTheme = theme === "light" ? "dark" : "light";
     setTheme(nextTheme);
-    document.documentElement.setAttribute("data-theme", nextTheme);
-    localStorage.setItem("theme", nextTheme);
+    // One write path for every store: <html> attribute, localStorage and
+    // the SSR theme cookie all move together.
+    persistTheme(nextTheme);
     // Keep the server-side Appearance setting in agreement (the section
     // update merges, so only the theme field changes). Otherwise the
     // on-login appearance fetch would seed this older server value on a
