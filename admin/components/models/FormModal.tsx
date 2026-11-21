@@ -147,6 +147,9 @@ export const FormModal: React.FC<FormModalProps> = ({
     field: string;
     url: string;
     fromPicker: boolean;
+    /** Original file name when known (picker items carry it) — the
+     *  cropper names its output after it. */
+    name?: string;
   } | null>(null);
 
   // Backdrop dismissal: a click closes the form only when the press
@@ -750,7 +753,12 @@ export const FormModal: React.FC<FormModalProps> = ({
         }}
         onEditSelected={(item) => {
           if (pickerField && item.url) {
-            setCropTarget({ field: pickerField, url: item.url, fromPicker: true });
+            setCropTarget({
+              field: pickerField,
+              url: item.url,
+              fromPicker: true,
+              name: item.originalName || item.filename || undefined,
+            });
           }
         }}
       />
@@ -762,6 +770,7 @@ export const FormModal: React.FC<FormModalProps> = ({
       <ImageCropper
         isOpen={cropTarget !== null}
         imageUrl={cropTarget?.url ?? null}
+        sourceName={cropTarget?.name}
         onClose={() => setCropTarget(null)}
         onApply={({ url }) => {
           if (cropTarget) {

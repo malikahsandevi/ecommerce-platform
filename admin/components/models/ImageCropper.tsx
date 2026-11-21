@@ -10,11 +10,42 @@ export interface ImageCropperProps {
   isOpen: boolean;
   /** The image to crop (any URL the browser can load with CORS). */
   imageUrl: string | null;
+  /** The original image's name, when the caller knows it (media
+   *  picker). The cropped file is named after it; without it the name
+   *  is derived from the image URL's file segment. */
+  sourceName?: string | null;
   onClose: () => void;
   /** Receives the URL of the cropped image after it has been uploaded
    *  and registered in the media library. */
   onApply: (result: { url: string }) => void;
 }
+
+/**
+ * The saved name for a cropped image: the ORIGINAL image's base name
+ * + "-croped" (Ahsan's exact suffix), with the .jpg extension the
+ * crop output always uses. A source already carrying the suffix
+ * keeps a single one — suffixes never stack.
+ */
+export const cropedFileName = (
+  sourceName?: string | null,
+  imageUrl?: string | null,
+): string => {
+  let raw = (sourceName || "").trim();
+  if (!raw && imageUrl) {
+    raw = imageUrl.split("/").pop()?.split("?")[0] || "";
+    try {
+      raw = decodeURIComponent(raw);
+    } catch {
+      /* keep the raw segment */
+    }
+  }
+  let base = raw.includes(".") ? raw.slice(0, raw.lastIndexOf(".")) : raw;
+  base = base.trim() || "image";
+  if (base.toLowerCase().endsWith("-croped")) {
+    base = base.slice(0, base.length - "-croped".length) || "image";
+  }
+  return `${base}-croped.jpg`;
+};
 
 const OUTPUT_SIZE = 512;
 
@@ -28,6 +59,7 @@ const OUTPUT_SIZE = 512;
 export const ImageCropper: React.FC<ImageCropperProps> = ({
   isOpen,
   imageUrl,
+  sourceName,
   onClose,
   onApply,
 }) => {
@@ -132,8 +164,14 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({
       if (!blob) {
         throw new Error("The cropped image could not be created.");
       }
-      const file = new File([blob], "cropped-image.jpg", { type: "image/jpeg" });
-      const record = await mediaService.upload({ file, title: "Cropped image" });
+      // Named after the ORIGINAL image + "-croped" — never the old
+      // generic "cropped-image.jpg" that filled the library with
+      // identical names. The register flow stores the file's name as
+      // the record's originalName/title, so this is the name the
+      // media record shows.
+      const name = cropedFileName(sourceName, imageUrl);
+      const file = new File([blob], name, { type: "image/jpeg" });
+      const record = await mediaService.upload({ file, title: name });
       if (!record?.url) throw new Error("The upload did not return a URL.");
       onApply({ url: record.url });
     } catch (error) {
