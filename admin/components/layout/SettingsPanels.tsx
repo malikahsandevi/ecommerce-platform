@@ -313,20 +313,12 @@ function GeneralPanel({ data, saving, onSave }: SectionPanelProps<ObjectData>) {
             Amounts are never converted — only the symbol changes.
           </p>
         </div>
-        <div className="space-y-5">
-          <MediaUrlField
-            label="Store Logo URL"
-            value={form.logo}
-            onChange={(logo) => setForm({ ...form, logo })}
-            onSelect={() => setPickerTarget("logo")}
-          />
-          <MediaUrlField
-            label="Favicon URL"
-            value={form.favicon}
-            onChange={(favicon) => setForm({ ...form, favicon })}
-            onSelect={() => setPickerTarget("favicon")}
-          />
-        </div>
+        <MediaUrlField
+          label="Store Logo URL"
+          value={form.logo}
+          onChange={(logo) => setForm({ ...form, logo })}
+          onSelect={() => setPickerTarget("logo")}
+        />
         <div>
           <SettingsInput
             label={`Monthly Target (amount ${currencySymbolFor(form.currency)})`}
@@ -342,6 +334,12 @@ function GeneralPanel({ data, saving, onSave }: SectionPanelProps<ObjectData>) {
             dashboard. Leave empty for no target.
           </p>
         </div>
+        <MediaUrlField
+          label="Favicon URL"
+          value={form.favicon}
+          onChange={(favicon) => setForm({ ...form, favicon })}
+          onSelect={() => setPickerTarget("favicon")}
+        />
       </div>
       <SettingsSaveButton
         onSave={() => {
