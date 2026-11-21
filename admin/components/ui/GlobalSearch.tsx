@@ -9,6 +9,7 @@ import {
   FolderTree,
   Award,
   Image as ImageIcon,
+  CircleAlert,
 } from "lucide-react";
 import { apiClient } from "@/services/api";
 
@@ -72,20 +73,25 @@ const SCOPE_LABEL: Record<Exclude<ScopeName, "all">, string> = {
  * "home //products", "home// products" and "home // products" all parse
  * the same. A known scope word after `//` scopes the search; NOTHING
  * after `//` ("home//") is a plain all-sources search for the text
- * before it; an unknown word after `//` leaves the whole input as a
- * plain query.
+ * before it. An UNKNOWN word after `//` is an invalid tag: the text
+ * before the `//` is searched across all sources, and the dropdown
+ * flags the tag with a notice line at the bottom.
  */
-function parseQuery(raw: string): { text: string; scope: ScopeName } {
+function parseQuery(raw: string): {
+  text: string;
+  scope: ScopeName;
+  invalidTag: string | null;
+} {
   const idx = raw.lastIndexOf("//");
   if (idx >= 0) {
     const left = raw.slice(0, idx).trim();
-    const right = raw.slice(idx + 2).trim().toLowerCase();
-    if (!right) return { text: left, scope: "all" };
-    const scope = SCOPE_WORDS[right];
-    if (scope) return { text: left, scope };
-    return { text: raw.trim(), scope: "all" };
+    const right = raw.slice(idx + 2).trim();
+    if (!right) return { text: left, scope: "all", invalidTag: null };
+    const scope = SCOPE_WORDS[right.toLowerCase()];
+    if (scope) return { text: left, scope, invalidTag: null };
+    return { text: left, scope: "all", invalidTag: right };
   }
-  return { text: raw.trim(), scope: "all" };
+  return { text: raw.trim(), scope: "all", invalidTag: null };
 }
 
 /**
@@ -104,7 +110,7 @@ export const GlobalSearch: React.FC = () => {
   const [activeIndex, setActiveIndex] = useState(-1);
   const requestSeq = useRef(0);
 
-  const { text, scope } = parseQuery(query);
+  const { text, scope, invalidTag } = parseQuery(query);
 
   // Ctrl+/ focuses the box, like the old SearchBar.
   useEffect(() => {
@@ -189,7 +195,9 @@ export const GlobalSearch: React.FC = () => {
     router.push(path);
   };
 
-  const showPanel = open && text.length > 0;
+  // An invalid tag keeps the panel open even with an empty query text,
+  // so the "No results found" state can still carry the tag notice.
+  const showPanel = open && (text.length > 0 || invalidTag !== null);
 
   return (
     <div
@@ -302,6 +310,20 @@ export const GlobalSearch: React.FC = () => {
                 </button>
               );
             })
+          )}
+          {invalidTag !== null && !loading && (
+            // Not a result — a one-row notice (same height/padding as a
+            // result row) naming the invalid tag; the results above are
+            // the all-sources matches for the text before the `//`.
+            <div className="flex items-center gap-2.5 bg-[var(--surface-muted)]/60 px-3 py-2">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center">
+                <CircleAlert className="h-4 w-4 text-amber-500" />
+              </span>
+              <span className="min-w-0 flex-1 truncate text-xs text-[var(--text-muted)]">
+                &quot;{invalidTag}&quot; invalid tag — results from &quot;
+                {text}&quot;
+              </span>
+            </div>
           )}
         </div>
       )}
