@@ -1,6 +1,7 @@
 // components/ui/CreateTable.tsx
 import React, { useState } from "react";
 import { Inbox, Pencil, Trash2 } from "lucide-react";
+import { AvatarViewerTrigger } from "@/components/ui/AvatarViewer";
 
 export interface CreateTableProps<T extends Record<string, any>> {
   data: T[];
@@ -9,6 +10,12 @@ export interface CreateTableProps<T extends Record<string, any>> {
   onEditItem?: (item: T) => void;
   onDeleteItem?: (item: T) => void;
   columnHeaders?: { [key in keyof T]?: string };
+  /**
+   * User-avatar rows only (the Customers table): the name-cell image
+   * becomes an avatar-viewer trigger (eye overlay on hover, FLIP-morph
+   * popup on click) with an initial-letter fallback if it fails.
+   */
+  enableAvatarViewer?: boolean;
 }
 
 // Helper function to truncate long MongoDB or UUID IDs
@@ -64,6 +71,7 @@ export function CreateTable<T extends Record<string, any>>({
   onEditItem,
   onDeleteItem,
   columnHeaders,
+  enableAvatarViewer,
 }: CreateTableProps<T>) {
   const showActions = Boolean(onEditItem || onDeleteItem);
   const [internalSelectedItem, setInternalSelectedItem] = useState<T | null>(null);
@@ -169,7 +177,17 @@ export function CreateTable<T extends Record<string, any>>({
                       return (
                         <td key={String(colKey) + idx} className="px-3 py-2.5 align-middle">
                           <div className="flex items-center gap-2.5">
-                            {/* Small Square Image Box */}
+                            {enableAvatarViewer && isUrl ? (
+                              <AvatarViewerTrigger
+                                src={imgUrl as string}
+                                alt={String(rawValue || "User")}
+                                sizeClass="w-8 h-8"
+                                roundedClass="rounded-lg"
+                                className="border border-[var(--border)]"
+                                fallbackLabel={(String(rawValue || "N").trim().charAt(0) || "N").toUpperCase()}
+                              />
+                            ) : (
+                            /* Small Square Image Box */
                             <div className="w-8 h-8 rounded-lg border border-[var(--border)] bg-[var(--surface)] flex items-center justify-center overflow-hidden shrink-0">
                               {isUrl ? (
                                 <img
@@ -190,6 +208,7 @@ export function CreateTable<T extends Record<string, any>>({
                                 </span>
                               )}
                             </div>
+                            )}
 
                             {/* Name Text */}
                             <span className="font-medium text-[var(--text)] line-clamp-2">

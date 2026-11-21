@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import { X, Package, Star, Pencil, Trash2, Copy, Check } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { StatusPill } from "@/components/models/CreateTable";
+import { AvatarViewerTrigger } from "@/components/ui/AvatarViewer";
 import { formatMoney, useStoreCurrency } from "@/services/currency";
 
 export interface DetailSpecification {
@@ -181,11 +182,13 @@ export function DetailPanel<T extends DetailPanelData>({
                   <div className="flex items-center gap-2.5 min-w-0">
                     {isAvatar &&
                       (showAvatarImage ? (
-                        <img
-                          src={currentImage}
+                        <AvatarViewerTrigger
+                          src={currentImage as string}
                           alt={selectedItem.title}
+                          sizeClass="w-10 h-10"
+                          roundedClass="rounded-full"
+                          className="border border-[var(--border)]"
                           onError={() => setFailedAvatarUrl(currentImage ?? null)}
-                          className="w-10 h-10 shrink-0 rounded-full object-cover border border-[var(--border)]"
                         />
                       ) : (
                         <span className="w-10 h-10 shrink-0 rounded-full bg-[var(--primary-soft)] text-[var(--primary)] flex items-center justify-center text-sm font-bold">

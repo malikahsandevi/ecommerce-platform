@@ -847,6 +847,7 @@ const PageLayout: React.FC = () => {
                 onEditItem={canEdit ? handleRowEdit : undefined}
                 onDeleteItem={canDelete ? handleRowDelete : undefined}
                 columnHeaders={currentConfig.columnHeaders}
+                enableAvatarViewer={Route.toLowerCase() === "customers"}
               />
             </div>
 
