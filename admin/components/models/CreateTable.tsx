@@ -233,11 +233,12 @@ export function CreateTable<T extends Record<string, any>>({
 
                   {showActions && (
                     <td className="px-3 py-2.5 align-middle">
-                      <div
-                        className={`flex items-center gap-1 transition-opacity ${
-                          isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                        }`}
-                      >
+                      {/* Row actions are ALWAYS visible: muted gray on
+                          rest, full colour on the hovered (or selected)
+                          row — edit in the primary tone, delete in full
+                          red — with a smooth colour transition both
+                          ways. */}
+                      <div className="flex items-center gap-1">
                         {onEditItem && (
                           <button
                             type="button"
@@ -247,7 +248,11 @@ export function CreateTable<T extends Record<string, any>>({
                               event.stopPropagation();
                               onEditItem(item);
                             }}
-                            className="w-7 h-7 rounded-lg flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--primary)] hover:bg-[var(--primary-soft)] transition-colors"
+                            className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors duration-200 hover:bg-[var(--primary-soft)] ${
+                              isSelected
+                                ? "text-[var(--primary)]"
+                                : "text-[var(--text-muted)] group-hover:text-[var(--primary)]"
+                            }`}
                           >
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
@@ -261,7 +266,11 @@ export function CreateTable<T extends Record<string, any>>({
                               event.stopPropagation();
                               onDeleteItem(item);
                             }}
-                            className="w-7 h-7 rounded-lg flex items-center justify-center text-[var(--text-muted)] hover:text-red-500 hover:bg-red-500/10 transition-colors"
+                            className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors duration-200 hover:bg-red-500/10 ${
+                              isSelected
+                                ? "text-red-500"
+                                : "text-[var(--text-muted)] group-hover:text-red-500"
+                            }`}
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
