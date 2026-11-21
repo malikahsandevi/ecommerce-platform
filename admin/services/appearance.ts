@@ -63,7 +63,34 @@ export function applyAppearance(appearance: AppearanceSettings | undefined): voi
 export async function fetchAndApplyAppearance(): Promise<void> {
   try {
     const { data } = await apiClient.get('/settings');
-    applyAppearance(data?.appearance);
+    const appearance = data?.appearance as AppearanceSettings | undefined;
+    if (!appearance) return;
+
+    // Theme precedence — this is what stops the light<->dark flash on
+    // refresh. The pre-paint script in the root layout paints the theme
+    // stored in localStorage ("theme") before first paint. If this fetch
+    // then overwrote it with a *different* server-side Appearance theme,
+    // the panel visibly flipped a moment after loading (and the server
+    // value rewrote localStorage, so the fight repeated every visit).
+    // A theme already stored on this device is the user's most recent
+    // choice here (header toggle, Settings save, or an earlier seed), so
+    // the server copy is applied WITHOUT its theme. Only a device with
+    // no stored theme is seeded from the server value — applyAppearance
+    // persists it to localStorage, so the next load paints it from the
+    // first frame.
+    let localTheme: string | null = null;
+    try {
+      localTheme = localStorage.getItem('theme');
+    } catch {
+      /* storage unavailable — fall through to the server value */
+    }
+    if (localTheme === 'dark' || localTheme === 'light') {
+      const withoutTheme: AppearanceSettings = { ...appearance };
+      delete withoutTheme.theme;
+      applyAppearance(withoutTheme);
+    } else {
+      applyAppearance(appearance);
+    }
   } catch {
     /* settings may be unreachable — the panel keeps its local defaults */
   }

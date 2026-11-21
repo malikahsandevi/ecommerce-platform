@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { Sun, Moon } from "lucide-react";
+import { settingsService } from "@/services/settingsService";
 
 export default function ThemeToggle() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
@@ -19,6 +20,17 @@ export default function ThemeToggle() {
     setTheme(nextTheme);
     document.documentElement.setAttribute("data-theme", nextTheme);
     localStorage.setItem("theme", nextTheme);
+    // Keep the server-side Appearance setting in agreement (the section
+    // update merges, so only the theme field changes). Otherwise the
+    // on-login appearance fetch would seed this older server value on a
+    // fresh device. Fire-and-forget — the local change already applied.
+    void settingsService
+      .updateSection("appearance", {
+        theme: nextTheme === "dark" ? "Dark" : "Light",
+      })
+      .catch(() => {
+        /* the local preference is already saved */
+      });
   };
 
   return (
