@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import { Check, Copy, Eye, EyeOff, Plus, ShieldCheck, Trash2, Code2, Globe } from "lucide-react";
 import Button from "@/components/ui/Button";
+import MediaPickerModal from "@/components/models/MediaPickerModal";
 import { apiClient, extractApiError } from "@/services/api";
 import { settingsService } from "@/services/settingsService";
 import { useAdminAuth } from "@/services/authContext";
@@ -190,6 +191,55 @@ export function SettingsPanel({
   }
 }
 
+/** URL field for an image that lives in the media library (store logo,
+ *  favicon): type/paste a URL by hand, or pick an existing image with the
+ *  Select button. A small thumbnail of the current value sits next to the
+ *  input. The preview is guarded by isPreviewableImageSrc — rendering a
+ *  raw partial value in next/image can throw and unmount the panel. */
+function MediaUrlField({
+  label,
+  value,
+  onChange,
+  onSelect,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  onSelect: () => void;
+}) {
+  return (
+    <div>
+      <span className="mb-2 block text-xs font-medium text-[var(--text-soft)]">{label}</span>
+      <div className="flex items-center gap-2">
+        {isPreviewableImageSrc(value) && (
+          <Image
+            src={value}
+            alt={`${label} preview`}
+            width={40}
+            height={40}
+            unoptimized
+            className="h-10 w-10 shrink-0 rounded-lg border border-[var(--border)] object-contain"
+          />
+        )}
+        <input
+          type="text"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          className="h-10 min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-sm text-[var(--text)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]"
+        />
+        <Button
+          variant="secondary"
+          size="md"
+          onClick={onSelect}
+          className="h-10 shrink-0 text-xs"
+        >
+          Select
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function GeneralPanel({ data, saving, onSave }: SectionPanelProps<ObjectData>) {
   const [form, setForm] = useState(() => ({
     storeName: String(data?.storeName ?? ""),
@@ -199,8 +249,10 @@ function GeneralPanel({ data, saving, onSave }: SectionPanelProps<ObjectData>) {
     timeZone: String(data?.timeZone ?? ""),
     language: String(data?.language ?? ""),
     logo: String(data?.logo ?? ""),
+    favicon: String(data?.favicon ?? ""),
     monthlyTarget: String(data?.monthlyTarget ?? ""),
   }));
+  const [pickerTarget, setPickerTarget] = useState<"logo" | "favicon" | null>(null);
 
   return (
     <SettingsCard title="General Settings" description="Basic information about your store">
@@ -238,11 +290,20 @@ function GeneralPanel({ data, saving, onSave }: SectionPanelProps<ObjectData>) {
           options={["English", "Urdu"]}
           onChange={(language) => setForm({ ...form, language })}
         />
-        <SettingsInput
-          label="Store Logo URL"
-          value={form.logo}
-          onChange={(event) => setForm({ ...form, logo: event.target.value })}
-        />
+        <div className="space-y-5">
+          <MediaUrlField
+            label="Store Logo URL"
+            value={form.logo}
+            onChange={(logo) => setForm({ ...form, logo })}
+            onSelect={() => setPickerTarget("logo")}
+          />
+          <MediaUrlField
+            label="Favicon URL"
+            value={form.favicon}
+            onChange={(favicon) => setForm({ ...form, favicon })}
+            onSelect={() => setPickerTarget("favicon")}
+          />
+        </div>
         <div>
           <SettingsInput
             label="Monthly Target (amount $)"
@@ -259,20 +320,6 @@ function GeneralPanel({ data, saving, onSave }: SectionPanelProps<ObjectData>) {
           </p>
         </div>
       </div>
-      {/* Only preview a value next/image can actually parse. Rendering
-          the raw field value meant the FIRST letter typed here mounted
-          an <Image> with an invalid src, which throws during render and
-          unmounts the whole panel — another way this form lost focus. */}
-      {isPreviewableImageSrc(form.logo) && (
-        <Image
-          src={form.logo}
-          alt="Store logo preview"
-          width={64}
-          height={64}
-          unoptimized
-          className="mt-5 rounded-lg border border-[var(--border)] object-contain"
-        />
-      )}
       <SettingsSaveButton
         onSave={() =>
           onSave({
@@ -284,6 +331,20 @@ function GeneralPanel({ data, saving, onSave }: SectionPanelProps<ObjectData>) {
           })
         }
         saving={saving}
+      />
+      <MediaPickerModal
+        isOpen={pickerTarget !== null}
+        single
+        existing={[]}
+        maxTotal={1}
+        onClose={() => setPickerTarget(null)}
+        onConfirm={(picked) => {
+          const url = picked[0]?.url;
+          if (url && pickerTarget) {
+            setForm((current) => ({ ...current, [pickerTarget]: url }));
+          }
+          setPickerTarget(null);
+        }}
       />
     </SettingsCard>
   );

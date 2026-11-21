@@ -17,6 +17,9 @@ export interface MediaPickerModalProps {
   existing: GalleryImage[];
   /** The product's total image cap (7). */
   maxTotal: number;
+  /** Single-pick mode (e.g. Settings logo/favicon): one image, generic
+   *  wording instead of the product-gallery wording. */
+  single?: boolean;
 }
 
 /**
@@ -32,6 +35,7 @@ export const MediaPickerModal: React.FC<MediaPickerModalProps> = ({
   onConfirm,
   existing,
   maxTotal,
+  single = false,
 }) => {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<MediaItem[]>([]);
@@ -126,7 +130,9 @@ export const MediaPickerModal: React.FC<MediaPickerModalProps> = ({
           <div className="min-w-0">
             <h3 className="font-bold text-[var(--text)] text-base">Select Media</h3>
             <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
-              Pick images from the media library to add to this product.
+              {single
+                ? "Pick one image from the media library."
+                : "Pick images from the media library to add to this product."}
             </p>
           </div>
           <Button variant="ghost" size="sm" icon={X} onClick={onClose} aria-label="Close picker" />
@@ -150,10 +156,14 @@ export const MediaPickerModal: React.FC<MediaPickerModalProps> = ({
             />
           </div>
           <p className="text-[11px] text-[var(--text-muted)] mt-2">
-            {remaining === 0
-              ? `This product already has the maximum of ${maxTotal} images.`
-              : `${remaining} of ${maxTotal} image slots available — ${selected.length} selected.`}
-            {limitHit && remaining > 0 && (
+            {single
+              ? selected.length > 0
+                ? "1 image selected."
+                : "Select one image from the library."
+              : remaining === 0
+                ? `This product already has the maximum of ${maxTotal} images.`
+                : `${remaining} of ${maxTotal} image slots available — ${selected.length} selected.`}
+            {!single && limitHit && remaining > 0 && (
               <span className="text-[var(--primary)] font-semibold">
                 {" "}
                 Slot limit reached; deselect one to pick another.
@@ -244,7 +254,7 @@ export const MediaPickerModal: React.FC<MediaPickerModalProps> = ({
             disabled={selected.length === 0}
             onClick={handleConfirm}
           >
-            Add Selected ({selected.length})
+            {single ? "Select Image" : `Add Selected (${selected.length})`}
           </Button>
         </div>
       </div>
