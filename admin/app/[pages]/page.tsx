@@ -1,9 +1,9 @@
 // /app/[pages]/page.tsx
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { AlertCircle, CheckCircle2, Loader2, ShieldAlert } from "lucide-react";
+import { Loader2, ShieldAlert } from "lucide-react";
 
 import TopBar from "@/components/ui/TopBar";
 import StatsGrid from "@/components/models/StatsGrid";
@@ -16,6 +16,7 @@ import { DetailPanel } from "@/components/models/DetailPanel";
 import FormModal, { FormField, ItemFormData } from "@/components/models/FormModal";
 import MediaHandlerModal from "@/components/models/MediaHandler";
 import { confirmDialog } from "@/components/ui/ConfirmDialog";
+import { toast } from "@/components/ui/Toast";
 
 import { getRouteConfigByPath } from "@/config";
 import { extractApiError, PaginationMeta } from "@/services/api";
@@ -192,8 +193,6 @@ const PageLayout: React.FC = () => {
   // route — distinguishes "still loading" from "loaded and empty".
   const [optionsLoaded, setOptionsLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
 
   // --- view state ---------------------------------------------------------
@@ -214,7 +213,6 @@ const PageLayout: React.FC = () => {
 
     let cancelled = false;
     setIsLoading(true);
-    setLoadError(null);
 
     service
       .list({ page: 1, limit: MAX_ROWS })
@@ -228,7 +226,7 @@ const PageLayout: React.FC = () => {
         if (cancelled) return;
         setItems([]);
         setDisplayItems([]);
-        setLoadError(extractApiError(error));
+        toast.error(extractApiError(error));
       })
       .finally(() => {
         if (!cancelled) setIsLoading(false);
@@ -274,8 +272,6 @@ const PageLayout: React.FC = () => {
     setActiveTab(currentConfig.tabs?.[0] || `All ${currentConfig.routeTitle}`);
     setSelectedRawRow(null);
     setCurrentPage(1);
-    setLoadError(null);
-    setNotice(null);
   }, [currentConfig]);
 
   // Any change to what is displayed returns to page 1.
@@ -467,8 +463,6 @@ const PageLayout: React.FC = () => {
       if (!service) return;
 
       setIsSaving(true);
-      setLoadError(null);
-      setNotice(null);
 
       try {
         if (formMode === "add") {
@@ -477,7 +471,7 @@ const PageLayout: React.FC = () => {
           }
           const created = await service.create(formData);
           const generated = (created as { temporaryPassword?: string } | null)?.temporaryPassword;
-          setNotice(
+          toast.success(
             generated
               ? `${Route} created. Temporary password: ${generated}`
               : `${Route} created successfully.`,
@@ -488,7 +482,7 @@ const PageLayout: React.FC = () => {
             throw new Error(`Updating ${Route} is not supported by the API.`);
           }
           const result = await service.update(String(id), formData);
-          setNotice(
+          toast.success(
             Array.isArray(result)
               ? `${Route} updated: ${result.join(", ")}.`
               : `${Route} updated successfully.`,
@@ -498,7 +492,7 @@ const PageLayout: React.FC = () => {
         setIsModalOpen(false);
         reload();
       } catch (error) {
-        setLoadError(extractApiError(error));
+        toast.error(extractApiError(error));
       } finally {
         setIsSaving(false);
       }
@@ -509,7 +503,7 @@ const PageLayout: React.FC = () => {
   const handleDeleteItem = useCallback(
     async (id: string) => {
       if (!service?.remove) {
-        setLoadError(`Deleting ${Route} is not supported by the API.`);
+        toast.error(`Deleting ${Route} is not supported by the API.`);
         return;
       }
 
@@ -526,15 +520,13 @@ const PageLayout: React.FC = () => {
         return;
       }
 
-      setLoadError(null);
-      setNotice(null);
       try {
         await service.remove(id);
         setSelectedRawRow(null);
-        setNotice(`${Route} deleted.`);
+        toast.success(`${Route} deleted.`);
         reload();
       } catch (error) {
-        setLoadError(extractApiError(error));
+        toast.error(extractApiError(error));
       }
     },
     [service, Route, reload],
@@ -560,8 +552,6 @@ const PageLayout: React.FC = () => {
     async (mediaData: Row | Row[]) => {
       if (Array.isArray(mediaData)) {
         setIsSaving(true);
-        setLoadError(null);
-        setNotice(null);
 
         try {
           let uploaded = 0;
@@ -578,13 +568,13 @@ const PageLayout: React.FC = () => {
             uploaded++;
           }
           if (!uploaded) throw new Error("Pick a file before saving.");
-          setNotice(
+          toast.success(
             uploaded === 1 ? "Media uploaded." : `${uploaded} media uploaded.`,
           );
           setIsModalOpen(false);
           reload();
         } catch (error) {
-          setLoadError(extractApiError(error));
+          toast.error(extractApiError(error));
         } finally {
           setIsSaving(false);
         }
@@ -592,8 +582,6 @@ const PageLayout: React.FC = () => {
       }
 
       setIsSaving(true);
-      setLoadError(null);
-      setNotice(null);
 
       try {
         const file = mediaData.file as File | undefined;
@@ -605,7 +593,7 @@ const PageLayout: React.FC = () => {
             description: mediaData.description,
             status: mediaData.status,
           });
-          setNotice("Media uploaded.");
+          toast.success("Media uploaded.");
         } else if (mediaData.id || mediaData._id) {
           // No new file picked — this is a metadata-only edit of an
           // already-uploaded item.
@@ -615,7 +603,7 @@ const PageLayout: React.FC = () => {
             description: mediaData.description,
             status: mediaData.status,
           });
-          setNotice("Media updated.");
+          toast.success("Media updated.");
         } else {
           throw new Error("Pick a file before saving.");
         }
@@ -623,7 +611,7 @@ const PageLayout: React.FC = () => {
         setIsModalOpen(false);
         reload();
       } catch (error) {
-        setLoadError(extractApiError(error));
+        toast.error(extractApiError(error));
       } finally {
         setIsSaving(false);
       }
@@ -753,6 +741,20 @@ const PageLayout: React.FC = () => {
   const isBusy = isLoading || isRestoring;
   const isTruncated = Boolean(meta && meta.total > items.length);
 
+  // A truncated list used to be announced by the old inline banner; it
+  // is an info toast now, fired once per route + total so reloads and
+  // re-renders don't repeat it.
+  const truncatedToastKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!isTruncated || !meta) return;
+    const key = `${Route}:${meta.total}`;
+    if (truncatedToastKeyRef.current === key) return;
+    truncatedToastKeyRef.current = key;
+    toast.info(
+      `Showing the first ${items.length} of ${meta.total} records. Narrow the search to see the rest.`,
+    );
+  }, [isTruncated, meta, items.length, Route]);
+
   // Direct access to a module the role cannot view: a clean notice
   // instead of a broken page (the API would 403 the data anyway).
   if (isAuthenticated && moduleName && !canView) {
@@ -794,38 +796,6 @@ const PageLayout: React.FC = () => {
           // silently overwritten by the other.
         />
       </header>
-
-      {(loadError || notice || isTruncated) && (
-        <div
-          className={`shrink-0 flex items-start gap-2 rounded-xl border px-3 py-2 text-xs ${
-            loadError
-              ? "border-red-500/30 bg-red-500/10 text-red-500"
-              : "border-emerald-500/30 bg-emerald-500/10 text-emerald-600"
-          }`}
-        >
-          {loadError ? (
-            <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-          ) : (
-            <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-          )}
-          <span className="flex-1">
-            {loadError ||
-              notice ||
-              `Showing the first ${items.length} of ${meta?.total} records. Narrow the search to see the rest.`}
-          </span>
-          <button
-            type="button"
-            onClick={() => {
-              setLoadError(null);
-              setNotice(null);
-              setMeta(null);
-            }}
-            className="shrink-0 hover:opacity-70"
-          >
-            Dismiss
-          </button>
-        </div>
-      )}
 
       <div className="flex flex-1 flex-col min-h-0 w-full overflow-y-auto lg:flex-row lg:overflow-hidden gap-3">
         <section className="flex flex-1 flex-col lg:min-w-158 min-h-0 bg-[var(--background)] space-y-3 lg:overflow-hidden">
@@ -960,7 +930,6 @@ const PageLayout: React.FC = () => {
           categoryOptions={options.categoryOptions || configOptions.categoryOptions || []}
           brandOptions={options.brandOptions || configOptions.brandOptions || []}
           statusOptions={options.statusOptions || configOptions.statusOptions || []}
-          error={loadError}
         />
       )}
 

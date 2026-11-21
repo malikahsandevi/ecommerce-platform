@@ -13,6 +13,7 @@ import {
 } from "@/services/currency";
 import { getTimeZoneOptions, resolveTimeZoneValue } from "@/services/timeZones";
 import { settingsService } from "@/services/settingsService";
+import { toast } from "@/components/ui/Toast";
 import { useAdminAuth } from "@/services/authContext";
 import type {
   PermissionMatrixData,
@@ -1009,8 +1010,7 @@ function RolePermissionsPanel() {
   const [selectedRole, setSelectedRole] = useState("Admin");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
+  const [loadFailed, setLoadFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -1022,7 +1022,10 @@ function RolePermissionsPanel() {
         setMatrix(loaded.matrix);
       })
       .catch((loadError: unknown) => {
-        if (!cancelled) setError(extractApiError(loadError));
+        if (!cancelled) {
+          setLoadFailed(true);
+          toast.error(extractApiError(loadError));
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -1038,7 +1041,6 @@ function RolePermissionsPanel() {
 
   const toggleCell = (module: string, action: string) => {
     if (!editable) return;
-    setNotice("");
     setMatrix((current) => ({
       ...current,
       [selectedRole]: {
@@ -1053,14 +1055,12 @@ function RolePermissionsPanel() {
 
   const saveMatrix = async () => {
     setSaving(true);
-    setError("");
-    setNotice("");
     try {
       const saved = await settingsService.updatePermissions(matrix);
       setMatrix(saved);
-      setNotice("Role permissions saved.");
+      toast.success("Role permissions saved.");
     } catch (saveError) {
-      setError(extractApiError(saveError));
+      toast.error(extractApiError(saveError));
     } finally {
       setSaving(false);
     }
@@ -1074,9 +1074,9 @@ function RolePermissionsPanel() {
       >
         {loading ? (
           <p className="text-sm text-[var(--text-muted)]">Loading permissions…</p>
-        ) : error && !data ? (
+        ) : loadFailed && !data ? (
           <p className="rounded-lg border border-red-300 bg-red-500/10 p-3 text-xs text-red-600" role="alert">
-            {error}
+            Role permissions could not be loaded.
           </p>
         ) : data ? (
           <>
@@ -1088,7 +1088,6 @@ function RolePermissionsPanel() {
                   type="button"
                   onClick={() => {
                     setSelectedRole(role);
-                    setNotice("");
                   }}
                   className={`flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs transition-all ${
                     selectedRole === role
@@ -1159,19 +1158,6 @@ function RolePermissionsPanel() {
               </table>
             </div>
 
-            {(error || notice) && (
-              <p
-                className={`mt-4 rounded-lg border p-3 text-xs ${
-                  error
-                    ? "border-red-300 bg-red-500/10 text-red-600"
-                    : "border-green-300 bg-green-500/10 text-green-700"
-                }`}
-                role={error ? "alert" : "status"}
-              >
-                {error || notice}
-              </p>
-            )}
-
             {canEdit && (
               <div className="mt-4 flex justify-end">
                 <Button
@@ -1199,12 +1185,10 @@ function RolePermissionsPanel() {
  */
 function SecurityPanel() {
   const [enabled, setEnabled] = useState<boolean | null>(null);
-  const [loadError, setLoadError] = useState("");
+  const [loadFailed, setLoadFailed] = useState(false);
   const [setupData, setSetupData] = useState<{ secret: string; qrCode: string } | null>(null);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
-  const [actionError, setActionError] = useState("");
-  const [notice, setNotice] = useState("");
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -1215,7 +1199,10 @@ function SecurityPanel() {
         if (!cancelled) setEnabled(Boolean(res.data?.enabled));
       })
       .catch((statusError) => {
-        if (!cancelled) setLoadError(extractApiError(statusError));
+        if (!cancelled) {
+          setLoadFailed(true);
+          toast.error(extractApiError(statusError));
+        }
       });
     return () => {
       cancelled = true;
@@ -1224,14 +1211,12 @@ function SecurityPanel() {
 
   const startSetup = async () => {
     setBusy(true);
-    setActionError("");
-    setNotice("");
     try {
       const res = await apiClient.post("/auth/2fa/setup", {});
       setSetupData({ secret: res.data.secret, qrCode: res.data.qrCode });
       setCode("");
     } catch (setupError) {
-      setActionError(extractApiError(setupError));
+      toast.error(extractApiError(setupError));
     } finally {
       setBusy(false);
     }
@@ -1239,15 +1224,14 @@ function SecurityPanel() {
 
   const confirmEnable = async () => {
     setBusy(true);
-    setActionError("");
     try {
       await apiClient.post("/auth/2fa/enable", { code: code.trim() });
       setEnabled(true);
       setSetupData(null);
       setCode("");
-      setNotice("Two-factor authentication is now on. Your next sign-in will ask for a code.");
+      toast.success("Two-factor authentication is now on. Your next sign-in will ask for a code.");
     } catch (enableError) {
-      setActionError(extractApiError(enableError));
+      toast.error(extractApiError(enableError));
     } finally {
       setBusy(false);
     }
@@ -1255,15 +1239,13 @@ function SecurityPanel() {
 
   const disable = async () => {
     setBusy(true);
-    setActionError("");
-    setNotice("");
     try {
       await apiClient.post("/auth/2fa/disable", { code: code.trim() });
       setEnabled(false);
       setCode("");
-      setNotice("Two-factor authentication has been turned off.");
+      toast.success("Two-factor authentication has been turned off.");
     } catch (disableError) {
-      setActionError(extractApiError(disableError));
+      toast.error(extractApiError(disableError));
     } finally {
       setBusy(false);
     }
@@ -1318,23 +1300,7 @@ function SecurityPanel() {
           )}
         </div>
 
-        {loadError && (
-          <p className="mt-4 rounded-lg border border-red-300 bg-red-500/10 p-3 text-xs text-red-600" role="alert">
-            {loadError}
-          </p>
-        )}
-        {notice && (
-          <p className="mt-4 rounded-lg border border-green-300 bg-green-500/10 p-3 text-xs text-green-700" role="status">
-            {notice}
-          </p>
-        )}
-        {actionError && (
-          <p className="mt-4 rounded-lg border border-red-300 bg-red-500/10 p-3 text-xs text-red-600" role="alert">
-            {actionError}
-          </p>
-        )}
-
-        {enabled === null && !loadError && (
+        {enabled === null && !loadFailed && (
           <p className="mt-4 text-sm text-[var(--text-muted)]">Checking your two-factor status…</p>
         )}
 
@@ -1390,7 +1356,6 @@ function SecurityPanel() {
                     onClick={() => {
                       setSetupData(null);
                       setCode("");
-                      setActionError("");
                     }}
                     disabled={busy}
                   >

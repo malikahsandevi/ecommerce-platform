@@ -5,6 +5,7 @@ import React, { useEffect } from "react";
 import Sidebar from "@/components/layout/Sidebar";
 import AdminLoginPopup from "@/components/Login";
 import { ConfirmDialogHost } from "@/components/ui/ConfirmDialog";
+import { ToastHost } from "@/components/ui/Toast";
 import { AuthProvider, useAdminAuth } from "@/services/authContext";
 import { fetchAndApplyAppearance } from "@/services/appearance";
 import { fetchAndApplyStoreCurrency } from "@/services/currency";
@@ -57,6 +58,10 @@ function AdminShell({ children }: { children: React.ReactNode }) {
       {/* The panel's single confirmation-dialog host (replaces every
           native confirm()/alert()). */}
       <ConfirmDialogHost />
+
+      {/* Transient success/error/info messages — bottom-right toasts,
+          never an inline banner. */}
+      <ToastHost />
     </main>
   );
 }

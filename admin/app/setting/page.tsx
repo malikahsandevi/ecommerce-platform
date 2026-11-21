@@ -22,6 +22,7 @@ import { settingsService } from "@/services/settingsService";
 import type { SettingsDocument, SettingsSection, SettingsUser } from "@/services/settingsService";
 import { useAdminAuth } from "@/services/authContext";
 import { applyAppearance, type AppearanceSettings } from "@/services/appearance";
+import { toast } from "@/components/ui/Toast";
 import { SettingsPanel } from "../../components/layout/SettingsPanels";
 
 type SettingMenu =
@@ -75,8 +76,6 @@ export default function SettingsPage() {
   const [users, setUsers] = useState<SettingsUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
 
   // The settings API requires the admin token — wait for the session
   // before loading, and reload once it appears (the shell renders this
@@ -91,7 +90,7 @@ export default function SettingsPage() {
         if (!cancelled) setSettings(data);
       })
       .catch((loadError: unknown) => {
-        if (!cancelled) setError(loadError instanceof Error ? loadError.message : "Unable to load settings.");
+        if (!cancelled) toast.error(loadError instanceof Error ? loadError.message : "Unable to load settings.");
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -111,7 +110,7 @@ export default function SettingsPage() {
         if (!cancelled) setUsers(data);
       })
       .catch((loadError: unknown) => {
-        if (!cancelled) setError(loadError instanceof Error ? loadError.message : "Unable to load users.");
+        if (!cancelled) toast.error(loadError instanceof Error ? loadError.message : "Unable to load users.");
       });
 
     return () => {
@@ -121,8 +120,6 @@ export default function SettingsPage() {
 
   const saveSection = async (section: SettingsSection, value: unknown) => {
     setSaving(true);
-    setError("");
-    setNotice("");
     try {
       const updated = await settingsService.updateSection(section, value);
       setSettings(updated);
@@ -130,9 +127,9 @@ export default function SettingsPage() {
       if (section === "appearance") {
         applyAppearance(updated.appearance as AppearanceSettings);
       }
-      setNotice("Settings saved.");
+      toast.success("Settings saved.");
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "Unable to save settings.");
+      toast.error(saveError instanceof Error ? saveError.message : "Unable to save settings.");
     } finally {
       setSaving(false);
     }
@@ -146,12 +143,11 @@ export default function SettingsPage() {
       variant: "danger",
     });
     if (!confirmed) return;
-    setError("");
     try {
       await settingsService.deleteUser(id);
       setUsers((currentUsers) => currentUsers.filter((user) => user._id !== id));
     } catch (deleteError) {
-      setError(deleteError instanceof Error ? deleteError.message : "Unable to delete user.");
+      toast.error(deleteError instanceof Error ? deleteError.message : "Unable to delete user.");
     }
   };
 
@@ -163,11 +159,10 @@ export default function SettingsPage() {
     role: string;
     isActive: boolean;
   }) => {
-    setError("");
     try {
       const created = await settingsService.createUser(values);
       setUsers((currentUsers) => [...currentUsers, created]);
-      setNotice("User created.");
+      toast.success("User created.");
     } catch (createError) {
       // Rethrow with the API's message so the Add User form can show it
       // in place (e.g. "A user with this email already exists.").
@@ -180,19 +175,18 @@ export default function SettingsPage() {
   };
 
   const updateUser = async (id: string, values: { role?: string; isActive?: boolean }) => {
-    setError("");
     try {
       const updated = await settingsService.updateUser(id, values);
       setUsers((currentUsers) =>
         currentUsers.map((user) => (user._id === id ? { ...user, ...updated } : user)),
       );
-      setNotice("User updated.");
+      toast.success("User updated.");
     } catch (updateError) {
       // The API's own message explains guard refusals (own role, last
       // Super Admin) better than a generic fallback — prefer it.
       const apiMessage = (updateError as { response?: { data?: { message?: string } } })?.response
         ?.data?.message;
-      setError(apiMessage || (updateError instanceof Error ? updateError.message : "Unable to update user."));
+      toast.error(apiMessage || (updateError instanceof Error ? updateError.message : "Unable to update user."));
     }
   };
 
@@ -304,12 +298,6 @@ export default function SettingsPage() {
         />
       </header>
 
-      {(error || notice) && (
-        <div className={`mb-4 rounded-lg border p-3 text-sm ${error ? "border-red-300 text-red-700" : "border-green-300 text-green-700"}`} role={error ? "alert" : "status"}>
-          {error || notice}
-        </div>
-      )}
-
       <div className="grid grid-row-2 gap-3 ">
         <nav aria-label="Settings sections" className="h-fit rounded-xl border border-[var(--border)] bg-[var(--background)] p-2 flex flex-wrap gap-3">
           {visibleMenus.map(({ name, icon: Icon }) => {
@@ -321,8 +309,6 @@ export default function SettingsPage() {
                 aria-current={active ? "page" : undefined}
                 onClick={() => {
                   setActiveMenu(name);
-                  setError("");
-                  setNotice("");
                 }}
                 className={`min-w-[clamp(130px,18%,100%)] flex-1 justify-start text-left ${active ? "text-[var(--primary)]!" : ""}`}
               >
