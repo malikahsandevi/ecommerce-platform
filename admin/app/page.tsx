@@ -415,7 +415,6 @@ export default function Page() {
                   value={statsLoading ? "" : fmtWholeMoney(stats.totalRevenue)}
                   icon={CircleDollarSign}
                   wowPct={comparisons?.revenue?.pct}
-                  highlighted
                   loading={statsLoading}
                 />
                 <DashboardStatCard
