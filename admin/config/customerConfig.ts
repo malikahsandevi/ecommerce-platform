@@ -90,6 +90,13 @@ export const customerConfig = {
     id: customer._id,
     _id: customer._id,
     code: customer.code,
+    // The table's name cell renders `image` as the row thumbnail —
+    // without it the cell always fell back to the initial letter even
+    // when the customer had an avatar saved.
+    image:
+      customer.avatar && customer.avatar !== "default-avatar.png"
+        ? customer.avatar
+        : undefined,
     name: fullName(customer),
     email: customer.email || "",
     phone: customer.phone || "—",
@@ -113,6 +120,10 @@ export const customerConfig = {
         customer.avatar && customer.avatar !== "default-avatar.png"
           ? customer.avatar
           : undefined,
+      // A customer's image is an avatar: the details panel shows it as a
+      // small round thumbnail beside the name, not the big product-style
+      // banner block.
+      imageVariant: "avatar" as const,
       shortDescription: customer.email,
       attributes: {
         Username: customer.username || "—",

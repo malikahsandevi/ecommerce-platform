@@ -28,6 +28,7 @@ export interface SettingsUser {
   lastName?: string;
   name?: string;
   email: string;
+  avatar?: string;
   role?: string;
   isActive?: boolean;
 }

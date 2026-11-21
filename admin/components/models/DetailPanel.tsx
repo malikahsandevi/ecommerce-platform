@@ -18,6 +18,10 @@ export interface DetailPanelData {
   sku?: string;
   status?: string;
   image?: string;
+  /** "banner" (default) shows the big image block above the title;
+   *  "avatar" shows a small round thumbnail beside the title instead
+   *  (people records — customers/users). */
+  imageVariant?: "banner" | "avatar";
   gallery?: string[];
   price?: number;
   salePrice?: number;
@@ -112,6 +116,13 @@ export function DetailPanel<T extends DetailPanelData>({
 
   // Selected item change hone par image reset karein
   const currentImage = activeImage || selectedItem?.image;
+  const isAvatar = selectedItem?.imageVariant === "avatar";
+  // Avatar <img> failures fall back to the initial tile (keyed by URL,
+  // the same pattern the TopBar avatar uses).
+  const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null);
+  const showAvatarImage = Boolean(
+    isAvatar && currentImage && failedAvatarUrl !== currentImage,
+  );
 
   return (
     <aside className="w-full lg:min-w-78 lg:max-w-84 lg:h-full bg-[var(--surface)] flex flex-col z-10 overflow-hidden rounded-xl">
@@ -137,7 +148,7 @@ export function DetailPanel<T extends DetailPanelData>({
             <div className="flex flex-col gap-3 md:flex-row lg:flex-col">
               {/* Media & Key Header Stats */}
               <div className="w-full md:w-5/12 lg:w-full space-y-2 shrink-0 bg-[var(--background)] rounded-2xl p-2">
-                {selectedItem.image && (
+                {selectedItem.image && !isAvatar && (
                   <div className="h-44 md:h-48 flex items-center justify-center overflow-hidden border border-[var(--border)] bg-[var(--surface)] rounded-2xl">
                     <img
                       src={currentImage}
@@ -167,7 +178,21 @@ export function DetailPanel<T extends DetailPanelData>({
 
                 {/* Title, SKU & Status */}
                 <div className="flex items-start justify-between gap-2 pt-1">
-                  <div className="min-w-0">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    {isAvatar &&
+                      (showAvatarImage ? (
+                        <img
+                          src={currentImage}
+                          alt={selectedItem.title}
+                          onError={() => setFailedAvatarUrl(currentImage ?? null)}
+                          className="w-10 h-10 shrink-0 rounded-full object-cover border border-[var(--border)]"
+                        />
+                      ) : (
+                        <span className="w-10 h-10 shrink-0 rounded-full bg-[var(--primary-soft)] text-[var(--primary)] flex items-center justify-center text-sm font-bold">
+                          {(selectedItem.title.trim().charAt(0) || "N").toUpperCase()}
+                        </span>
+                      ))}
+                    <div className="min-w-0">
                     <h4
                       className="font-bold text-[var(--text)] text-sm truncate"
                       title={selectedItem.title}
@@ -184,6 +209,7 @@ export function DetailPanel<T extends DetailPanelData>({
                           </span>
                         </>
                       )}
+                    </div>
                     </div>
                   </div>
 

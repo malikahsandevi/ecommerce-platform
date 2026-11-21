@@ -683,6 +683,32 @@ function NotificationsPanel({ data, saving, onSave }: SectionPanelProps<ObjectDa
 
 const USER_ROLE_OPTIONS = ["Super Admin", "Admin", "Manager", "Editor", "Support", "Customer"];
 
+/** Round avatar for the Users & Roles list: the saved image when the
+ *  user has one, otherwise an initial-letter tile (same fallback the
+ *  Customers table and details panel use). */
+function UserAvatarTile({ user }: { user: SettingsUser }) {
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const displayName =
+    [user.firstName, user.lastName].filter(Boolean).join(" ") || user.name || "Unnamed user";
+  const src =
+    user.avatar && user.avatar !== "default-avatar.png" ? user.avatar : undefined;
+  if (src && failedUrl !== src) {
+    return (
+      <img
+        src={src}
+        alt={displayName}
+        onError={() => setFailedUrl(src)}
+        className="h-8 w-8 shrink-0 rounded-full border border-[var(--border)] object-cover"
+      />
+    );
+  }
+  return (
+    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--primary-soft)] text-[11px] font-bold text-[var(--primary)]">
+      {(displayName.trim().charAt(0) || "N").toUpperCase()}
+    </span>
+  );
+}
+
 function UsersPanel({
   users,
   onDeleteUser,
@@ -866,7 +892,10 @@ function UsersPanel({
             {users.map((user) => (
               <tr key={user._id} className="border-t border-[var(--border)]">
                 <td className="px-4 py-3 font-medium text-[var(--text)]">
-                  {[user.firstName, user.lastName].filter(Boolean).join(" ") || user.name || "Unnamed user"}
+                  <span className="flex items-center gap-2.5">
+                    <UserAvatarTile user={user} />
+                    {[user.firstName, user.lastName].filter(Boolean).join(" ") || user.name || "Unnamed user"}
+                  </span>
                 </td>
                 <td className="px-4 py-3 text-[var(--text-soft)]">{user.email}</td>
                 <td className="px-4 py-3">
