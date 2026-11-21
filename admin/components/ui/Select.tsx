@@ -36,6 +36,12 @@ export interface SelectProps extends Omit<ComponentPropsWithoutRef<"button">, "o
   variant?: SelectVariant;
   size?: SelectSize;
   fullWidth?: boolean;
+  /**
+   * Stretch the trigger button to the wrapper's full width so it matches
+   * the open menu's width (the menu spans the wrapper, left-0/right-0),
+   * without making the wrapper itself full-width like `fullWidth` does.
+   */
+  triggerFullWidth?: boolean;
   direction?: DropdownDirection;
   /** Shown inside the open dropdown when there are no options at all. */
   emptyText?: string;
@@ -54,6 +60,7 @@ const Select: React.FC<SelectProps> = ({
   variant = "secondary",
   size = "md",
   fullWidth = false,
+  triggerFullWidth = false,
   direction = "bottom",
   disabled = false,
   emptyText,
@@ -98,7 +105,7 @@ const Select: React.FC<SelectProps> = ({
         className={`font-semibold inline-flex items-center justify-between transition-colors cursor-pointer focus:shadow-2xl ${
           variantStyles[variant] || variantStyles.secondary
         } ${sizeStyles[size] || sizeStyles.md} ${
-          fullWidth ? "w-full" : ""
+          fullWidth || triggerFullWidth ? "w-full" : ""
         } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
         {...props}
       >

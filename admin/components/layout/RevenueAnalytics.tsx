@@ -87,7 +87,7 @@ export const RevenueAnalytics: React.FC<RevenueAnalyticsProps> = ({
       <div className="p-4 w-full h-full bg-(--background) rounded-2xl shadow-sm border border-(--border) animate-pulse">
         <div className="flex items-center justify-between mb-4">
           <div className="h-5 bg-(--primary-soft) rounded w-40"></div>
-          <div className="h-8 bg-(--primary-soft) rounded-lg w-28"></div>
+          <div className="h-8 bg-(--primary-soft) rounded-lg w-36"></div>
         </div>
         <div className="h-3 bg-(--primary-soft) rounded w-48 mb-5"></div>
         <div className="h-40 bg-(--primary-soft) rounded-xl"></div>
@@ -115,10 +115,14 @@ export const RevenueAnalytics: React.FC<RevenueAnalyticsProps> = ({
         <h3 className="text-base font-bold text-(--text)">Revenue Analytics</h3>
         {/* The shared Select (same component as the list-page filters):
             orange pill trigger, light menu, selected row highlighted —
-            the old native <select> opened the browser's blue menu. */}
+            the old native <select> opened the browser's blue menu.
+            Sized like the list-page filter triggers (size md) and the
+            trigger spans the wrapper (triggerFullWidth) so it is exactly
+            as wide as the open menu below it. */}
         <Select
           variant="primary"
-          size="sm"
+          size="md"
+          triggerFullWidth
           value={range}
           onChange={(value) => setRange(value as RangeKey)}
           options={[
@@ -126,7 +130,7 @@ export const RevenueAnalytics: React.FC<RevenueAnalyticsProps> = ({
             { label: "Last 6 Months", value: "6months" },
           ]}
           aria-label="Chart range"
-          className="min-w-32"
+          className="min-w-36"
         />
       </div>
 
