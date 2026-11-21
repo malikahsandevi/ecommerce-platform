@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState, ComponentPropsWithoutRef } from "react";
-import { Check, ChevronDown } from "lucide-react";
+import { Check, ChevronDown, Plus } from "lucide-react";
 
 // Types Definition
 export type SelectVariant = "primary" | "secondary" | "outline" | "ghost" | "danger";
@@ -37,6 +37,12 @@ export interface SelectProps extends Omit<ComponentPropsWithoutRef<"button">, "o
   size?: SelectSize;
   fullWidth?: boolean;
   direction?: DropdownDirection;
+  /** Shown inside the open dropdown when there are no options at all. */
+  emptyText?: string;
+  /** Label for an optional action button under `emptyText` (empty state only). */
+  emptyActionLabel?: string;
+  /** Click handler for the empty-state action button. */
+  onEmptyAction?: () => void;
 }
 
 const Select: React.FC<SelectProps> = ({
@@ -50,6 +56,9 @@ const Select: React.FC<SelectProps> = ({
   fullWidth = false,
   direction = "bottom",
   disabled = false,
+  emptyText,
+  emptyActionLabel,
+  onEmptyAction,
   ...props
 }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -110,7 +119,27 @@ const Select: React.FC<SelectProps> = ({
         <div
           className={`absolute right-0 left-0 z-50 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-lg max-h-56 overflow-y-auto py-1 animate-in fade-in zoom-in-95 duration-100 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-button]:hidden [&::-webkit-scrollbar-track]:bg-[var(--surface-muted)] [&::-webkit-scrollbar-thumb]:bg-[var(--primary)] [&::-webkit-scrollbar-thumb]:rounded-full ${dropdownDirectionClasses}`}
         >
-          {options.map((option) => {
+          {options.length === 0 && (emptyText || emptyActionLabel) ? (
+            <div className="px-3 py-2.5">
+              {emptyText && (
+                <p className="text-xs text-[var(--text-muted)]">{emptyText}</p>
+              )}
+              {emptyActionLabel && onEmptyAction && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsOpen(false);
+                    onEmptyAction();
+                  }}
+                  className="mt-2 inline-flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 py-2 text-xs font-bold text-[var(--primary-text,#ffffff)] transition-opacity hover:opacity-90"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  {emptyActionLabel}
+                </button>
+              )}
+            </div>
+          ) : (
+            options.map((option) => {
             const isSelected = option.value === value;
             return (
               <button
@@ -131,8 +160,9 @@ const Select: React.FC<SelectProps> = ({
                   <Check className="w-3.5 h-3.5 text-[var(--primary)] shrink-0 ml-2" />
                 )}
               </button>
-            );
-          })}
+              );
+            })
+          )}
         </div>
       )}
     </div>

@@ -36,7 +36,11 @@ const MAX_ROWS = 200;
 const DEFAULT_PAGE_SIZE = 10;
 
 /** Replaces config dropdown options with the live ones loaded from the API. */
-function withDynamicOptions(fields: FormField[], options: EntityOptions): FormField[] {
+function withDynamicOptions(
+  fields: FormField[],
+  options: EntityOptions,
+  optionsLoaded: boolean,
+): FormField[] {
   return fields.map((field) => {
     switch (field.name) {
       case "parentCategory":
@@ -50,11 +54,48 @@ function withDynamicOptions(fields: FormField[], options: EntityOptions): FormFi
             }
           : field;
       case "category":
-        return options.categoryOptions?.length
-          ? { ...field, options: options.categoryOptions }
-          : field;
+        if (options.categoryOptions?.length) {
+          return { ...field, options: options.categoryOptions };
+        }
+        // Loaded and genuinely empty: offer to create the first category
+        // instead of leaving a dead dropdown (product form only — the
+        // "category" field name is unique to it).
+        if (
+          optionsLoaded &&
+          Array.isArray(options.categoryOptions) &&
+          options.categoryOptions.length === 0
+        ) {
+          return {
+            ...field,
+            createNew: {
+              emptyMessage: "No categories yet",
+              buttonLabel: "Create New Category",
+              path: "/categories",
+              resource: "categories",
+            },
+          };
+        }
+        return field;
       case "brand":
-        return options.brandOptions?.length ? { ...field, options: options.brandOptions } : field;
+        if (options.brandOptions?.length) {
+          return { ...field, options: options.brandOptions };
+        }
+        if (
+          optionsLoaded &&
+          Array.isArray(options.brandOptions) &&
+          options.brandOptions.length === 0
+        ) {
+          return {
+            ...field,
+            createNew: {
+              emptyMessage: "No brands yet",
+              buttonLabel: "Create New Brand",
+              path: "/brands",
+              resource: "brands",
+            },
+          };
+        }
+        return field;
       case "vendor":
         return options.vendorOptions?.length ? { ...field, options: options.vendorOptions } : field;
       case "product":
@@ -143,6 +184,9 @@ const PageLayout: React.FC = () => {
   const [displayItems, setDisplayItems] = useState<Row[]>([]);
   const [meta, setMeta] = useState<PaginationMeta | null>(null);
   const [options, setOptions] = useState<EntityOptions>({});
+  // True once the dropdown-options request has settled for the current
+  // route — distinguishes "still loading" from "loaded and empty".
+  const [optionsLoaded, setOptionsLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -193,16 +237,27 @@ const PageLayout: React.FC = () => {
 
   // --- fetch dropdown options --------------------------------------------
   useEffect(() => {
-    if (!service?.loadOptions || !isAuthenticated) return;
+    // A new route starts from "not loaded" so a previous page's lists
+    // can't masquerade as this page's (or claim a list is empty early).
+    setOptions({});
+    setOptionsLoaded(false);
+    if (!service?.loadOptions || !isAuthenticated) {
+      setOptionsLoaded(true);
+      return;
+    }
 
     let cancelled = false;
     service
       .loadOptions()
       .then((loaded) => {
-        if (!cancelled) setOptions(loaded);
+        if (!cancelled) {
+          setOptions(loaded);
+          setOptionsLoaded(true);
+        }
       })
       .catch(() => {
         /* options are optional — the static config values remain in place */
+        if (!cancelled) setOptionsLoaded(true);
       });
 
     return () => {
@@ -290,12 +345,12 @@ const PageLayout: React.FC = () => {
   const formFields = useMemo(() => {
     // Not every route config declares form fields (media uses its own modal).
     const base = (currentConfig as { formFields?: FormField[] }).formFields || [];
-    const withOptions = withDynamicOptions(base, options);
+    const withOptions = withDynamicOptions(base, options, optionsLoaded);
     // Only products need the vendor picker.
     return Route.toLowerCase() === "products"
       ? ensureVendorField(withOptions, options)
       : withOptions;
-  }, [currentConfig, options, Route]);
+  }, [currentConfig, options, optionsLoaded, Route]);
 
   // Static fallbacks declared in the route configs, read through one shape so
   // the union of config types does not fight the props.
@@ -637,6 +692,33 @@ const PageLayout: React.FC = () => {
     setFormData(buildInitialFormValues(row));
     setIsModalOpen(true);
   }, [pathname, items, buildInitialFormValues]);
+
+  // --- "Create New" handoff (product form → Categories / Brands) -------
+  // When the product form's Category/Brand list is empty, its dropdown
+  // offers "Create New": the click stores the resource slug under
+  // "openCreate" and navigates here. On landing (fresh mount or an
+  // already-mounted page whose route just changed), open the same
+  // create form the Add button opens, then clear the flag.
+  useEffect(() => {
+    const segment = pathname.split("/").filter(Boolean)[0] || "";
+    let flag: string | null = null;
+    try {
+      flag = sessionStorage.getItem("openCreate");
+    } catch {
+      /* storage unavailable */
+    }
+    if (!flag || flag !== segment) return;
+    try {
+      sessionStorage.removeItem("openCreate");
+    } catch {
+      /* ignore */
+    }
+    // Mirror the Add button's visibility rule — no create rights, no form.
+    if (!canCreate || isMediaPage) return;
+    setFormMode("add");
+    setFormData(buildInitialFormValues());
+    setIsModalOpen(true);
+  }, [pathname, canCreate, isMediaPage, buildInitialFormValues]);
 
   const isBusy = isLoading || isRestoring;
   const isTruncated = Boolean(meta && meta.total > items.length);

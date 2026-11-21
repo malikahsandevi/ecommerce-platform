@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import {
   X,
   Tag as TagIcon,
@@ -48,6 +49,20 @@ export interface FormField {
   step?: number;
   rows?: number;
   helperText?: string;
+  /**
+   * For a select whose options come from another resource (Category,
+   * Brand): when the loaded list is empty, the dropdown shows
+   * `emptyMessage` plus a button that jumps to that resource's page and
+   * auto-opens its create form there. Attached by the page only after
+   * the options have loaded and come back empty — never while loading
+   * and never when items exist.
+   */
+  createNew?: {
+    emptyMessage: string;
+    buttonLabel: string;
+    path: string;
+    resource: string;
+  };
 }
 
 export interface ItemFormData {
@@ -112,6 +127,7 @@ export const FormModal: React.FC<FormModalProps> = ({
   statusOptions = [],
   error,
 }) => {
+  const router = useRouter();
   const [tagInputs, setTagInputs] = useState<Record<string, string>>({});
   const [imageUpload, setImageUpload] = useState<{ field: string; busy: boolean; error: string }>({
     field: "",
@@ -154,6 +170,20 @@ export const FormModal: React.FC<FormModalProps> = ({
   }, [fields]);
 
   if (!isOpen) return null;
+
+  // Empty Category/Brand dropdown → "Create New": hand the target
+  // resource to that resource's page via sessionStorage (the same
+  // handoff pattern as openEntity), close this form, and navigate —
+  // the landing page opens its own create form on arrival.
+  const handleCreateNew = (createNew: NonNullable<FormField["createNew"]>) => {
+    try {
+      sessionStorage.setItem("openCreate", createNew.resource);
+    } catch {
+      /* navigation still happens; the create form just won't auto-open */
+    }
+    onClose();
+    router.push(createNew.path);
+  };
 
   // Change handler for standard input fields
   const handleFieldChange = (fieldName: string, value: any) => {
@@ -323,6 +353,11 @@ export const FormModal: React.FC<FormModalProps> = ({
               variant="outline"
               size="md"
               disabled={field.disabled}
+              emptyText={field.createNew?.emptyMessage}
+              emptyActionLabel={field.createNew?.buttonLabel}
+              onEmptyAction={
+                field.createNew ? () => handleCreateNew(field.createNew!) : undefined
+              }
             />
             {field.helperText && (
               <span className="text-[10px] text-[var(--text-muted)] mt-0.5 block">
