@@ -10,7 +10,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { ChevronDown } from "lucide-react";
+import Select from "@/components/ui/Select";
 
 export interface RevenuePoint {
   month: string;
@@ -113,18 +113,21 @@ export const RevenueAnalytics: React.FC<RevenueAnalyticsProps> = ({
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-base font-bold text-(--text)">Revenue Analytics</h3>
-        <div className="relative">
-          <select
-            value={range}
-            onChange={(event) => setRange(event.target.value as RangeKey)}
-            aria-label="Chart range"
-            className="appearance-none bg-(--primary) hover:bg-(--primary-dark) transition-colors text-white text-xs font-semibold rounded-lg pl-3 pr-8 py-1.5 cursor-pointer outline-none"
-          >
-            <option value="8days">Last 8 Days</option>
-            <option value="6months">Last 6 Months</option>
-          </select>
-          <ChevronDown className="w-3.5 h-3.5 text-white absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-        </div>
+        {/* The shared Select (same component as the list-page filters):
+            orange pill trigger, light menu, selected row highlighted —
+            the old native <select> opened the browser's blue menu. */}
+        <Select
+          variant="primary"
+          size="sm"
+          value={range}
+          onChange={(value) => setRange(value as RangeKey)}
+          options={[
+            { label: "Last 8 Days", value: "8days" },
+            { label: "Last 6 Months", value: "6months" },
+          ]}
+          aria-label="Chart range"
+          className="min-w-32"
+        />
       </div>
 
       {/* Legend — mirrors the reference (solid = Revenue, dashed = Order) */}
