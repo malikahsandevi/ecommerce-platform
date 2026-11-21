@@ -7,10 +7,12 @@ import {
   Tag as TagIcon,
   PlusCircle,
   UploadCloud,
+  Images,
   Trash2,
 } from "lucide-react";
 import Select, { SelectOption } from "@/components/ui/Select";
 import Button from "@/components/ui/Button";
+import MediaPickerModal from "@/components/models/MediaPickerModal";
 import ProductMediaManager, {
   GalleryImage,
 } from "@/components/models/ProductMediaManager";
@@ -134,6 +136,8 @@ export const FormModal: React.FC<FormModalProps> = ({
     busy: false,
     error: "",
   });
+  // Which image field the Media library picker is open for (Select button).
+  const [pickerField, setPickerField] = useState<string | null>(null);
 
   // Image fields accept a pasted URL or a real file — files go through the
   // media library upload endpoint and the field receives the hosted URL.
@@ -550,6 +554,14 @@ export const FormModal: React.FC<FormModalProps> = ({
                   }}
                 />
               </label>
+              <button
+                type="button"
+                onClick={() => setPickerField(field.name)}
+                className="inline-flex shrink-0 items-center gap-1.5 px-3 py-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-xs font-medium cursor-pointer hover:border-[var(--primary)] transition-colors"
+              >
+                <Images className="w-3.5 h-3.5" />
+                Select
+              </button>
               {rawValue && (
                 <img
                   src={rawValue}
@@ -656,6 +668,21 @@ export const FormModal: React.FC<FormModalProps> = ({
           </Button>
         </div>
       </div>
+
+      {/* Media library picker for image fields (the Select button) —
+          same single-pick flow as Settings → Logo/Favicon. */}
+      <MediaPickerModal
+        isOpen={pickerField !== null}
+        single
+        existing={[]}
+        maxTotal={1}
+        onClose={() => setPickerField(null)}
+        onConfirm={(picked) => {
+          const url = picked[0]?.url;
+          if (url && pickerField) handleFieldChange(pickerField, url);
+          setPickerField(null);
+        }}
+      />
     </div>
   );
 };
