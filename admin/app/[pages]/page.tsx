@@ -451,9 +451,46 @@ const PageLayout: React.FC = () => {
    * The media modal hands back the picked file alongside its metadata. A file
    * present means "upload"; anything else would be an in-place edit, which the
    * media API does not support.
+   *
+   * In add mode the modal hands back the WHOLE queue as an array — every
+   * picked file uploads (images already carry their processed file when
+   * optimization applied). Edit mode still hands back a single record.
    */
   const handleMediaSave = useCallback(
-    async (mediaData: Row) => {
+    async (mediaData: Row | Row[]) => {
+      if (Array.isArray(mediaData)) {
+        setIsSaving(true);
+        setLoadError(null);
+        setNotice(null);
+
+        try {
+          let uploaded = 0;
+          for (const item of mediaData) {
+            const file = item.file as File | undefined;
+            if (!file) continue;
+            await mediaService.upload({
+              file,
+              altText: item.altText,
+              title: item.title,
+              description: item.description,
+              status: item.status,
+            });
+            uploaded++;
+          }
+          if (!uploaded) throw new Error("Pick a file before saving.");
+          setNotice(
+            uploaded === 1 ? "Media uploaded." : `${uploaded} media uploaded.`,
+          );
+          setIsModalOpen(false);
+          reload();
+        } catch (error) {
+          setLoadError(extractApiError(error));
+        } finally {
+          setIsSaving(false);
+        }
+        return;
+      }
+
       setIsSaving(true);
       setLoadError(null);
       setNotice(null);
