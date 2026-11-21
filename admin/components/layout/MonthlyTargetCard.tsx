@@ -35,7 +35,7 @@ export const MonthlyTargetCard: React.FC<MonthlyTargetCardProps> = ({ data }) =>
   useStoreCurrency();
   if (data === undefined) {
     return (
-      <div className="p-5 w-full h-full bg-(--background) rounded-2xl shadow-sm border border-(--border) animate-pulse flex flex-col">
+      <div className="p-5 w-full bg-(--background) rounded-2xl shadow-sm border border-(--border) animate-pulse flex flex-col">
         <div className="h-5 bg-(--primary-soft) rounded w-32 mb-4"></div>
         <div className="mx-auto w-36 h-12 bg-(--primary-soft) rounded-t-full"></div>
         <div className="h-3 bg-(--primary-soft) rounded w-40 mx-auto mt-5"></div>
@@ -63,34 +63,33 @@ export const MonthlyTargetCard: React.FC<MonthlyTargetCardProps> = ({ data }) =>
           : { title: "Getting Started", body: `${fmtMoney(remaining)} to go this month — new orders will move the gauge.` };
 
   return (
-    <div className="p-5 w-full h-full bg-(--background) rounded-2xl shadow-sm border border-(--border) flex flex-col">
+    <div className="p-5 w-full bg-(--background) rounded-2xl shadow-sm border border-(--border) flex flex-col">
       <div className="flex items-center justify-between">
         <h3 className="text-base font-bold text-(--text)">Monthly Target</h3>
         <Ellipsis className="w-5 h-5 text-(--text-muted)" />
       </div>
 
-      {/* Semicircle gauge — explicit pixel geometry instead of the old
-          percentage radii (which Recharts derives from the box height
-          and capped the arc at ~68px wide / 7px thick): outerRadius 42
-          and innerRadius 22 render a ~80px wide arc with a ~16px thick
-          band, and cy=42 puts the diameter line 42px into the section
-          so the curve sits low with the percentage fully UNDER it
-          (label top 43px, just below the diameter) instead of inside
-          the hollow. The chart box (110px) overflows the 44px clip
-          window, but the sector only draws the top semicircle, so
-          nothing renders below the diameter line. The section's flow
-          height is 64px — measured as the tallest gauge area that
-          keeps this card at the dashboard row's shortened height with
-          both card bottoms aligned. */}
-      <div className="relative w-full h-16">
-        <div className="absolute inset-x-0 top-0 h-11 overflow-hidden">
-          <div className="absolute top-0 left-0 w-full h-[110px]">
+      {/* Semicircle gauge — explicit pixel geometry: outerRadius 57
+          and innerRadius 30 render a ~114px wide arc with a ~27px
+          thick band (the same proportions as the previous 84px arc,
+          moderately larger — not oversized). cy=57 puts the diameter
+          line 57px into the section; the 59px clip window shows the
+          full semicircle plus a 2px margin, and the chart box (130px)
+          overflows it, but the sector only draws the top semicircle,
+          so nothing renders below the diameter line. The percentage
+          sits fully UNDER the arc (label top 58px, just below the
+          diameter) inside the section's 100px flow height. The card
+          itself is content-height (no h-full): it no longer stretches
+          to the dashboard row, so no dead band sits under the strip. */}
+      <div className="relative w-full h-[100px]">
+        <div className="absolute inset-x-0 top-0 h-[59px] overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-[130px]">
             <ResponsiveContainer width="100%" height="100%">
               <RadialBarChart
                 cx="50%"
-                cy={42}
-                innerRadius={22}
-                outerRadius={42}
+                cy={57}
+                innerRadius={30}
+                outerRadius={57}
                 data={chartData}
                 startAngle={180}
                 endAngle={0}
@@ -113,7 +112,7 @@ export const MonthlyTargetCard: React.FC<MonthlyTargetCardProps> = ({ data }) =>
         </div>
 
         {/* Percentage under the arc */}
-        <div className="absolute top-[43px] left-1/2 -translate-x-1/2 flex flex-col items-center text-center">
+        <div className="absolute top-[58px] left-1/2 -translate-x-1/2 flex flex-col items-center text-center">
           <span className="text-2xl leading-6 font-bold text-(--text)">
             {hasTarget ? `${pct % 1 ? pct.toFixed(1) : pct}%` : "—"}
           </span>
@@ -131,11 +130,9 @@ export const MonthlyTargetCard: React.FC<MonthlyTargetCardProps> = ({ data }) =>
         </div>
       </div>
 
-      {/* Encouragement / hint — no flex-1 here: when the dashboard
-          grid stretches this card to the row height, flex-1 used to
-          absorb the extra space and push the Target/Revenue strip to
-          the bottom, leaving a dead gap under this text. The strip
-          must follow the text with its normal mt-4 spacing. */}
+      {/* Encouragement / hint — no flex-1 here: the strip must follow
+          the text with its normal mt-4 spacing so the card ends right
+          after the strip (plus its padding), with no dead band. */}
       <div className="text-center mt-1">
         {encouragement ? (
           <>

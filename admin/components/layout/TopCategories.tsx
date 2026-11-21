@@ -110,8 +110,9 @@ export const TopCategories: React.FC<TopCategoriesProps> = ({ categoriesData, to
             </div>
           </div>
 
-          {/* Categories Legend List */}
-          <div className="mt-4 space-y-3">
+          {/* Categories Legend List — rows sit tight (no gaps between
+              them); the mt-4 above the first row stays as it was. */}
+          <div className="mt-4 space-y-0">
             {items.map((item, index) => (
               <div key={index} className="flex items-center justify-between text-xs">
                 <div className="flex items-center gap-2.5 min-w-0">
