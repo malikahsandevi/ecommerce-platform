@@ -1,6 +1,6 @@
 // components/ui/DetailPanel.tsx
 import React, { useState } from "react";
-import { X, Package, Star, Pencil, Trash2 } from "lucide-react";
+import { X, Package, Star, Pencil, Trash2, Copy, Check } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { StatusPill } from "@/components/models/CreateTable";
 
@@ -26,6 +26,56 @@ export interface DetailPanelData {
   tags?: string[];
   specifications?: DetailSpecification[];
   attributes?: Record<string, string | number | boolean | null | undefined>;
+  /** Attribute label → full text for a small copy button rendered after that attribute's (truncated) value. */
+  copyableAttributes?: Record<string, string>;
+}
+
+/** Small copy-to-clipboard button shown after a truncated attribute value. */
+function CopyValueButton({ text, label }: { text: string; label?: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        throw new Error("Clipboard API unavailable");
+      }
+    } catch {
+      // Fallback for contexts where the Clipboard API is missing/blocked.
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      try {
+        document.execCommand("copy");
+      } catch {
+        /* best effort */
+      }
+      document.body.removeChild(textarea);
+    }
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1500);
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      title={copied ? "Copied!" : `Copy ${label ?? "value"}`}
+      aria-label={copied ? "Copied" : `Copy ${label ?? "value"}`}
+      className="shrink-0 cursor-pointer rounded p-0.5 text-[var(--text-muted)] transition-colors hover:bg-[var(--surface)] hover:text-[var(--primary)]"
+    >
+      {copied ? (
+        <Check className="h-3.5 w-3.5 text-green-500" />
+      ) : (
+        <Copy className="h-3.5 w-3.5" />
+      )}
+    </button>
+  );
 }
 
 export interface DetailPanelProps<T extends DetailPanelData> {
@@ -208,15 +258,25 @@ export function DetailPanel<T extends DetailPanelData>({
                               <span className="text-[var(--text-muted)] capitalize">
                                 {attrKey.replace(/([A-Z])/g, " $1")}
                               </span>
-                              <span
-                                className="font-semibold text-[var(--text)] text-right truncate max-w-[140px]"
-                                title={String(attrVal ?? "-")}
-                              >
-                                {typeof attrVal === "boolean"
-                                  ? attrVal
-                                    ? "Yes"
-                                    : "No"
-                                  : (attrVal ?? "-")}
+                              <span className="flex min-w-0 items-center justify-end gap-1">
+                                <span
+                                  className="font-semibold text-[var(--text)] text-right truncate max-w-[140px]"
+                                  title={String(attrVal ?? "-")}
+                                >
+                                  {typeof attrVal === "boolean"
+                                    ? attrVal
+                                      ? "Yes"
+                                      : "No"
+                                    : (attrVal ?? "-")}
+                                </span>
+                                {selectedItem.copyableAttributes?.[attrKey] ? (
+                                  <CopyValueButton
+                                    text={
+                                      selectedItem.copyableAttributes[attrKey]
+                                    }
+                                    label={attrKey}
+                                  />
+                                ) : null}
                               </span>
                             </div>
                           )

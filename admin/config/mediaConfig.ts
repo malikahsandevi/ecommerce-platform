@@ -106,7 +106,7 @@ export const mediaConfig = {
     attributes: {
       "File Name": displayName(media),
       URL: media.url || "—",
-      "MIME Type": media.mimeType || "—",
+      "Media Type": media.mimeType || "—",
       Extension: media.extension || "—",
       Size: formatSize(media.size),
       Dimensions: dimensionsText(media),
@@ -114,6 +114,9 @@ export const mediaConfig = {
       "Alt Text": effectiveAlt(media) || "—",
       Uploaded: media.createdAt ? new Date(media.createdAt).toLocaleDateString() : "—",
     },
+    // The detail panel renders a copy button after the URL value; it copies
+    // the FULL url even though the visible value is truncated.
+    copyableAttributes: media.url ? { URL: media.url } : undefined,
     description: media.description || "",
   }),
 
