@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { AlertCircle, Loader2, Store, X } from "lucide-react";
+import { AlertCircle, Loader2, ShieldCheck, Store, X } from "lucide-react";
 import { describeAuthError, useAdminAuth } from "@/services/authContext";
 
 interface AdminLoginPopupProps {
@@ -18,11 +18,16 @@ export const AdminLoginPopup: React.FC<AdminLoginPopupProps> = ({
   notice,
   onDismissNotice,
 }) => {
-  const { login } = useAdminAuth();
+  const { login, verifyTwoFactor } = useAdminAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  // Two-factor second step: set when the API answers the password with a
+  // challenge instead of a session.
+  const [step, setStep] = useState<"credentials" | "code">("credentials");
+  const [tempToken, setTempToken] = useState("");
+  const [code, setCode] = useState("");
 
   if (!isOpen) return null;
 
@@ -32,7 +37,13 @@ export const AdminLoginPopup: React.FC<AdminLoginPopupProps> = ({
     setError("");
 
     try {
-      await login(email.trim(), password);
+      const result = await login(email.trim(), password);
+      if (result.status === "two-factor-required") {
+        setTempToken(result.tempToken);
+        setCode("");
+        setStep("code");
+        return;
+      }
       onLoginSuccess?.();
       onClose?.();
     } catch (err) {
@@ -40,6 +51,31 @@ export const AdminLoginPopup: React.FC<AdminLoginPopupProps> = ({
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+
+    try {
+      await verifyTwoFactor(tempToken, code.trim());
+      setStep("credentials");
+      setTempToken("");
+      onLoginSuccess?.();
+      onClose?.();
+    } catch (err) {
+      setError(describeAuthError(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const backToCredentials = () => {
+    setStep("credentials");
+    setTempToken("");
+    setCode("");
+    setError("");
   };
 
   return (
@@ -59,13 +95,15 @@ export const AdminLoginPopup: React.FC<AdminLoginPopupProps> = ({
             className="mx-auto mb-3 w-11 h-11 rounded-2xl flex items-center justify-center text-white shadow-sm"
             style={{ backgroundColor: "var(--primary)" }}
           >
-            <Store className="w-5 h-5" />
+            {step === "code" ? <ShieldCheck className="w-5 h-5" /> : <Store className="w-5 h-5" />}
           </div>
           <h3 className="text-base font-bold" style={{ color: "var(--text)" }}>
-            Admin Sign In
+            {step === "code" ? "Two-Factor Authentication" : "Admin Sign In"}
           </h3>
           <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-            Enter your credentials to manage the store
+            {step === "code"
+              ? "Enter the 6-digit code from your authenticator app"
+              : "Enter your credentials to manage the store"}
           </p>
         </div>
 
@@ -93,6 +131,56 @@ export const AdminLoginPopup: React.FC<AdminLoginPopupProps> = ({
           </div>
         )}
 
+        {step === "code" ? (
+          <form onSubmit={handleVerify} className="space-y-4">
+            <div>
+              <label
+                className="block text-xs font-medium mb-1"
+                style={{ color: "var(--text-muted)" }}
+              >
+                Verification Code
+              </label>
+              <input
+                type="text"
+                required
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                autoFocus
+                maxLength={6}
+                pattern="[0-9]{6}"
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+                placeholder="123456"
+                className="w-full px-3 py-2 text-center text-sm tracking-[0.4em] bg-transparent rounded-xl focus:outline-none transition-colors"
+                style={{
+                  borderColor: "var(--border)",
+                  borderWidth: "1px",
+                  borderStyle: "solid",
+                  color: "var(--text)",
+                }}
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading || code.length !== 6}
+              className="w-full py-2.5 mt-2 font-semibold text-xs rounded-xl transition-all disabled:opacity-50 hover:opacity-90 text-white inline-flex items-center justify-center gap-2"
+              style={{ backgroundColor: "var(--primary)" }}
+            >
+              {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              {loading ? "Verifying..." : "Verify & Sign In"}
+            </button>
+
+            <button
+              type="button"
+              onClick={backToCredentials}
+              className="w-full text-center text-xs hover:underline"
+              style={{ color: "var(--text-muted)" }}
+            >
+              Back to sign in
+            </button>
+          </form>
+        ) : (
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
             <label
@@ -152,6 +240,7 @@ export const AdminLoginPopup: React.FC<AdminLoginPopupProps> = ({
             {loading ? "Authenticating..." : "Login"}
           </button>
         </form>
+        )}
       </div>
     </div>
   );

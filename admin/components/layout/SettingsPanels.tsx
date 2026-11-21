@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import { Copy, Eye, EyeOff, Plus, ShieldCheck, Trash2, Code2, Globe } from "lucide-react";
 import Button from "@/components/ui/Button";
+import { apiClient, extractApiError } from "@/services/api";
 import {
   SettingsCard,
   SettingsInput,
@@ -19,6 +20,20 @@ import type {
 } from "@/services/settingsService";
 
 type ObjectData = Record<string, unknown>;
+
+/** True when a value is a src next/image can render (absolute URL or
+ *  root-relative path) — used to guard live previews of URL fields. */
+const isPreviewableImageSrc = (value: string): boolean => {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  if (trimmed.startsWith("/")) return true;
+  try {
+    new URL(trimmed);
+    return true;
+  } catch {
+    return false;
+  }
+};
 type SectionPanelProps<T> = {
   data?: T;
   saving: boolean;
@@ -68,6 +83,15 @@ interface DynamicIntegration {
   isConnected: boolean;
 }
 
+export type NewUserValues = {
+  firstName: string;
+  lastName: string;
+  email: string;
+  password: string;
+  role: string;
+  isActive: boolean;
+};
+
 export function SettingsPanel({
   activeMenu,
   settings,
@@ -76,6 +100,7 @@ export function SettingsPanel({
   onSave,
   onDeleteUser,
   onUpdateUser,
+  onCreateUser,
 }: {
   activeMenu: string;
   settings: SettingsDocument;
@@ -84,6 +109,7 @@ export function SettingsPanel({
   onSave: (section: SettingsSection, value: unknown) => void;
   onDeleteUser: (id: string) => void;
   onUpdateUser: (id: string, values: { role?: string; isActive?: boolean }) => void;
+  onCreateUser: (values: NewUserValues) => Promise<void>;
 }) {
   switch (activeMenu) {
     case "General":
@@ -127,7 +153,14 @@ export function SettingsPanel({
         />
       );
     case "Users & Roles":
-      return <UsersPanel users={users} onDeleteUser={onDeleteUser} onUpdateUser={onUpdateUser} />;
+      return (
+        <UsersPanel
+          users={users}
+          onDeleteUser={onDeleteUser}
+          onUpdateUser={onUpdateUser}
+          onCreateUser={onCreateUser}
+        />
+      );
     case "Security":
       return <SecurityPanel />;
     case "API / Integrations":
@@ -220,7 +253,11 @@ function GeneralPanel({ data, saving, onSave }: SectionPanelProps<ObjectData>) {
           </p>
         </div>
       </div>
-      {form.logo && (
+      {/* Only preview a value next/image can actually parse. Rendering
+          the raw field value meant the FIRST letter typed here mounted
+          an <Image> with an invalid src, which throws during render and
+          unmounts the whole panel — another way this form lost focus. */}
+      {isPreviewableImageSrc(form.logo) && (
         <Image
           src={form.logo}
           alt="Store logo preview"
@@ -347,8 +384,13 @@ function PaymentPanel({ data, saving, onSave }: SectionPanelProps<Array<Record<s
     <SettingsCard title="Payment Methods" description="Manage saved payment methods">
       <div className="space-y-3">
         {methods.map((method, index) => (
+          // The key must stay stable while the row is edited: keying by
+          // the method's NAME made React throw the row away and rebuild
+          // it on the first keystroke in that field, so the input lost
+          // focus after a single letter. Index keys are safe here — the
+          // inputs are fully controlled from this array.
           <div
-            key={`${method.name}-${index}`}
+            key={index}
             className="grid grid-cols-1 items-end gap-3 rounded-lg border border-[var(--border)] p-4 sm:grid-cols-[1fr_1fr_auto_auto]"
           >
             <SettingsInput
@@ -424,7 +466,10 @@ function ShippingPanel({ data, saving, onSave }: SectionPanelProps<ObjectData>) 
     <SettingsCard title="Shipping" description="Manage stored shipping zones and rates">
       <div className="space-y-3">
         {zones.map((zone, index) => (
-          <div key={`${zone.name}-${index}`} className="grid grid-cols-1 gap-3 rounded-lg border border-[var(--border)] p-4 md:grid-cols-4">
+          // Stable key only — see PaymentPanel: a key containing the
+          // zone's name remounts the row (and drops input focus) on the
+          // first character typed into the name field.
+          <div key={index} className="grid grid-cols-1 gap-3 rounded-lg border border-[var(--border)] p-4 md:grid-cols-4">
             <SettingsInput
               label="Zone"
               value={zone.name}
@@ -551,16 +596,159 @@ function UsersPanel({
   users,
   onDeleteUser,
   onUpdateUser,
+  onCreateUser,
 }: {
   users: SettingsUser[];
   onDeleteUser: (id: string) => void;
   onUpdateUser: (id: string, values: { role?: string; isActive?: boolean }) => void;
+  onCreateUser: (values: NewUserValues) => Promise<void>;
 }) {
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [form, setForm] = useState<NewUserValues>({
+    firstName: "",
+    lastName: "",
+    email: "",
+    password: "",
+    role: "Manager",
+    isActive: true,
+  });
+  const [formError, setFormError] = useState("");
+  const [creating, setCreating] = useState(false);
+
+  const openAddForm = () => {
+    setForm({ firstName: "", lastName: "", email: "", password: "", role: "Manager", isActive: true });
+    setFormError("");
+    setShowAddForm(true);
+  };
+
+  const submitAddForm = async () => {
+    if (!form.firstName.trim()) {
+      setFormError("A first name is required.");
+      return;
+    }
+    if (!/^\S+@\S+\.\S+$/.test(form.email.trim())) {
+      setFormError("Enter a valid email address.");
+      return;
+    }
+    if (form.password.length < 6) {
+      setFormError("Password must be at least 6 characters.");
+      return;
+    }
+    setCreating(true);
+    setFormError("");
+    try {
+      await onCreateUser({
+        ...form,
+        firstName: form.firstName.trim(),
+        lastName: form.lastName.trim(),
+        email: form.email.trim(),
+      });
+      setShowAddForm(false);
+    } catch (createError) {
+      // The page rethrows with the API's message (e.g. duplicate email).
+      setFormError(createError instanceof Error ? createError.message : "Unable to create the user.");
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const selectClassName =
+    "h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-sm text-[var(--text)] outline-none transition focus:border-[var(--primary)]";
+
   return (
     <SettingsCard
       title="Users & Roles"
       description="Change a user's role or deactivate an account. Your own role and the last Super Admin are protected."
     >
+      <div className="mb-4 flex justify-end">
+        <Button variant="primary" icon={Plus} onClick={openAddForm}>
+          Add User
+        </Button>
+      </div>
+
+      {showAddForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3">
+          <div className="w-full max-w-md rounded-xl border border-[var(--border)] bg-[var(--background)] p-5 shadow-2xl">
+            <h3 className="text-base font-semibold text-[var(--text)]">Add User</h3>
+            <p className="mt-1 text-xs text-[var(--text-muted)]">
+              The new account can sign in to the admin panel right away (staff roles) with this email and password.
+            </p>
+
+            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <SettingsInput
+                label="First Name"
+                value={form.firstName}
+                onChange={(event) => setForm({ ...form, firstName: event.target.value })}
+              />
+              <SettingsInput
+                label="Last Name"
+                value={form.lastName}
+                onChange={(event) => setForm({ ...form, lastName: event.target.value })}
+              />
+              <div className="sm:col-span-2">
+                <SettingsInput
+                  label="Email Address"
+                  type="email"
+                  value={form.email}
+                  onChange={(event) => setForm({ ...form, email: event.target.value })}
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <SettingsInput
+                  label="Password"
+                  type="password"
+                  autoComplete="new-password"
+                  value={form.password}
+                  onChange={(event) => setForm({ ...form, password: event.target.value })}
+                />
+              </div>
+              <div>
+                <span className="mb-2 block text-xs font-medium text-[var(--text-soft)]">Role</span>
+                <select
+                  aria-label="Role for the new user"
+                  value={form.role}
+                  onChange={(event) => setForm({ ...form, role: event.target.value })}
+                  className={selectClassName}
+                >
+                  {USER_ROLE_OPTIONS.map((role) => (
+                    <option key={role} value={role}>
+                      {role}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <span className="mb-2 block text-xs font-medium text-[var(--text-soft)]">Status</span>
+                <select
+                  aria-label="Status for the new user"
+                  value={form.isActive ? "active" : "inactive"}
+                  onChange={(event) => setForm({ ...form, isActive: event.target.value === "active" })}
+                  className={selectClassName}
+                >
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </div>
+            </div>
+
+            {formError && (
+              <p className="mt-4 rounded-lg border border-red-300 bg-red-500/10 p-3 text-xs text-red-600" role="alert">
+                {formError}
+              </p>
+            )}
+
+            <div className="mt-5 flex justify-end gap-3">
+              <Button variant="ghost" onClick={() => setShowAddForm(false)} disabled={creating}>
+                Cancel
+              </Button>
+              <Button variant="primary" onClick={() => void submitAddForm()} disabled={creating}>
+                {creating ? "Creating..." : "Create User"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
         <table className="w-full min-w-[600px] text-left text-sm">
           <thead className="bg-[var(--surface)] text-xs text-[var(--text-muted)]">
@@ -632,14 +820,231 @@ function UsersPanel({
   );
 }
 
+/**
+ * Two-factor authentication (TOTP) management for the signed-in account.
+ * Enrolment is a two-step handshake with the API: setup issues a secret +
+ * QR (not yet active), and only a valid code from the authenticator app
+ * turns it on — so 2FA can never be enabled by accident or by a hijacked
+ * session alone. Disabling likewise requires a current code.
+ */
 function SecurityPanel() {
+  const [enabled, setEnabled] = useState<boolean | null>(null);
+  const [loadError, setLoadError] = useState("");
+  const [setupData, setSetupData] = useState<{ secret: string; qrCode: string } | null>(null);
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiClient
+      .get("/auth/2fa/status")
+      .then((res) => {
+        if (!cancelled) setEnabled(Boolean(res.data?.enabled));
+      })
+      .catch((statusError) => {
+        if (!cancelled) setLoadError(extractApiError(statusError));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const startSetup = async () => {
+    setBusy(true);
+    setActionError("");
+    setNotice("");
+    try {
+      const res = await apiClient.post("/auth/2fa/setup", {});
+      setSetupData({ secret: res.data.secret, qrCode: res.data.qrCode });
+      setCode("");
+    } catch (setupError) {
+      setActionError(extractApiError(setupError));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const confirmEnable = async () => {
+    setBusy(true);
+    setActionError("");
+    try {
+      await apiClient.post("/auth/2fa/enable", { code: code.trim() });
+      setEnabled(true);
+      setSetupData(null);
+      setCode("");
+      setNotice("Two-factor authentication is now on. Your next sign-in will ask for a code.");
+    } catch (enableError) {
+      setActionError(extractApiError(enableError));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const disable = async () => {
+    setBusy(true);
+    setActionError("");
+    setNotice("");
+    try {
+      await apiClient.post("/auth/2fa/disable", { code: code.trim() });
+      setEnabled(false);
+      setCode("");
+      setNotice("Two-factor authentication has been turned off.");
+    } catch (disableError) {
+      setActionError(extractApiError(disableError));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const copySecret = async () => {
+    if (!setupData) return;
+    try {
+      await navigator.clipboard.writeText(setupData.secret);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* clipboard unavailable — the secret is visible to copy manually */
+    }
+  };
+
+  const codeInput = (id: string) => (
+    <SettingsInput
+      label="Authenticator Code"
+      inputMode="numeric"
+      autoComplete="one-time-code"
+      maxLength={6}
+      placeholder="123456"
+      value={code}
+      onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))}
+      id={id}
+    />
+  );
+
   return (
-    <SettingsCard title="Security" description="Authentication controls">
-      <div className="flex items-start gap-3 rounded-lg border border-[var(--border)] p-4">
-        <ShieldCheck className="mt-0.5 h-5 w-5 text-[var(--primary)]" />
-        <p className="text-sm text-[var(--text-muted)]">
-          Password changes and two-factor authentication are not available through the current Settings API.
-        </p>
+    <SettingsCard title="Security" description="Authentication controls for your account">
+      <div className="rounded-lg border border-[var(--border)] p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-[var(--primary)]" />
+            <div>
+              <h3 className="text-sm font-medium text-[var(--text)]">Two-Factor Authentication (2FA)</h3>
+              <p className="mt-1 max-w-xl text-xs text-[var(--text-muted)]">
+                Adds a 6-digit code from an authenticator app (Google Authenticator, Microsoft
+                Authenticator, Authy…) on top of your password when signing in to this panel.
+              </p>
+            </div>
+          </div>
+          {enabled !== null && (
+            <span
+              className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                enabled ? "bg-emerald-500/10 text-emerald-600" : "bg-[var(--surface)] text-[var(--text-muted)]"
+              }`}
+            >
+              {enabled ? "Enabled" : "Off"}
+            </span>
+          )}
+        </div>
+
+        {loadError && (
+          <p className="mt-4 rounded-lg border border-red-300 bg-red-500/10 p-3 text-xs text-red-600" role="alert">
+            {loadError}
+          </p>
+        )}
+        {notice && (
+          <p className="mt-4 rounded-lg border border-green-300 bg-green-500/10 p-3 text-xs text-green-700" role="status">
+            {notice}
+          </p>
+        )}
+        {actionError && (
+          <p className="mt-4 rounded-lg border border-red-300 bg-red-500/10 p-3 text-xs text-red-600" role="alert">
+            {actionError}
+          </p>
+        )}
+
+        {enabled === null && !loadError && (
+          <p className="mt-4 text-sm text-[var(--text-muted)]">Checking your two-factor status…</p>
+        )}
+
+        {enabled === false && !setupData && (
+          <div className="mt-4">
+            <Button variant="primary" onClick={() => void startSetup()} disabled={busy}>
+              {busy ? "Preparing..." : "Enable Two-Factor Authentication"}
+            </Button>
+          </div>
+        )}
+
+        {enabled === false && setupData && (
+          <div className="mt-5 space-y-4 border-t border-[var(--border)] pt-5">
+            <ol className="list-decimal space-y-1 pl-5 text-xs text-[var(--text-muted)]">
+              <li>Open your authenticator app and scan this QR code (or enter the secret manually).</li>
+              <li>Type the 6-digit code the app shows to confirm and switch 2FA on.</li>
+            </ol>
+            <div className="flex flex-wrap items-start gap-5">
+              {/* Server-generated QR for the otpauth:// enrolment URL. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={setupData.qrCode}
+                alt="Two-factor enrolment QR code"
+                width={160}
+                height={160}
+                className="rounded-lg border border-[var(--border)] bg-white p-1"
+              />
+              <div className="min-w-56 flex-1">
+                <span className="mb-2 block text-xs font-medium text-[var(--text-soft)]">
+                  Manual Secret Key
+                </span>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 break-all rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 font-mono text-xs text-[var(--text)]">
+                    {setupData.secret}
+                  </code>
+                  <Button variant="outline" size="sm" icon={Copy} onClick={() => void copySecret()}>
+                    {copied ? "Copied" : "Copy"}
+                  </Button>
+                </div>
+                <div className="mt-4 max-w-xs">
+                  {codeInput("two-factor-enable-code")}
+                </div>
+                <div className="mt-4 flex gap-3">
+                  <Button
+                    variant="primary"
+                    onClick={() => void confirmEnable()}
+                    disabled={busy || code.length !== 6}
+                  >
+                    {busy ? "Confirming..." : "Confirm & Enable"}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      setSetupData(null);
+                      setCode("");
+                      setActionError("");
+                    }}
+                    disabled={busy}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {enabled === true && (
+          <div className="mt-5 border-t border-[var(--border)] pt-5">
+            <p className="text-xs text-[var(--text-muted)]">
+              To turn 2FA off, enter a current code from your authenticator app.
+            </p>
+            <div className="mt-3 max-w-xs">{codeInput("two-factor-disable-code")}</div>
+            <div className="mt-4">
+              <Button variant="danger" onClick={() => void disable()} disabled={busy || code.length !== 6}>
+                {busy ? "Turning off..." : "Disable Two-Factor Authentication"}
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
     </SettingsCard>
   );
@@ -766,7 +1171,11 @@ function IntegrationsPanel({ data, saving, onSave }: SectionPanelProps<Array<Rec
     >
       <div className="space-y-6">
         {integrations.map((item, index) => (
-          <div key={`${item.serviceSlug}-${index}`} className="rounded-xl border border-[var(--border)] bg-[var(--surface)]/30 p-5 space-y-4">
+          // Stable key only — see PaymentPanel: this key contained the
+          // service slug, and the title field REWRITES the slug on every
+          // keystroke, so the whole connector card remounted per letter
+          // and its inputs lost focus immediately.
+          <div key={index} className="rounded-xl border border-[var(--border)] bg-[var(--surface)]/30 p-5 space-y-4">
             <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
               <div className="flex items-center gap-2">
                 <Globe className="h-4 w-4 text-[var(--primary)]" />

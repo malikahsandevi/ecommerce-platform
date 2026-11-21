@@ -126,6 +126,30 @@ export default function SettingsPage() {
     }
   };
 
+  const createUser = async (values: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    password: string;
+    role: string;
+    isActive: boolean;
+  }) => {
+    setError("");
+    try {
+      const created = await settingsService.createUser(values);
+      setUsers((currentUsers) => [...currentUsers, created]);
+      setNotice("User created.");
+    } catch (createError) {
+      // Rethrow with the API's message so the Add User form can show it
+      // in place (e.g. "A user with this email already exists.").
+      const apiMessage = (createError as { response?: { data?: { message?: string } } })?.response
+        ?.data?.message;
+      throw new Error(
+        apiMessage || (createError instanceof Error ? createError.message : "Unable to create user."),
+      );
+    }
+  };
+
   const updateUser = async (id: string, values: { role?: string; isActive?: boolean }) => {
     setError("");
     try {
@@ -248,6 +272,7 @@ export default function SettingsPage() {
             onSave={saveSection}
             onDeleteUser={(id) => void deleteUser(id)}
             onUpdateUser={(id, values) => void updateUser(id, values)}
+            onCreateUser={createUser}
           />
         </section>
       </div>

@@ -52,6 +52,21 @@ export const settingsService = {
     await apiClient.delete(`/users/${id}`);
   },
 
+  /** Creates an account from Settings → Users & Roles ("Add User").
+   *  The API derives the username from the email and answers with a
+   *  clean message when the email is already taken. */
+  async createUser(values: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    password: string;
+    role: string;
+    isActive: boolean;
+  }): Promise<SettingsUser> {
+    const { data } = await apiClient.post<SettingsUser>("/users", values);
+    return data;
+  },
+
   /** Role / active-status changes for the Users & Roles panel. The
    *  backend refuses self-demotion, self-deactivation and removing the
    *  last active Super Admin — those errors surface to the page. */

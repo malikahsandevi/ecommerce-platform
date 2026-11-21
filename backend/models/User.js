@@ -96,6 +96,11 @@ const userSchema = new mongoose.Schema(
 
     // Security Settings (Two-Factor Auth)
     twoFactorEnabled: { type: Boolean, default: false },
+    // TOTP secret (base32). select:false — it must never ride along in a
+    // normal query/response; auth flows opt in with .select('+twoFactorSecret').
+    // A secret can exist while enabled is still false (enrolment started,
+    // waiting for the first code to confirm).
+    twoFactorSecret: { type: String, default: null, select: false },
 
     // Address (Embedded)
     addresses: [

@@ -76,37 +76,63 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return () => window.removeEventListener('admin:session-expired', handleExpired);
   }, []);
 
-  const login = async (email: string, password: string): Promise<boolean> => {
+  // Stores the session from a completed sign-in payload — shared by the
+  // plain login and the second step of a two-factor login, which return
+  // the identical shape.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const completeLogin = (data: any, fallbackEmail: string) => {
+    const { token, _id, name, email: userEmail, role, avatar } = data;
+
+    localStorage.setItem('adminToken', token);
+
+    const userData: AdminUser = {
+      id: _id,
+      name: name || 'Admin',
+      email: userEmail || fallbackEmail,
+      // The API returns the account's real role ("Super Admin", "Admin",
+      // …) — show it exactly as stored.
+      role: role || 'Admin',
+      avatar: avatar && avatar !== 'default-avatar.png' ? avatar : undefined,
+    };
+    localStorage.setItem('adminUser', JSON.stringify(userData));
+
+    setUser(userData);
+    setIsAuthenticated(true);
+    setSessionNotice(null);
+  };
+
+  /**
+   * First factor only. When the account has two-factor authentication
+   * on, the API answers with a temp token instead of a session — the
+   * caller must collect the TOTP code and finish with verifyTwoFactor.
+   */
+  const login = async (
+    email: string,
+    password: string,
+  ): Promise<{ status: 'authenticated' } | { status: 'two-factor-required'; tempToken: string }> => {
     try {
       const res = await apiClient.post('/auth/login', { email, password });
-      const { token, _id, name, email: userEmail, role, avatar } = res.data;
-
-      localStorage.setItem('adminToken', token);
-
-      const userData: AdminUser = {
-        id: _id,
-        name: name || 'Admin',
-        email: userEmail || email,
-        // The API returns the account's real role ("Super Admin", "Admin",
-        // …) — show it exactly as stored.
-        role: role || 'Admin',
-        avatar: avatar && avatar !== 'default-avatar.png' ? avatar : undefined,
-      };
-      localStorage.setItem('adminUser', JSON.stringify(userData));
-
-      setUser(userData);
-      setIsAuthenticated(true);
-      setSessionNotice(null);
-      return true;
+      if (res.data?.twoFactorRequired) {
+        return { status: 'two-factor-required', tempToken: res.data.tempToken };
+      }
+      completeLogin(res.data, email);
+      return { status: 'authenticated' };
     } catch (error) {
       console.error('Login failed', error);
       throw error;
     }
   };
 
+  /** Second factor: temp token + 6-digit code → a real session. */
+  const verifyTwoFactor = async (tempToken: string, code: string): Promise<boolean> => {
+    const res = await apiClient.post('/auth/2fa/verify', { tempToken, code });
+    completeLogin(res.data, '');
+    return true;
+  };
+
   return (
     <AuthContext.Provider
-      value={{ isAuthenticated, isRestoring, user, login, logout, sessionNotice, clearNotice }}
+      value={{ isAuthenticated, isRestoring, user, login, verifyTwoFactor, logout, sessionNotice, clearNotice }}
     >
       {children}
     </AuthContext.Provider>

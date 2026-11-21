@@ -27,18 +27,64 @@ const getUserById = async (req, res) => {
     }
 };
 
-// @desc    Create a new user
+const USER_ROLES = ['Super Admin', 'Admin', 'Manager', 'Editor', 'Support', 'Customer'];
+
+// @desc    Create a new user (Settings → Users & Roles "Add User")
 // @route   POST /api/users
-// @access  Admin/Public
+// @access  Admin (staff-only — the router enforces protect + requireStaff)
 const createUser = async (req, res) => {
     try {
-        const user = new User(req.body);
+        const { firstName, lastName, email, password, role, isActive } = req.body || {};
+
+        if (!email || !String(email).trim()) {
+            return res.status(400).json({ message: 'An email address is required.' });
+        }
+        if (!password) {
+            return res.status(400).json({ message: 'A password is required.' });
+        }
+        if (String(password).length < 6) {
+            return res.status(400).json({ message: 'Password must be at least 6 characters.' });
+        }
+        if (role !== undefined && !USER_ROLES.includes(role)) {
+            return res.status(400).json({ message: `Invalid role. Use one of: ${USER_ROLES.join(', ')}.` });
+        }
+
+        const normalizedEmail = String(email).trim().toLowerCase();
+        const existing = await User.findOne({ email: normalizedEmail });
+        if (existing) {
+            return res.status(400).json({ message: 'A user with this email already exists.' });
+        }
+
+        // `username` is required and unique in the schema, but the panel
+        // form never asks for one — derive it from the email's local part
+        // and suffix it until it is free.
+        const base = (normalizedEmail.split('@')[0] || 'user')
+            .replace(/[^a-z0-9_.-]/gi, '')
+            .slice(0, 24) || 'user';
+        let username = base;
+        let suffix = 1;
+        while (await User.exists({ username })) {
+            suffix += 1;
+            username = `${base}${suffix}`;
+        }
+
+        // The model's pre-save hook hashes the password.
+        const user = new User({
+            firstName: firstName ? String(firstName).trim() : '',
+            lastName: lastName ? String(lastName).trim() : '',
+            username,
+            email: normalizedEmail,
+            password: String(password),
+            role: role || 'Customer',
+            isActive: isActive === undefined ? true : Boolean(isActive),
+            isVerified: true,
+        });
         const createdUser = await user.save();
-        
+
         // Remove password from response
         const userObj = createdUser.toObject();
         delete userObj.password;
-        
+
         res.status(201).json(userObj);
     } catch (error) {
         res.status(400).json({ message: error.message });

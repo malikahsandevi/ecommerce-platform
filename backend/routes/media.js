@@ -4,6 +4,9 @@ const { Media, User } = require('../models');
 const genericController = require('../controllers/genericController')(Media);
 const cloudinary = require('../config/cloudinary');
 const { protect } = require('../middleware/auth');
+const { requireStaff } = require('../middleware/admin');
+
+const UPLOAD_FOLDER = 'ecommerce-media';
 
 // Mime types the Media schema accepts.
 const ALLOWED_MIME_TYPES = [
@@ -118,6 +121,103 @@ router.post('/upload', protect, express.json({ limit: '15mb' }), async (req, res
             storageType: 'cloud',
             uploadedBy,
             title: title || originalName,
+            altText: altText || '',
+            description: description || '',
+            status: ['published', 'draft', 'archived'].includes(status) ? status : 'published',
+        });
+
+        res.status(201).json(media);
+    } catch (error) {
+        res.status(400).json({ message: error.message });
+    }
+});
+
+// GET /api/media/upload-signature — direct-to-Cloudinary uploads.
+// The backend used to receive every photo as base64 JSON, but on Vercel
+// the platform rejects request bodies over ~4.5MB before Express runs,
+// so any real photo died with a 413. Now the browser uploads the file
+// straight to Cloudinary with this one-time signature and only the small
+// registration JSON (below) ever touches the serverless function.
+router.get('/upload-signature', protect, requireStaff, (req, res) => {
+    const timestamp = Math.round(Date.now() / 1000);
+    const signature = cloudinary.utils.api_sign_request(
+        { folder: UPLOAD_FOLDER, timestamp },
+        process.env.CLOUDINARY_API_SECRET
+    );
+    res.json({
+        signature,
+        timestamp,
+        apiKey: process.env['CLOUDINARY_API_KEY'],
+        cloudName: process.env.CLOUDINARY_CLOUD_NAME,
+        folder: UPLOAD_FOLDER,
+    });
+});
+
+// POST /api/media/register — creates the Media record for a file the
+// browser already uploaded directly to Cloudinary. The client only says
+// WHERE the file went (publicId); every fact stored (URL, size, format,
+// dimensions) is read back from Cloudinary's own API, so a client cannot
+// register a record that lies about the file.
+router.post('/register', protect, requireStaff, async (req, res) => {
+    try {
+        const { publicId, resourceType, originalName, mimeType, title, altText, description, status } = req.body || {};
+
+        if (!publicId || typeof publicId !== 'string') {
+            return res.status(400).json({ message: 'publicId is required.' });
+        }
+
+        const lookupType = ['image', 'video', 'raw'].includes(resourceType) ? resourceType : 'image';
+        let resource;
+        try {
+            resource = await cloudinary.api.resource(publicId, { resource_type: lookupType });
+        } catch {
+            return res.status(400).json({ message: 'The uploaded file could not be verified on Cloudinary.' });
+        }
+
+        const format = String(resource.format || '').toLowerCase();
+        const derivedMime =
+            resource.resource_type === 'video'
+                ? format === 'mov'
+                    ? 'video/quicktime'
+                    : `video/${format}`
+                : resource.resource_type === 'raw'
+                  ? format === 'pdf'
+                      ? 'application/pdf'
+                      : 'application/msword'
+                  : format === 'jpg'
+                    ? 'image/jpeg'
+                    : format === 'svg'
+                      ? 'image/svg+xml'
+                      : `image/${format}`;
+
+        // The browser-reported type wins when the schema accepts it (it is
+        // the accurate one for e.g. .mov files); otherwise use the type
+        // derived from Cloudinary's format.
+        const finalMime = ALLOWED_MIME_TYPES.includes(mimeType) ? mimeType : derivedMime;
+        if (!ALLOWED_MIME_TYPES.includes(finalMime)) {
+            // A type the library does not accept — remove the orphaned
+            // asset instead of leaving it on Cloudinary forever.
+            try {
+                await cloudinary.uploader.destroy(publicId, { resource_type: resource.resource_type });
+            } catch { /* best effort */ }
+            return res.status(400).json({ message: `Unsupported file type: ${finalMime || 'unknown'}` });
+        }
+
+        const fallbackName = publicId.split('/').pop() || 'file';
+        const media = await Media.create({
+            filename: fallbackName,
+            originalName: originalName || fallbackName,
+            url: resource.secure_url,
+            path: publicId,
+            mimeType: finalMime,
+            size: resource.bytes || 0,
+            extension: format,
+            dimensions: resource.width && resource.height
+                ? { width: resource.width, height: resource.height }
+                : undefined,
+            storageType: 'cloud',
+            uploadedBy: req.user._id,
+            title: title || originalName || fallbackName,
             altText: altText || '',
             description: description || '',
             status: ['published', 'draft', 'archived'].includes(status) ? status : 'published',

@@ -1,3 +1,4 @@
+import axios from 'axios';
 import { apiClient } from './api';
 
 export interface ServiceCapabilities {
@@ -364,38 +365,59 @@ export function getResourceService(pathname: string): ResourceService | null {
   };
 }
 
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(new Error('Could not read the selected file.'));
-    reader.readAsDataURL(file);
-  });
-}
-
 export const mediaService = {
-  /** Uploads the file to Cloudinary through the backend and registers it. */
+  /**
+   * Uploads the file DIRECTLY to Cloudinary with a signature issued by
+   * the backend, then registers the media record. The file bytes never
+   * pass through the serverless backend — Vercel rejects request bodies
+   * over ~4.5MB with a 413 before the API runs, which is exactly what
+   * the old base64-through-the-backend flow hit on any real photo. This
+   * one helper backs every upload entry point (Media page, product /
+   * category / brand image fields), so all of them get the fix.
+   */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   upload: async (data: any) => {
     const file = data.file as File;
-    const dataUrl = await readFileAsDataUrl(file);
 
-    let uploadedBy: string | undefined;
+    const sigRes = await apiClient.get('/media/upload-signature');
+    const { signature, timestamp, apiKey, cloudName, folder } = sigRes.data;
+
+    const form = new FormData();
+    form.append('file', file);
+    form.append('api_key', String(apiKey));
+    form.append('timestamp', String(timestamp));
+    form.append('signature', signature);
+    form.append('folder', folder);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let uploaded: any;
     try {
-      const stored = localStorage.getItem('adminUser');
-      if (stored) uploadedBy = JSON.parse(stored)?.id;
-    } catch {
-      /* the backend falls back to the first admin account */
+      const res = await axios.post(
+        `https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`,
+        form,
+        { timeout: 120000 },
+      );
+      uploaded = res.data;
+    } catch (uploadError) {
+      // Surface Cloudinary's own explanation when it provides one.
+      const cloudinaryMessage = (
+        uploadError as { response?: { data?: { error?: { message?: string } } } }
+      )?.response?.data?.error?.message;
+      if (cloudinaryMessage) throw new Error(`Upload failed: ${cloudinaryMessage}`);
+      throw uploadError;
     }
 
-    const res = await apiClient.post('/media/upload', {
-      dataUrl,
-      filename: file.name,
+    // Small JSON registration — the backend reads the file's real facts
+    // (URL, size, format, dimensions) back from Cloudinary itself.
+    const res = await apiClient.post('/media/register', {
+      publicId: uploaded.public_id,
+      resourceType: uploaded.resource_type,
+      originalName: file.name,
+      mimeType: file.type || '',
       altText: data.altText || '',
       title: data.title || file.name,
       description: data.description || '',
       status: data.status || 'published',
-      uploadedBy,
     });
     return res.data;
   },

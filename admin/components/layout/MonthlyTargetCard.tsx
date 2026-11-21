@@ -1,6 +1,11 @@
 import React from "react";
 import Link from "next/link";
-import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
+import {
+  PolarAngleAxis,
+  RadialBar,
+  RadialBarChart,
+  ResponsiveContainer,
+} from "recharts";
 import { Ellipsis } from "lucide-react";
 
 export interface MonthlyTargetData {
@@ -14,8 +19,6 @@ interface MonthlyTargetCardProps {
   /** Undefined while the dashboard request is still in flight. */
   data?: MonthlyTargetData;
 }
-
-const ACCENT = "#f97316";
 
 const fmtMoney = (value: number) =>
   `$${Number(value || 0).toLocaleString(undefined, {
@@ -33,7 +36,7 @@ export const MonthlyTargetCard: React.FC<MonthlyTargetCardProps> = ({ data }) =>
     return (
       <div className="p-5 w-full h-full bg-(--background) rounded-2xl shadow-sm border border-(--border) animate-pulse flex flex-col">
         <div className="h-5 bg-(--primary-soft) rounded w-32 mb-4"></div>
-        <div className="mx-auto w-44 h-24 bg-(--primary-soft) rounded-t-full"></div>
+        <div className="mx-auto w-44 h-20 bg-(--primary-soft) rounded-t-full"></div>
         <div className="h-3 bg-(--primary-soft) rounded w-40 mx-auto mt-5"></div>
         <div className="h-14 bg-(--primary-soft) rounded-xl mt-5"></div>
       </div>
@@ -45,10 +48,7 @@ export const MonthlyTargetCard: React.FC<MonthlyTargetCardProps> = ({ data }) =>
     data.percentage === null
       ? 0
       : Math.max(0, Math.min(100, data.percentage));
-  const gaugeData = [
-    { name: "achieved", value: pct },
-    { name: "remaining", value: 100 - pct },
-  ];
+  const chartData = [{ value: pct }];
   const remaining = Math.max(0, data.target - data.revenueThisMonth);
 
   const encouragement = !hasTarget
@@ -68,41 +68,57 @@ export const MonthlyTargetCard: React.FC<MonthlyTargetCardProps> = ({ data }) =>
         <Ellipsis className="w-5 h-5 text-(--text-muted)" />
       </div>
 
-      {/* Semicircle gauge */}
-      <div className="relative w-full max-w-60 mx-auto mt-1">
-        <ResponsiveContainer width="100%" height={128}>
-          <PieChart>
-            <Pie
-              data={gaugeData}
-              dataKey="value"
+      {/* Semicircle gauge — geometry ported from the original design's
+          MonthlyTargetCard: the chart lives in a tall (h-35) box whose
+          lower half is clipped by the short overflow-hidden wrapper, so
+          the arc sits DOWN in the card with the percentage under its
+          centre. The previous PieChart version centred the full circle
+          in a 128px box, which floated the arc at the top of the card
+          with dead space underneath it. */}
+      <div className="relative w-full h-20 md:h-22 flex items-center justify-center overflow-hidden mt-1">
+        <div className="absolute top-0 w-full h-35">
+          <ResponsiveContainer width="100%" height="100%">
+            <RadialBarChart
+              cx="50%"
+              cy="50%"
+              innerRadius="75%"
+              outerRadius="100%"
+              data={chartData}
               startAngle={180}
               endAngle={0}
-              innerRadius={64}
-              outerRadius={86}
-              paddingAngle={0}
-              cornerRadius={8}
-              strokeWidth={0}
             >
-              <Cell fill={ACCENT} />
-              <Cell fill="var(--primary-light)" fillOpacity={0.45} />
-            </Pie>
-          </PieChart>
-        </ResponsiveContainer>
-        <div className="absolute inset-x-0 bottom-0 flex flex-col items-center">
-          <span className="text-[28px] leading-8 font-bold text-(--text)">
-            {hasTarget ? `${pct % 1 ? pct.toFixed(1) : pct}%` : "—"}
-          </span>
-          {data.vsLastMonthPct !== null && (
-            <span
-              className={`text-[11px] font-semibold ${
-                data.vsLastMonthPct >= 0 ? "text-emerald-500" : "text-red-500"
-              }`}
-            >
-              {data.vsLastMonthPct >= 0 ? "+" : ""}
-              {data.vsLastMonthPct.toFixed(2)}%{" "}
-              <span className="text-(--text-muted) font-medium">from last month</span>
+              <PolarAngleAxis
+                type="number"
+                domain={[0, 100]}
+                angleAxisId={0}
+                tick={false}
+              />
+              <RadialBar
+                background={{ fill: "var(--primary-light)" }}
+                dataKey="value"
+                cornerRadius={4}
+                fill="var(--primary)"
+              />
+            </RadialBarChart>
+          </ResponsiveContainer>
+
+          {/* Centre text under the arc */}
+          <div className="absolute top-[28%] lg:top-[33%] md:top-[28%] left-1/2 -translate-x-1/2 flex flex-col items-center text-center">
+            <span className="text-[28px] leading-8 font-bold text-(--text)">
+              {hasTarget ? `${pct % 1 ? pct.toFixed(1) : pct}%` : "—"}
             </span>
-          )}
+            {data.vsLastMonthPct !== null && (
+              <span
+                className={`text-[11px] font-semibold whitespace-nowrap ${
+                  data.vsLastMonthPct >= 0 ? "text-emerald-500" : "text-red-500"
+                }`}
+              >
+                {data.vsLastMonthPct >= 0 ? "+" : ""}
+                {data.vsLastMonthPct.toFixed(2)}%{" "}
+                <span className="text-(--text-muted) font-medium">from last month</span>
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
