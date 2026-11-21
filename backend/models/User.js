@@ -126,6 +126,10 @@ const userSchema = new mongoose.Schema(
   },
 );
 
+// The dashboard counts sign-ups inside date windows and lists the newest
+// customers first — both sort/filter on createdAt.
+userSchema.index({ createdAt: -1 });
+
 // Password Hashing Middleware
 userSchema.pre("save", async function () {
   if (!this.isModified("password")) return;

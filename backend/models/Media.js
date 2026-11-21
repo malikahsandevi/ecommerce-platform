@@ -24,7 +24,7 @@ const mediaSchema = new mongoose.Schema({
   mimeType: { 
     type: String, 
     required: true,
-    enum: ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'video/mp4', 'video/mov', 'application/pdf', 'application/msword']
+    enum: ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml', 'video/mp4', 'video/mov', 'video/quicktime', 'application/pdf', 'application/msword']
   },
   size: { 
     type: Number, 

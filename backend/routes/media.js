@@ -11,8 +11,10 @@ const ALLOWED_MIME_TYPES = [
     'image/png',
     'image/gif',
     'image/webp',
+    'image/svg+xml',
     'video/mp4',
     'video/mov',
+    'video/quicktime',
     'application/pdf',
     'application/msword',
 ];
@@ -84,9 +86,10 @@ router.post('/upload', protect, express.json({ limit: '15mb' }), async (req, res
             return res.status(400).json({ message: `Unsupported file type: ${mimeType || 'unknown'}` });
         }
 
-        // Media.uploadedBy is required — prefer the id the client sends,
-        // otherwise fall back to the first admin account.
-        let uploadedBy = req.body.uploadedBy;
+        // Media.uploadedBy is required — the uploader is the signed-in
+        // user from the token (protect already ran). The client-sent id
+        // is only a fallback for legacy callers, then the first admin.
+        let uploadedBy = req.user?._id || req.body.uploadedBy;
         if (!uploadedBy) {
             const admin = await User.findOne({ role: { $in: ['Super Admin', 'Admin'] } }).select('_id');
             if (!admin) return res.status(400).json({ message: 'No admin user found to own the upload.' });

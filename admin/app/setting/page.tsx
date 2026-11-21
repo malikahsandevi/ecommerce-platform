@@ -126,6 +126,23 @@ export default function SettingsPage() {
     }
   };
 
+  const updateUser = async (id: string, values: { role?: string; isActive?: boolean }) => {
+    setError("");
+    try {
+      const updated = await settingsService.updateUser(id, values);
+      setUsers((currentUsers) =>
+        currentUsers.map((user) => (user._id === id ? { ...user, ...updated } : user)),
+      );
+      setNotice("User updated.");
+    } catch (updateError) {
+      // The API's own message explains guard refusals (own role, last
+      // Super Admin) better than a generic fallback — prefer it.
+      const apiMessage = (updateError as { response?: { data?: { message?: string } } })?.response
+        ?.data?.message;
+      setError(apiMessage || (updateError instanceof Error ? updateError.message : "Unable to update user."));
+    }
+  };
+
   /* Full Page Theme-Matched Skeleton Component */
   if (loading) {
     return (
@@ -230,6 +247,7 @@ export default function SettingsPage() {
             saving={saving}
             onSave={saveSection}
             onDeleteUser={(id) => void deleteUser(id)}
+            onUpdateUser={(id, values) => void updateUser(id, values)}
           />
         </section>
       </div>

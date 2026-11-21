@@ -2,6 +2,7 @@ const Product = require('../models/Product');
 const Category = require('../models/Category');
 const Brand = require('../models/Brand');
 const mongoose = require('mongoose');
+const { logActivity } = require('../utils/activity');
 
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -58,6 +59,21 @@ const getProducts = async (req, res) => {
     }
 };
 
+// @desc    Fetch one product
+// @route   GET /api/products/:id
+// @access  Public/Admin
+const getProductById = async (req, res) => {
+    try {
+        const product = await Product.findById(req.params.id).populate('category brand');
+        if (!product) {
+            return res.status(404).json({ message: 'Product not found' });
+        }
+        res.json(product);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
 // @desc    Create a product
 // @route   POST /api/products
 // @access  Admin
@@ -77,15 +93,28 @@ const createProduct = async (req, res) => {
 // @access  Admin
 const updateProduct = async (req, res) => {
     try {
+        const before = await Product.findById(req.params.id).select('price name').lean();
+
         const product = await Product.findByIdAndUpdate(
-            req.params.id, 
-            await normalizeProductInput(req.body), 
+            req.params.id,
+            await normalizeProductInput(req.body),
             { new: true, runValidators: true }
         );
 
         if (!product) {
             return res.status(404).json({ message: 'Product not found' });
         }
+
+        // A price change is one of the events the dashboard's Recent
+        // Activity feed exists for.
+        if (before && req.body.price !== undefined && Number(req.body.price) !== before.price) {
+            await logActivity(
+                'PRICE_UPDATE',
+                `Price updated for ${product.name}: $${before.price} → $${product.price}`,
+                { productId: product._id }
+            );
+        }
+
         res.json(product);
     } catch (error) {
         res.status(400).json({ message: error.message });
@@ -109,6 +138,7 @@ const deleteProduct = async (req, res) => {
 
 module.exports = {
     getProducts,
+    getProductById,
     createProduct,
     updateProduct,
     deleteProduct

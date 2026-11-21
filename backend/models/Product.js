@@ -34,11 +34,17 @@ const productSchema = new mongoose.Schema({
     required: true,
     min: 0
   },
-  comparePrice: { 
+  comparePrice: {
     type: Number,
     min: 0,
     validate: {
       validator: function(value) {
+        // On findByIdAndUpdate, `this` is the query — not the document —
+        // so this.price is undefined there. Only enforce the comparison
+        // when both values are actually known (document context);
+        // otherwise an unrelated edit carrying a compare price would be
+        // rejected with a misleading error.
+        if (value == null || this.price == null) return true;
         return value > this.price;
       },
       message: 'Compare price must be greater than price'

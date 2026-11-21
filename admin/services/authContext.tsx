@@ -87,8 +87,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         id: _id,
         name: name || 'Admin',
         email: userEmail || email,
-        // The API returns lowercase "admin"; present roles in title case.
-        role: role ? role.charAt(0).toUpperCase() + role.slice(1) : 'Admin',
+        // The API returns the account's real role ("Super Admin", "Admin",
+        // …) — show it exactly as stored.
+        role: role || 'Admin',
         avatar: avatar && avatar !== 'default-avatar.png' ? avatar : undefined,
       };
       localStorage.setItem('adminUser', JSON.stringify(userData));

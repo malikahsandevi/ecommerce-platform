@@ -75,6 +75,7 @@ export function SettingsPanel({
   saving,
   onSave,
   onDeleteUser,
+  onUpdateUser,
 }: {
   activeMenu: string;
   settings: SettingsDocument;
@@ -82,6 +83,7 @@ export function SettingsPanel({
   saving: boolean;
   onSave: (section: SettingsSection, value: unknown) => void;
   onDeleteUser: (id: string) => void;
+  onUpdateUser: (id: string, values: { role?: string; isActive?: boolean }) => void;
 }) {
   switch (activeMenu) {
     case "General":
@@ -125,7 +127,7 @@ export function SettingsPanel({
         />
       );
     case "Users & Roles":
-      return <UsersPanel users={users} onDeleteUser={onDeleteUser} />;
+      return <UsersPanel users={users} onDeleteUser={onDeleteUser} onUpdateUser={onUpdateUser} />;
     case "Security":
       return <SecurityPanel />;
     case "API / Integrations":
@@ -543,9 +545,22 @@ function NotificationsPanel({ data, saving, onSave }: SectionPanelProps<ObjectDa
   );
 }
 
-function UsersPanel({ users, onDeleteUser }: { users: SettingsUser[]; onDeleteUser: (id: string) => void }) {
+const USER_ROLE_OPTIONS = ["Super Admin", "Admin", "Manager", "Editor", "Support", "Customer"];
+
+function UsersPanel({
+  users,
+  onDeleteUser,
+  onUpdateUser,
+}: {
+  users: SettingsUser[];
+  onDeleteUser: (id: string) => void;
+  onUpdateUser: (id: string, values: { role?: string; isActive?: boolean }) => void;
+}) {
   return (
-    <SettingsCard title="Users & Roles" description="Users currently stored in the database">
+    <SettingsCard
+      title="Users & Roles"
+      description="Change a user's role or deactivate an account. Your own role and the last Super Admin are protected."
+    >
       <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
         <table className="w-full min-w-[600px] text-left text-sm">
           <thead className="bg-[var(--surface)] text-xs text-[var(--text-muted)]">
@@ -564,8 +579,34 @@ function UsersPanel({ users, onDeleteUser }: { users: SettingsUser[]; onDeleteUs
                   {[user.firstName, user.lastName].filter(Boolean).join(" ") || user.name || "Unnamed user"}
                 </td>
                 <td className="px-4 py-3 text-[var(--text-soft)]">{user.email}</td>
-                <td className="px-4 py-3 text-[var(--text-soft)]">{user.role || "—"}</td>
-                <td className="px-4 py-3">{user.isActive === false ? "Inactive" : "Active"}</td>
+                <td className="px-4 py-3">
+                  <select
+                    aria-label={`Role for ${user.email}`}
+                    value={user.role || "Customer"}
+                    onChange={(event) => onUpdateUser(user._id, { role: event.target.value })}
+                    className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-[13px] text-[var(--text)] outline-none focus:border-[var(--primary)]"
+                  >
+                    {USER_ROLE_OPTIONS.map((role) => (
+                      <option key={role} value={role}>
+                        {role}
+                      </option>
+                    ))}
+                  </select>
+                </td>
+                <td className="px-4 py-3">
+                  <button
+                    type="button"
+                    onClick={() => onUpdateUser(user._id, { isActive: user.isActive === false })}
+                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                      user.isActive === false
+                        ? "bg-red-500/10 text-red-500"
+                        : "bg-emerald-500/10 text-emerald-600"
+                    }`}
+                    title={user.isActive === false ? "Reactivate this account" : "Deactivate this account"}
+                  >
+                    {user.isActive === false ? "Inactive" : "Active"}
+                  </button>
+                </td>
                 <td className="px-4 py-3 text-right">
                   <Button
                     variant="danger"

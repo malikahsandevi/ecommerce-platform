@@ -4,10 +4,11 @@ const { Setting } = require('../models');
 const genericController = require('../controllers/genericController')(Setting);
 const { getSettings, updateSettings, executeIntegration } = require('../controllers/settingController');
 const { protect } = require('../middleware/auth');
+const { requireStaff } = require('../middleware/admin');
 
 // Settings hold integration credentials and drive outbound calls — every
-// route here requires a signed-in admin.
-router.use(protect);
+// route here requires a signed-in staff account.
+router.use(protect, requireStaff);
 
 // Standard settings fetch and update
 router.route('/')

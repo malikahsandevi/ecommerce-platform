@@ -8,8 +8,10 @@ const {
     deleteUser
 } = require('../controllers/userController');
 const { protect } = require('../middleware/auth');
+const { requireStaff } = require('../middleware/admin');
 
-router.use(protect);
+// User management is staff-only: signed in AND holding a staff role.
+router.use(protect, requireStaff);
 
 router.route('/')
     .get(getUsers)

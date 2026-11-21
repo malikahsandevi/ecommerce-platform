@@ -7,7 +7,10 @@ const app = express();
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+// 15mb: media uploads travel as base64 data URLs in JSON bodies. The
+// default 100kb limit silently rejected any real photo before the media
+// route's own parser ever saw the request.
+app.use(express.json({ limit: '15mb' }));
 
 // logger
 app.use((req, res, next) => {
@@ -44,5 +47,13 @@ app.use('/api/coupons', require('./routes/coupons'));
 app.use('/api/reviews', require('./routes/reviews'));
 app.use('/api/settings', require('./routes/settings'));
 app.use('/api/media', require('./routes/media'));
+
+// Anything under /api that matched no route is a JSON 404, not HTML.
+app.use('/api', (req, res) => {
+    res.status(404).json({ message: `Route not found: ${req.method} ${req.originalUrl}` });
+});
+
+// Unexpected errors still answer in the API's { message } shape.
+app.use(require('./middleware/errorHandler').errorHandler);
 
 module.exports = app;

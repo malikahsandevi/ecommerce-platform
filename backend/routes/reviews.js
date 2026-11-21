@@ -1,19 +1,24 @@
 const express = require('express');
 const router = express.Router();
-const { Review } = require('../models');
-const genericController = require('../controllers/genericController')(Review);
+const {
+    getReviews,
+    getReviewById,
+    createReview,
+    updateReview,
+    deleteReview,
+} = require('../controllers/reviewController');
 const { protect } = require('../middleware/auth');
 
-router.route('/').get(async (req, res) => {
-	try {
-		const reviews = await Review.find()
-			.populate('product', 'name')
-			.populate('user', 'firstName lastName username email');
-		res.json(reviews);
-	} catch (error) {
-		res.status(500).json({ message: error.message });
-	}
-}).post(protect, genericController.create);
-router.route('/:id').get(genericController.getById).put(protect, genericController.update).delete(protect, genericController.remove);
+// Reviews use a dedicated controller (not the generic one) because writes
+// must keep the product's averageRating / reviewCount in sync and record
+// dashboard activity.
+router.route('/')
+    .get(getReviews)
+    .post(protect, createReview);
+
+router.route('/:id')
+    .get(getReviewById)
+    .put(protect, updateReview)
+    .delete(protect, deleteReview);
 
 module.exports = router;

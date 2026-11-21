@@ -51,4 +51,15 @@ export const settingsService = {
   async deleteUser(id: string): Promise<void> {
     await apiClient.delete(`/users/${id}`);
   },
+
+  /** Role / active-status changes for the Users & Roles panel. The
+   *  backend refuses self-demotion, self-deactivation and removing the
+   *  last active Super Admin — those errors surface to the page. */
+  async updateUser(
+    id: string,
+    values: { role?: string; isActive?: boolean },
+  ): Promise<SettingsUser> {
+    const { data } = await apiClient.put<SettingsUser>(`/users/${id}`, values);
+    return data;
+  },
 };

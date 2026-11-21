@@ -74,7 +74,14 @@ const getDashboardData = async (req, res) => {
             User.countDocuments(),
             Product.countDocuments(),
             Order.countDocuments(),
-            Order.aggregate([{ $group: { _id: null, total: { $sum: '$total' } } }]),
+            // Headline revenue matches the charts: a cancelled order is
+            // not revenue. (This aggregate used to sum EVERY order, so a
+            // cancelled $999 order inflated the stat card while the chart
+            // below it honestly showed $0 for it.)
+            Order.aggregate([
+                { $match: nonCancelled },
+                { $group: { _id: null, total: { $sum: '$total' } } },
+            ]),
             Order.find().sort({ createdAt: -1 }).limit(5).populate('user', 'firstName lastName email'),
             ActivityLog.find().sort({ createdAt: -1 }).limit(10),
             Category.find().limit(6),
@@ -225,10 +232,10 @@ const getDashboardData = async (req, res) => {
             outOfStock: facetCount('outOfStock'),
         };
 
-        let analytics = existingAnalytics;
-        if (!analytics) {
-            analytics = await Analytics.create({});
-        }
+        // The legacy Analytics document (seeded traffic/conversion
+        // counters) is reported when one exists, but a GET must never
+        // WRITE — this handler used to create the document on first read.
+        const analytics = existingAnalytics || null;
 
         res.json({
             stats: {
