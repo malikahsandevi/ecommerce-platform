@@ -23,6 +23,7 @@ import RecentOrdersCard, { DashboardOrder } from "@/components/layout/RecentOrde
 import ActivityCard, { ActivityLogItem } from "@/components/layout/ActivityCard";
 import TopBar from "@/components/ui/TopBar";
 import { getDashboardAllData } from "@/services/dashboardService";
+import { formatMoney, useStoreCurrency } from "@/services/currency";
 import { apiClient } from "@/services/api";
 import { useAdminAuth } from "@/services/authContext";
 
@@ -67,8 +68,8 @@ function customerNameOf(order: AnyRecord): string {
   );
 }
 
-const fmtWholeMoney = (value: number) =>
-  `$${Math.round(Number(value || 0)).toLocaleString()}`;
+// Money follows the store currency setting (Settings → General).
+const fmtWholeMoney = (value: number) => formatMoney(value);
 
 const fmtJoinedDate = (iso: string) =>
   new Date(iso).toLocaleDateString(undefined, {
@@ -79,6 +80,8 @@ const fmtJoinedDate = (iso: string) =>
 
 export default function Page() {
   const { user, isAuthenticated, hasPermission } = useAdminAuth();
+  // Re-map every figure when the store currency changes.
+  const currencyCode = useStoreCurrency();
   const [stats, setStats] = useState<DashboardStats | undefined>(undefined);
   const [comparisons, setComparisons] = useState<Comparisons | undefined>(undefined);
   const [recentOrders, setRecentOrders] = useState<DashboardOrder[] | undefined>(undefined);
@@ -286,7 +289,10 @@ export default function Page() {
     return () => {
       cancelled = true;
     };
-  }, [fetchData, reloadToken, isAuthenticated]);
+    // currencyCode is a re-map trigger: the formatters read the active
+    // currency at map time, so a currency change must re-run the fetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetchData, reloadToken, isAuthenticated, currencyCode]);
 
   const statsLoading = stats === undefined;
 

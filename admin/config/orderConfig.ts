@@ -1,5 +1,6 @@
 import { SelectOption, FormField } from "@/components/models/FormModal";
 import { Download, Plus, RefreshCcwDot } from "lucide-react";
+import { formatMoney } from "@/services/currency";
 
 export interface OrderUser {
   _id?: string;
@@ -148,7 +149,7 @@ export const orderConfig = {
     code: order.code,
     orderNumber: order.orderNumber || "—",
     customer: customerName(order),
-    totalAmount: `$${(order.total ?? 0).toFixed(2)}`,
+    totalAmount: formatMoney(order.total ?? 0, 2),
     paymentStatus: (order.paymentStatus || "pending").toUpperCase(),
     carrier: order.shippingCarrier || "—",
     status: order.status || "pending",
@@ -165,11 +166,11 @@ export const orderConfig = {
       Items: (order.items || [])
         .map((item) => `${item.name || "Product"} × ${item.quantity || 1}`)
         .join(", ") || "—",
-      Subtotal: `$${(order.subtotal ?? 0).toFixed(2)}`,
-      Tax: `$${(order.tax ?? 0).toFixed(2)}`,
-      "Shipping Cost": `$${(order.shippingCost ?? 0).toFixed(2)}`,
-      Discount: `$${(order.discount ?? 0).toFixed(2)}`,
-      Total: `$${(order.total ?? 0).toFixed(2)}`,
+      Subtotal: formatMoney(order.subtotal ?? 0, 2),
+      Tax: formatMoney(order.tax ?? 0, 2),
+      "Shipping Cost": formatMoney(order.shippingCost ?? 0, 2),
+      Discount: formatMoney(order.discount ?? 0, 2),
+      Total: formatMoney(order.total ?? 0, 2),
       "Payment Method": (order.paymentMethod || "—").toUpperCase(),
       "Payment Status": (order.paymentStatus || "—").toUpperCase(),
       Carrier: order.shippingCarrier || "—",

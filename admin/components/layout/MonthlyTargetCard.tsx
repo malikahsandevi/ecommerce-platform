@@ -7,6 +7,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { Ellipsis } from "lucide-react";
+import { formatMoney, useStoreCurrency } from "@/services/currency";
 
 export interface MonthlyTargetData {
   target: number;
@@ -20,10 +21,8 @@ interface MonthlyTargetCardProps {
   data?: MonthlyTargetData;
 }
 
-const fmtMoney = (value: number) =>
-  `$${Number(value || 0).toLocaleString(undefined, {
-    maximumFractionDigits: 0,
-  })}`;
+// Money follows the store currency setting (Settings → General).
+const fmtMoney = (value: number) => formatMoney(value);
 
 /**
  * Monthly Target gauge in the EzMart reference style. The target is a
@@ -32,6 +31,8 @@ const fmtMoney = (value: number) =>
  * With no target set the card says so instead of inventing a percentage.
  */
 export const MonthlyTargetCard: React.FC<MonthlyTargetCardProps> = ({ data }) => {
+  // Re-render the figures in the active store currency when it changes.
+  useStoreCurrency();
   if (data === undefined) {
     return (
       <div className="p-5 w-full h-full bg-(--background) rounded-2xl shadow-sm border border-(--border) animate-pulse flex flex-col">

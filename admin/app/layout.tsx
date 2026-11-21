@@ -7,6 +7,7 @@ import AdminLoginPopup from "@/components/Login";
 import { ConfirmDialogHost } from "@/components/ui/ConfirmDialog";
 import { AuthProvider, useAdminAuth } from "@/services/authContext";
 import { fetchAndApplyAppearance } from "@/services/appearance";
+import { fetchAndApplyStoreCurrency } from "@/services/currency";
 import "./globals.css";
 
 // Renders the shell and gates the panel behind a session. Kept separate from
@@ -18,6 +19,12 @@ function AdminShell({ children }: { children: React.ReactNode }) {
   // animations) live in the settings document — apply them once signed in.
   useEffect(() => {
     if (isAuthenticated) void fetchAndApplyAppearance();
+  }, [isAuthenticated]);
+
+  // The store currency (Settings → General) formats every money figure
+  // in the panel — load and apply it once signed in, like Appearance.
+  useEffect(() => {
+    if (isAuthenticated) void fetchAndApplyStoreCurrency();
   }, [isAuthenticated]);
 
   // Avoid flashing the login popup while the session probe is still running.

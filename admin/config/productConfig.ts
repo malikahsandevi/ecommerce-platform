@@ -1,5 +1,6 @@
 import { SelectOption, FormField } from "@/components/models/FormModal";
 import { Download, Plus, RefreshCcwDot } from "lucide-react";
+import { formatMoney } from "@/services/currency";
 
 export interface ProductImage {
   url: string;
@@ -153,7 +154,7 @@ export const productConfig = {
     image: primaryImage(product),
     sku: product.sku,
     category: referenceName(product.category),
-    price: `$${(product.price ?? 0).toFixed(2)}`,
+    price: formatMoney(product.price ?? 0, 2),
     stock: product.stock,
     status: product.status,
   }),
@@ -182,7 +183,7 @@ export const productConfig = {
       SKU: product.sku,
       Category: referenceName(product.category) || "—",
       Brand: referenceName(product.brand) || "—",
-      "Cost Price": product.costPrice ? `$${product.costPrice.toFixed(2)}` : "—",
+      "Cost Price": product.costPrice ? formatMoney(product.costPrice, 2) : "—",
       Stock: product.stock,
       "Low Stock Alert": product.lowStockThreshold ?? "—",
       Weight: product.weight ? `${product.weight} kg` : "—",

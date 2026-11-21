@@ -47,23 +47,31 @@ export function SettingsSelect({
   options,
   onChange,
   placeholder,
+  searchable = false,
+  searchPlaceholder,
 }: {
   label: string;
   value: string;
-  options: string[];
+  options: Array<string | { label: string; value: string }>;
   onChange: (value: string) => void;
   placeholder?: string;
+  searchable?: boolean;
+  searchPlaceholder?: string;
 }) {
   return (
     <div>
       <span className="mb-2 block text-xs font-medium text-[var(--text-soft)]">{label}</span>
       <Select
         value={value}
-        options={options.map((option) => ({ label: option, value: option }))}
+        options={options.map((option) =>
+          typeof option === "string" ? { label: option, value: option } : option,
+        )}
         onChange={onChange}
         placeholder={placeholder}
         variant="outline"
         fullWidth
+        searchable={searchable}
+        searchPlaceholder={searchPlaceholder}
       />
     </div>
   );

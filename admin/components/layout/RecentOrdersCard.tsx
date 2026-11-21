@@ -4,6 +4,7 @@ import React from "react";
 import Link from "next/link";
 import { ArrowRight, ShoppingBag } from "lucide-react";
 import { StatusPill } from "@/components/models/CreateTable";
+import { formatMoney, useStoreCurrency } from "@/services/currency";
 
 export interface DashboardOrder {
   id: string;
@@ -20,6 +21,8 @@ interface RecentOrdersProps {
 }
 
 export const RecentOrdersCard: React.FC<RecentOrdersProps> = ({ orders }) => {
+  // Totals follow the store currency setting.
+  useStoreCurrency();
   if (!orders) {
     return (
       <div className="bg-(--background) p-5 rounded-2xl shadow-sm border border-(--border) h-full w-full animate-pulse">
@@ -83,7 +86,7 @@ export const RecentOrdersCard: React.FC<RecentOrdersProps> = ({ orders }) => {
                   </td>
                   <td className="py-2.5 pr-3 text-(--text-soft)">{order.qty}</td>
                   <td className="py-2.5 pr-3 font-semibold text-(--text) whitespace-nowrap">
-                    ${order.total.toFixed(2)}
+                    {formatMoney(order.total, 2)}
                   </td>
                   <td className="py-2.5">
                     <StatusPill status={order.status} />

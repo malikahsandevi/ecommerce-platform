@@ -20,6 +20,7 @@ import { confirmDialog } from "@/components/ui/ConfirmDialog";
 import { getRouteConfigByPath } from "@/config";
 import { extractApiError, PaginationMeta } from "@/services/api";
 import { useAdminAuth } from "@/services/authContext";
+import { useStoreCurrency } from "@/services/currency";
 import {
   getCapabilities,
   getResourceService,
@@ -151,6 +152,9 @@ const PageLayout: React.FC = () => {
   const pathname = usePathname();
   const router = useRouter();
   const { isAuthenticated, isRestoring, user, hasPermission } = useAdminAuth();
+  // Money cells are produced by the config mappers at memo time — the
+  // active currency is a memo dependency so they re-map on change.
+  const currencyCode = useStoreCurrency();
 
   const moduleName = MODULE_BY_SEGMENT[pathname.split("/").filter(Boolean)[0] || ""] ?? null;
   // UI gating only — the backend answers 403 for anything not allowed.
@@ -311,7 +315,8 @@ const PageLayout: React.FC = () => {
 
   const formattedTableData = useMemo(() => {
     return tableMapper ? pagedItems.map((item) => tableMapper(item)) : pagedItems;
-  }, [pagedItems, tableMapper]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pagedItems, tableMapper, currencyCode]);
 
   const selectedDetailData = useMemo(() => {
     if (!selectedRawRow) return null;
@@ -323,7 +328,8 @@ const PageLayout: React.FC = () => {
       status: selectedRawRow.status || "active",
       attributes: selectedRawRow,
     };
-  }, [selectedRawRow, detailMapper]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedRawRow, detailMapper, currencyCode]);
 
   const btnlist: HeaderActionButton[] = useMemo(() => {
     if (!currentConfig.buttons) return [];

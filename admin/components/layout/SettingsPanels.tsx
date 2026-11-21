@@ -6,6 +6,12 @@ import { Check, Copy, Eye, EyeOff, Plus, ShieldCheck, Trash2, Code2, Globe } fro
 import Button from "@/components/ui/Button";
 import MediaPickerModal from "@/components/models/MediaPickerModal";
 import { apiClient, extractApiError } from "@/services/api";
+import {
+  CURRENCY_OPTIONS,
+  applyStoreCurrency,
+  currencySymbolFor,
+} from "@/services/currency";
+import { getTimeZoneOptions, resolveTimeZoneValue } from "@/services/timeZones";
 import { settingsService } from "@/services/settingsService";
 import { useAdminAuth } from "@/services/authContext";
 import type {
@@ -246,8 +252,9 @@ function GeneralPanel({ data, saving, onSave }: SectionPanelProps<ObjectData>) {
     storeTagline: String(data?.storeTagline ?? ""),
     storeEmail: String(data?.storeEmail ?? ""),
     phone: String(data?.phone ?? ""),
-    timeZone: String(data?.timeZone ?? ""),
+    timeZone: resolveTimeZoneValue(data?.timeZone),
     language: String(data?.language ?? ""),
+    currency: data?.currency ? String(data.currency) : "USD",
     logo: String(data?.logo ?? ""),
     favicon: String(data?.favicon ?? ""),
     monthlyTarget: String(data?.monthlyTarget ?? ""),
@@ -281,8 +288,10 @@ function GeneralPanel({ data, saving, onSave }: SectionPanelProps<ObjectData>) {
         <SettingsSelect
           label="Time Zone"
           value={form.timeZone}
-          options={["(GMT+05:00) Pakistan Standard Time", "(GMT+00:00) UTC"]}
+          options={getTimeZoneOptions()}
           onChange={(timeZone) => setForm({ ...form, timeZone })}
+          searchable
+          searchPlaceholder="Search time zones..."
         />
         <SettingsSelect
           label="Language"
@@ -290,6 +299,20 @@ function GeneralPanel({ data, saving, onSave }: SectionPanelProps<ObjectData>) {
           options={["English", "Urdu"]}
           onChange={(language) => setForm({ ...form, language })}
         />
+        <div>
+          <SettingsSelect
+            label="Store Currency"
+            value={form.currency}
+            options={CURRENCY_OPTIONS}
+            onChange={(currency) => setForm({ ...form, currency })}
+            searchable
+            searchPlaceholder="Search currencies..."
+          />
+          <p className="mt-1.5 text-[11px] text-[var(--text-muted)]">
+            Every price and total in the panel is shown in this currency.
+            Amounts are never converted — only the symbol changes.
+          </p>
+        </div>
         <div className="space-y-5">
           <MediaUrlField
             label="Store Logo URL"
@@ -306,7 +329,7 @@ function GeneralPanel({ data, saving, onSave }: SectionPanelProps<ObjectData>) {
         </div>
         <div>
           <SettingsInput
-            label="Monthly Target (amount $)"
+            label={`Monthly Target (amount ${currencySymbolFor(form.currency)})`}
             type="number"
             min="0"
             step="any"
@@ -321,15 +344,18 @@ function GeneralPanel({ data, saving, onSave }: SectionPanelProps<ObjectData>) {
         </div>
       </div>
       <SettingsSaveButton
-        onSave={() =>
+        onSave={() => {
           onSave({
             ...form,
             monthlyTarget:
               form.monthlyTarget.trim() === ""
                 ? 0
                 : Number(form.monthlyTarget) || 0,
-          })
-        }
+          });
+          // Apply the currency right away so every money figure in the
+          // panel follows the setting without waiting for a reload.
+          applyStoreCurrency(form.currency);
+        }}
         saving={saving}
       />
       <MediaPickerModal

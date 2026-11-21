@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import { X, Package, Star, Pencil, Trash2, Copy, Check } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { StatusPill } from "@/components/models/CreateTable";
+import { formatMoney, useStoreCurrency } from "@/services/currency";
 
 export interface DetailSpecification {
   key: string;
@@ -105,6 +106,8 @@ export function DetailPanel<T extends DetailPanelData>({
   deleteLabel = "Delete",
   renderCustomActions,
 }: DetailPanelProps<T>) {
+  // Prices follow the store currency setting.
+  useStoreCurrency();
   const [activeImage, setActiveImage] = useState<string | null>(null);
 
   // Selected item change hone par image reset karein
@@ -199,14 +202,14 @@ export function DetailPanel<T extends DetailPanelData>({
                     <div className="flex items-baseline gap-2 flex-wrap">
                       {selectedItem.salePrice !== undefined && (
                         <span className="text-xl font-extrabold text-[var(--primary)]">
-                          ${selectedItem.salePrice.toFixed(2)}
+                          {formatMoney(selectedItem.salePrice, 2)}
                         </span>
                       )}
 
                       {selectedItem.price !== undefined &&
                         selectedItem.price > 0 && (
                           <span className="text-[var(--text-muted)] line-through text-[10px]">
-                            ${selectedItem.price.toFixed(2)}
+                            {formatMoney(selectedItem.price, 2)}
                           </span>
                         )}
 

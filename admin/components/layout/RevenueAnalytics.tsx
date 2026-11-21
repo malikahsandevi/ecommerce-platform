@@ -11,6 +11,11 @@ import {
   YAxis,
 } from "recharts";
 import Select from "@/components/ui/Select";
+import {
+  formatMoney,
+  formatMoneyCompact,
+  useStoreCurrency,
+} from "@/services/currency";
 
 export interface RevenuePoint {
   month: string;
@@ -41,11 +46,6 @@ interface ChartPoint {
   orders: number;
 }
 
-const fmtMoney = (value: number) =>
-  `$${Number(value || 0).toLocaleString(undefined, {
-    maximumFractionDigits: 2,
-  })}`;
-
 function ChartTooltip({
   active,
   payload,
@@ -55,13 +55,15 @@ function ChartTooltip({
   payload?: Array<{ payload: ChartPoint }>;
   label?: string;
 }) {
+  // Revenue figures follow the store currency setting.
+  useStoreCurrency();
   if (!active || !payload?.length) return null;
   const point = payload[0].payload;
   return (
     <div className="rounded-xl border border-(--border) bg-(--background) px-3 py-2 shadow-lg">
       <p className="text-[10px] font-medium text-(--text-muted)">{label}</p>
       <p className="text-sm font-bold text-(--text)">
-        Revenue {fmtMoney(point.revenue)}
+        Revenue {formatMoney(point.revenue, 2)}
       </p>
       <p className="text-[11px] font-medium text-(--text-muted)">
         {point.orders.toLocaleString()} order{point.orders === 1 ? "" : "s"}
@@ -80,6 +82,8 @@ export const RevenueAnalytics: React.FC<RevenueAnalyticsProps> = ({
   dailyData,
   monthlyData,
 }) => {
+  // Re-render the axis in the active store currency when it changes.
+  useStoreCurrency();
   const [range, setRange] = useState<RangeKey>("8days");
 
   if (dailyData === undefined || monthlyData === undefined) {
@@ -173,11 +177,7 @@ export const RevenueAnalytics: React.FC<RevenueAnalyticsProps> = ({
               axisLine={false}
               tickLine={false}
               width={52}
-              tickFormatter={(value: number) =>
-                value >= 1000
-                  ? `$${Math.round(value / 100) / 10}K`
-                  : `$${value}`
-              }
+              tickFormatter={(value: number) => formatMoneyCompact(value)}
             />
             {/* Orders ride on a hidden axis so both lines stay readable
                 even though revenue and order counts differ in scale.

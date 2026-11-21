@@ -1,5 +1,6 @@
 import { SelectOption, FormField } from "@/components/models/FormModal";
 import { Download, Plus, RefreshCcwDot } from "lucide-react";
+import { formatMoney, getCurrencySymbol } from "@/services/currency";
 
 export interface Coupon {
   _id?: string;
@@ -90,10 +91,10 @@ export const couponConfig = {
     id: coupon._id || String(coupon.id),
     _id: coupon._id,
     code: coupon.code,
-    type: getDiscountType(coupon) === "percentage" ? "Percentage (%)" : "Fixed Amount ($)",
+    type: getDiscountType(coupon) === "percentage" ? "Percentage (%)" : `Fixed Amount (${getCurrencySymbol()})`,
     value: getDiscountType(coupon) === "percentage"
       ? `${getDiscountValue(coupon)}%`
-      : `$${getDiscountValue(coupon).toFixed(2)}`,
+      : formatMoney(getDiscountValue(coupon), 2),
     usage: `${coupon.usedCount} / ${coupon.usageLimit || "∞"}`,
     status: getCouponStatus(coupon),
   }),
@@ -103,13 +104,13 @@ export const couponConfig = {
     id: coupon._id || String(coupon.id),
     title: `Code: ${coupon.code}`,
     status: getCouponStatus(coupon),
-    shortDescription: coupon.description || `Discount: ${getDiscountValue(coupon)}${getDiscountType(coupon) === "percentage" ? "%" : "$"}`,
+    shortDescription: coupon.description || `Discount: ${getDiscountType(coupon) === "percentage" ? `${getDiscountValue(coupon)}%` : formatMoney(getDiscountValue(coupon), 2)}`,
     attributes: {
       "Coupon Code": coupon.code,
       "Discount Type": getDiscountType(coupon)?.toUpperCase() || "N/A",
-      "Discount Value": getDiscountType(coupon) === "percentage" ? `${getDiscountValue(coupon)}%` : `$${getDiscountValue(coupon)}`,
-      "Min Purchase": coupon.minPurchaseAmount ? `$${coupon.minPurchaseAmount}` : "None",
-      "Max Discount": coupon.maxDiscountAmount ? `$${coupon.maxDiscountAmount}` : "N/A",
+      "Discount Value": getDiscountType(coupon) === "percentage" ? `${getDiscountValue(coupon)}%` : formatMoney(getDiscountValue(coupon), 2),
+      "Min Purchase": coupon.minPurchaseAmount ? formatMoney(coupon.minPurchaseAmount, 2) : "None",
+      "Max Discount": coupon.maxDiscountAmount ? formatMoney(coupon.maxDiscountAmount, 2) : "N/A",
       "Usage Limit": coupon.usageLimit ? `${coupon.usedCount} / ${coupon.usageLimit}` : `${coupon.usedCount} (No Limit)`,
       "Start Date": (coupon.validFrom || coupon.startDate) ? new Date(coupon.validFrom || coupon.startDate).toLocaleDateString() : "N/A",
       "End Date": (coupon.validUntil || coupon.endDate) ? new Date(coupon.validUntil || coupon.endDate).toLocaleDateString() : "N/A",

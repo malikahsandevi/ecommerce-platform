@@ -2,6 +2,7 @@ import React from "react";
 import Link from "next/link";
 import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 import { FolderTree } from "lucide-react";
+import { formatMoney, useStoreCurrency } from "@/services/currency";
 
 export interface CategoryItem {
   name: string;
@@ -23,6 +24,8 @@ interface TopCategoriesProps {
 }
 
 export const TopCategories: React.FC<TopCategoriesProps> = ({ categoriesData, totalSales, loading = false }) => {
+  // Subscribe so the centre figure re-renders in the active currency.
+  useStoreCurrency();
   if (loading) {
     return (
       <div className="p-5 w-full bg-(--background) rounded-2xl shadow-sm flex flex-col h-full border border-(--border) animate-pulse">
@@ -47,7 +50,7 @@ export const TopCategories: React.FC<TopCategoriesProps> = ({ categoriesData, to
 
   const items = categoriesData || [];
   const totalValue = items.reduce((acc, item) => acc + item.value, 0);
-  const formattedTotalSales = `$${Math.round(Number(totalSales || 0)).toLocaleString()}`;
+  const formattedTotalSales = formatMoney(totalSales || 0);
 
   return (
     <div className="p-5 w-full bg-(--background) rounded-2xl shadow-sm flex flex-col h-full border border-(--border)">

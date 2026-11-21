@@ -8,8 +8,12 @@ const settingSchema = new mongoose.Schema(
       storeTagline: { type: String, default: "" },
       storeEmail: { type: String, default: "" },
       phone: { type: String, default: "" },
-      timeZone: { type: String, default: "" },
+      timeZone: { type: String, default: "Asia/Karachi" },
       language: { type: String, default: "English" },
+      // ISO 4217 code of the store's currency. The admin formats every
+      // money figure with this currency's symbol; stored amounts are
+      // plain numbers and are never converted.
+      currency: { type: String, default: "USD" },
       // Admin-set revenue goal for the current calendar month, shown as
       // the gauge on the dashboard. 0 means "not set".
       monthlyTarget: { type: Number, default: 0 },

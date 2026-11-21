@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState, ComponentPropsWithoutRef } from "react";
-import { Check, ChevronDown, Plus } from "lucide-react";
+import { Check, ChevronDown, Plus, Search } from "lucide-react";
 
 // Types Definition
 export type SelectVariant = "primary" | "secondary" | "outline" | "ghost" | "danger";
@@ -43,6 +43,11 @@ export interface SelectProps extends Omit<ComponentPropsWithoutRef<"button">, "o
    */
   triggerFullWidth?: boolean;
   direction?: DropdownDirection;
+  /** Show a filter input at the top of the open dropdown (for long
+   *  option lists — currencies, time zones). Filters by label/value. */
+  searchable?: boolean;
+  /** Placeholder for the search input (searchable only). */
+  searchPlaceholder?: string;
   /** Shown inside the open dropdown when there are no options at all. */
   emptyText?: string;
   /** Label for an optional action button under `emptyText` (empty state only). */
@@ -63,15 +68,29 @@ const Select: React.FC<SelectProps> = ({
   triggerFullWidth = false,
   direction = "bottom",
   disabled = false,
+  searchable = false,
+  searchPlaceholder = "Search...",
   emptyText,
   emptyActionLabel,
   onEmptyAction,
   ...props
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const selectedOption = options.find((opt) => opt.value === value);
+
+  const visibleOptions =
+    searchable && query.trim()
+      ? options.filter((opt) => {
+          const needle = query.trim().toLowerCase();
+          return (
+            opt.label.toLowerCase().includes(needle) ||
+            opt.value.toLowerCase().includes(needle)
+          );
+        })
+      : options;
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -101,7 +120,10 @@ const Select: React.FC<SelectProps> = ({
       <button
         type="button"
         disabled={disabled}
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => {
+          if (!isOpen) setQuery("");
+          setIsOpen(!isOpen);
+        }}
         className={`font-semibold inline-flex items-center justify-between transition-colors cursor-pointer focus:shadow-2xl ${
           variantStyles[variant] || variantStyles.secondary
         } ${sizeStyles[size] || sizeStyles.md} ${
@@ -126,6 +148,21 @@ const Select: React.FC<SelectProps> = ({
         <div
           className={`absolute right-0 left-0 z-50 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-lg max-h-56 overflow-y-auto py-1 animate-in fade-in zoom-in-95 duration-100 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-button]:hidden [&::-webkit-scrollbar-track]:bg-[var(--surface-muted)] [&::-webkit-scrollbar-thumb]:bg-[var(--primary)] [&::-webkit-scrollbar-thumb]:rounded-full ${dropdownDirectionClasses}`}
         >
+          {searchable && (
+            <div className="sticky top-0 bg-[var(--surface)] px-2 pt-2 pb-1.5">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--text-muted)]" />
+                <input
+                  type="text"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  onClick={(event) => event.stopPropagation()}
+                  placeholder={searchPlaceholder}
+                  className="h-8 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] pl-8 pr-2.5 text-xs text-[var(--text)] outline-none transition focus:border-[var(--primary)]"
+                />
+              </div>
+            </div>
+          )}
           {options.length === 0 && (emptyText || emptyActionLabel) ? (
             <div className="px-3 py-2.5">
               {emptyText && (
@@ -145,8 +182,12 @@ const Select: React.FC<SelectProps> = ({
                 </button>
               )}
             </div>
+          ) : visibleOptions.length === 0 ? (
+            <p className="px-3 py-2.5 text-xs text-[var(--text-muted)]">
+              No matches found
+            </p>
           ) : (
-            options.map((option) => {
+            visibleOptions.map((option) => {
             const isSelected = option.value === value;
             return (
               <button
@@ -155,6 +196,7 @@ const Select: React.FC<SelectProps> = ({
                 onClick={() => {
                   onChange(option.value);
                   setIsOpen(false);
+                  setQuery("");
                 }}
                 className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between cursor-pointer transition-colors ${
                   isSelected
