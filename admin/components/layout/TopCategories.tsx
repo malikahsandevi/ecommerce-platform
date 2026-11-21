@@ -28,12 +28,12 @@ export const TopCategories: React.FC<TopCategoriesProps> = ({ categoriesData, to
   useStoreCurrency();
   if (loading) {
     return (
-      <div className="p-5 w-full bg-(--background) rounded-2xl shadow-sm flex flex-col border border-(--border) animate-pulse">
+      <div className="p-5 w-full h-full bg-(--background) rounded-2xl shadow-sm flex flex-col border border-(--border) animate-pulse">
         <div className="flex items-center justify-between mb-4">
           <div className="h-5 bg-(--primary-soft) rounded w-28"></div>
           <div className="h-4 bg-(--primary-soft) rounded w-12"></div>
         </div>
-        <div className="relative w-full h-40 flex items-center justify-center">
+        <div className="relative w-full h-48 flex items-center justify-center">
           <div className="w-32 h-32 rounded-full border-8 border-(--primary-soft)"></div>
         </div>
         <div className="mt-4 space-y-3">
@@ -53,7 +53,7 @@ export const TopCategories: React.FC<TopCategoriesProps> = ({ categoriesData, to
   const formattedTotalSales = formatMoney(totalSales || 0);
 
   return (
-    <div className="p-5 w-full bg-(--background) rounded-2xl shadow-sm flex flex-col border border-(--border)">
+    <div className="p-5 w-full h-full bg-(--background) rounded-2xl shadow-sm flex flex-col border border-(--border)">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-base font-bold text-(--text)">Top Categories</h3>

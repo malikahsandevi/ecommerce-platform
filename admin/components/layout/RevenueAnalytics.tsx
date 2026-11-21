@@ -88,13 +88,15 @@ export const RevenueAnalytics: React.FC<RevenueAnalyticsProps> = ({
 
   if (dailyData === undefined || monthlyData === undefined) {
     return (
-      <div className="p-4 w-full h-full bg-(--background) rounded-2xl shadow-sm border border-(--border) animate-pulse">
+      <div className="p-4 w-full h-full bg-(--background) rounded-2xl shadow-sm border border-(--border) animate-pulse flex flex-col">
         <div className="flex items-center justify-between mb-4">
           <div className="h-5 bg-(--primary-soft) rounded w-40"></div>
           <div className="h-8 bg-(--primary-soft) rounded-lg w-36"></div>
         </div>
         <div className="h-3 bg-(--primary-soft) rounded w-48 mb-5"></div>
-        <div className="h-40 bg-(--primary-soft) rounded-xl"></div>
+        {/* Chart placeholder flexes to fill the card, mirroring the
+            loaded card's flex-1 chart area. */}
+        <div className="flex-1 min-h-40 bg-(--primary-soft) rounded-xl"></div>
       </div>
     );
   }

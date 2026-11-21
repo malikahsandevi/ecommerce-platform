@@ -34,12 +34,17 @@ export const MonthlyTargetCard: React.FC<MonthlyTargetCardProps> = ({ data }) =>
   // Re-render the figures in the active store currency when it changes.
   useStoreCurrency();
   if (data === undefined) {
+    // Skeleton mirrors the loaded card: h-full so it stretches to the
+    // dashboard row like the real card (bottoms align while loading),
+    // gauge block centred in a flex-1 area, strip bar at the bottom.
     return (
-      <div className="p-5 w-full bg-(--background) rounded-2xl shadow-sm border border-(--border) animate-pulse flex flex-col">
-        <div className="h-5 bg-(--primary-soft) rounded w-32 mb-4"></div>
-        <div className="mx-auto w-36 h-12 bg-(--primary-soft) rounded-t-full"></div>
-        <div className="h-3 bg-(--primary-soft) rounded w-40 mx-auto mt-5"></div>
-        <div className="h-14 bg-(--primary-soft) rounded-xl mt-5"></div>
+      <div className="p-5 w-full h-full bg-(--background) rounded-2xl shadow-sm border border-(--border) animate-pulse flex flex-col">
+        <div className="h-5 bg-(--primary-soft) rounded w-32"></div>
+        <div className="flex-1 flex flex-col items-center justify-center">
+          <div className="w-36 h-12 bg-(--primary-soft) rounded-t-full"></div>
+          <div className="h-3 bg-(--primary-soft) rounded w-40 mt-5"></div>
+        </div>
+        <div className="h-14 bg-(--primary-soft) rounded-xl"></div>
       </div>
     );
   }
@@ -63,12 +68,19 @@ export const MonthlyTargetCard: React.FC<MonthlyTargetCardProps> = ({ data }) =>
           : { title: "Getting Started", body: `${fmtMoney(remaining)} to go this month — new orders will move the gauge.` };
 
   return (
-    <div className="p-5 w-full bg-(--background) rounded-2xl shadow-sm border border-(--border) flex flex-col">
+    <div className="p-5 w-full h-full bg-(--background) rounded-2xl shadow-sm border border-(--border) flex flex-col">
       <div className="flex items-center justify-between">
         <h3 className="text-base font-bold text-(--text)">Monthly Target</h3>
         <Ellipsis className="w-5 h-5 text-(--text-muted)" />
       </div>
 
+      {/* Middle block (gauge + percentage + status text) is vertically
+          centred in a flex-1 area: the card stretches to the dashboard
+          row height like its neighbours, but the extra height is
+          distributed around this block instead of pooling as one dead
+          band under the strip. The strip below stays anchored at the
+          card's bottom with only the normal padding under it. */}
+      <div className="flex-1 flex flex-col justify-center">
       {/* Semicircle gauge — explicit pixel geometry: outerRadius 57
           and innerRadius 30 render a ~114px wide arc with a ~27px
           thick band (the same proportions as the previous 84px arc,
@@ -79,9 +91,7 @@ export const MonthlyTargetCard: React.FC<MonthlyTargetCardProps> = ({ data }) =>
           sector only ever draws the top semicircle). The percentage
           sits in NORMAL FLOW underneath the chart box with a 4px gap —
           it is not positioned over the chart, so it can never overlap
-          the arc whatever its text width. The card itself is
-          content-height (no h-full): it no longer stretches to the
-          dashboard row, so no dead band sits under the strip. */}
+          the arc whatever its text width. */}
       <div className="w-full">
         <div className="relative w-full h-[59px]">
           <ResponsiveContainer width="100%" height="100%">
@@ -129,9 +139,7 @@ export const MonthlyTargetCard: React.FC<MonthlyTargetCardProps> = ({ data }) =>
         </div>
       </div>
 
-      {/* Encouragement / hint — no flex-1 here: the strip must follow
-          the text with its normal mt-4 spacing so the card ends right
-          after the strip (plus its padding), with no dead band. */}
+      {/* Encouragement / hint — part of the centred middle block. */}
       <div className="text-center mt-1">
         {encouragement ? (
           <>
@@ -153,9 +161,15 @@ export const MonthlyTargetCard: React.FC<MonthlyTargetCardProps> = ({ data }) =>
           </>
         )}
       </div>
+      </div>
 
-      {/* Target | Revenue boxes */}
-      <div className="mt-4 grid grid-cols-2 rounded-xl overflow-hidden bg-(--primary-soft)">
+      {/* Target | Revenue boxes — pinned to the END of the card by
+          margin-top: auto, whatever the card's height: the strip
+          stays flush at the bottom and the flex-1 middle block above
+          absorbs the extra height. The wrapper's pt-4 keeps a minimum
+          gap between the status text and the strip. */}
+      <div className="mt-auto pt-4">
+      <div className="grid grid-cols-2 rounded-xl overflow-hidden bg-(--primary-soft)">
         <div className="py-2.5 text-center border-r border-(--background)">
           <p className="text-[11px] font-medium text-(--text-muted)">Target</p>
           <p className="text-sm font-bold text-(--text) mt-0.5">
@@ -168,6 +182,7 @@ export const MonthlyTargetCard: React.FC<MonthlyTargetCardProps> = ({ data }) =>
             {fmtMoney(data.revenueThisMonth)}
           </p>
         </div>
+      </div>
       </div>
     </div>
   );
