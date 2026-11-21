@@ -1,7 +1,6 @@
 // /app/page.tsx
 "use client";
 import React, { useState, useEffect, useCallback } from "react";
-import Link from "next/link";
 import { AlertCircle, CircleDollarSign, RefreshCcw, ShieldAlert, ShoppingBag, Users } from "lucide-react";
 import DashboardStatCard from "@/components/layout/DashboardStatCard";
 import RevenueAnalytics, {
@@ -24,19 +23,10 @@ import ActivityCard, { ActivityLogItem } from "@/components/layout/ActivityCard"
 import TopBar from "@/components/ui/TopBar";
 import { getDashboardAllData } from "@/services/dashboardService";
 import { formatMoney, useStoreCurrency } from "@/services/currency";
-import { apiClient } from "@/services/api";
 import { useAdminAuth } from "@/services/authContext";
 
 // Orange shades, darkest first — the reference design's donut palette.
 const CATEGORY_COLORS = ["#ea580c", "#f97316", "#fb923c", "#fdba74", "#fed7aa", "#ffedd5"];
-
-interface ProductSearchRecord {
-  id: string;
-  name: string;
-  category: string;
-  sku: string;
-  [key: string]: string;
-}
 
 interface DashboardStats {
   totalRevenue: number;
@@ -98,9 +88,6 @@ export default function Page() {
   const [slowLoad, setSlowLoad] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
 
-  const [searchRecords, setSearchRecords] = useState<ProductSearchRecord[]>([]);
-  const [searchMatches, setSearchMatches] = useState<ProductSearchRecord[] | null>(null);
-
   const fetchData = useCallback(async () => {
     setLoadError(false);
     setSlowLoad(false);
@@ -122,11 +109,6 @@ export default function Page() {
     // products request, which used to delay everything behind whichever
     // call was slower on a cold start.
     const slowTimer = setTimeout(() => setSlowLoad(true), 6000);
-
-    const productsPromise = apiClient
-      .get("/products")
-      .then((res) => (Array.isArray(res.data) ? res.data : []))
-      .catch(() => [] as AnyRecord[]);
 
     const data = await getDashboardAllData();
     clearTimeout(slowTimer);
@@ -240,8 +222,6 @@ export default function Page() {
       }))
     );
 
-    const products: AnyRecord[] = await productsPromise;
-
     // Top Categories ranks by SALES: the dashboard endpoint returns the
     // top 5 categories with their real revenue and product counts,
     // already ordered by revenue. The donut follows the revenue share;
@@ -263,17 +243,6 @@ export default function Page() {
       })
     );
 
-    setSearchRecords(
-      products.map((product) => ({
-        id: String(product._id),
-        name: product.name || "",
-        category:
-          typeof product.category === "object"
-            ? product.category?.name || ""
-            : "",
-        sku: product.sku || "",
-      }))
-    );
   }, []);
 
   // Only fetch once signed in (the dashboard API requires the token), and
@@ -341,41 +310,8 @@ export default function Page() {
           email: user?.email,
           avatar: user?.avatar || "",
         }}
-        searchPlaceholder="Search products or SKU..."
-        searchData={searchRecords}
-        searchFields={["name", "category", "sku"]}
-        onSearchResults={(results) =>
-          setSearchMatches(
-            results.length === searchRecords.length ? null : results
-          )
-        }
+        globalSearch
       />
-
-      {searchMatches !== null && (
-        <div className="rounded-2xl border border-(--border) bg-(--background) px-4 py-3 shadow-sm">
-          {searchMatches.length === 0 ? (
-            <p className="text-xs text-(--text-muted)">
-              No products match your search.
-            </p>
-          ) : (
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs font-semibold text-(--text)">
-                {searchMatches.length} product{searchMatches.length === 1 ? "" : "s"} found:
-              </span>
-              {searchMatches.slice(0, 6).map((product) => (
-                <Link
-                  key={product.id}
-                  href="/products"
-                  className="text-[11px] font-medium px-2 py-1 rounded-full bg-(--primary-soft) text-(--primary-dark) hover:bg-(--primary-light) transition-colors"
-                >
-                  {product.name}
-                  {product.sku ? ` • ${product.sku}` : ""}
-                </Link>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
 
       {loadError ? (
         <div className="rounded-2xl border border-red-500/25 bg-red-500/5 p-6 flex flex-col items-center gap-2 text-center">

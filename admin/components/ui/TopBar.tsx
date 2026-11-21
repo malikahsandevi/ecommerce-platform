@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { MessageSquare, Bell, CheckCheck, ChevronDown, LogOut } from "lucide-react";
 import SearchBar, { SearchableEntityRecord } from "@/components/ui/SearchBar";
+import GlobalSearch from "@/components/ui/GlobalSearch";
 import ThemeToggle from "@/components/models/ThemeToggle";
 import { useAdminAuth } from "@/services/authContext";
 
@@ -36,6 +37,9 @@ interface TopBarProps<T extends SearchableEntityRecord> {
   notifications?: NotificationItem[];
   messages?: MessageItem[];
   searchPlaceholder?: string;
+  /** Render the global (all-sources) search instead of the legacy
+   *  page-local SearchBar. */
+  globalSearch?: boolean;
   // Generic Search Bar Props
   searchData?: T[];
   searchFields?: (keyof T)[];
@@ -56,6 +60,7 @@ export const TopBar = <T extends SearchableEntityRecord>({
   notifications = [],
   messages = [],
   searchPlaceholder = "Search...",
+  globalSearch = false,
   searchData = [],
   searchFields = [],
   onSearchResults,
@@ -134,14 +139,19 @@ export const TopBar = <T extends SearchableEntityRecord>({
 
       {/* Right Controls */}
       <div className="flex items-center gap-1" ref={containerRef}>
-        {/* Modular Search Bar Component */}
-        {searchData.length > 0 && onSearchResults && (
-          <SearchBar
-            searchSourceData={searchData}
-            searchableFieldsKeys={searchFields}
-            onSearchResultsUpdate={onSearchResults}
-            searchPlaceholder={searchPlaceholder}
-          />
+        {/* Global search (all sources) or the legacy page-local bar */}
+        {globalSearch ? (
+          <GlobalSearch />
+        ) : (
+          searchData.length > 0 &&
+          onSearchResults && (
+            <SearchBar
+              searchSourceData={searchData}
+              searchableFieldsKeys={searchFields}
+              onSearchResultsUpdate={onSearchResults}
+              searchPlaceholder={searchPlaceholder}
+            />
+          )
         )}
 
         {/* Action Icons With Popups */}

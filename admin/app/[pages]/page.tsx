@@ -699,6 +699,30 @@ const PageLayout: React.FC = () => {
     setIsModalOpen(true);
   }, [pathname, items, buildInitialFormValues]);
 
+  // --- Global-search handoff for media (TopBar search → Media edit) --
+  // Clicking a media result in the TopBar search stores its id under
+  // "openMediaId" and lands here; open that item's Edit Media panel.
+  useEffect(() => {
+    if (!isMediaPage || items.length === 0) return;
+    let target: string | null = null;
+    try {
+      target = sessionStorage.getItem("openMediaId");
+    } catch {
+      /* storage unavailable */
+    }
+    if (!target) return;
+    try {
+      sessionStorage.removeItem("openMediaId");
+    } catch {
+      /* ignore */
+    }
+    const row = items.find((item) => String(item._id || item.id) === target);
+    if (!row) return;
+    setSelectedRawRow(row);
+    setFormMode("edit");
+    setIsModalOpen(true);
+  }, [isMediaPage, items]);
+
   // --- "Create New" handoff (product form → Categories / Brands) -------
   // When the product form's Category/Brand list is empty, its dropdown
   // offers "Create New": the click stores the resource slug under
