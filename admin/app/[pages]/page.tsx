@@ -225,6 +225,20 @@ const PageLayout: React.FC = () => {
         setItems(rows);
         setDisplayItems(rows);
         setMeta(pageMeta);
+        // Single source of truth: the details panel renders the row
+        // object captured when it was clicked, so without this the
+        // panel keeps showing pre-edit values while the table (fed by
+        // this refetch) shows the saved ones — the two views disagree
+        // until the row is clicked again. Re-point the selection at
+        // the FRESH row with the same id from this fetch; if the
+        // record no longer exists, clear the selection.
+        setSelectedRawRow((prev) => {
+          if (!prev) return prev;
+          const prevId = String(prev._id || prev.id);
+          return (
+            rows.find((row) => String(row._id || row.id) === prevId) ?? null
+          );
+        });
       })
       .catch((error) => {
         if (cancelled) return;
