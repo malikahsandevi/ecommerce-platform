@@ -1,6 +1,7 @@
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 const { getEffectivePermissions } = require('../utils/permissions');
+const { getJwtSecret } = require('../utils/credentials');
 const { authenticator } = require('otplib');
 const QRCode = require('qrcode');
 
@@ -32,9 +33,11 @@ const generateTotpKey = () => {
     return secret;
 };
 
-// Generate JWT
-const generateToken = (id) => {
-    return jwt.sign({ id }, process.env.JWT_SECRET, {
+// Generate JWT — signed with the secret from the credentials store
+// (Settings → Credentials; environment value is the fallback and the
+// seed, so sessions minted before the move keep verifying).
+const generateToken = async (id) => {
+    return jwt.sign({ id }, await getJwtSecret(), {
         expiresIn: '30d',
     });
 };
@@ -43,8 +46,8 @@ const generateToken = (id) => {
 // has 2FA on. It is NOT a session token: it carries a purpose claim that
 // only the 2FA verify endpoint accepts, and a real session token is
 // minted only after the TOTP code checks out.
-const generateTwoFactorTempToken = (id) => {
-    return jwt.sign({ id, purpose: 'two-factor-login' }, process.env.JWT_SECRET, {
+const generateTwoFactorTempToken = async (id) => {
+    return jwt.sign({ id, purpose: 'two-factor-login' }, await getJwtSecret(), {
         expiresIn: '5m',
     });
 };
@@ -64,7 +67,7 @@ const sessionPayload = async (user) => ({
     // this user may not use. The backend re-checks every call anyway —
     // this is for display only.
     permissions: await getEffectivePermissions(user.role),
-    token: generateToken(user._id),
+    token: await generateToken(user._id),
 });
 
 // Panel-access rules shared by login and the 2FA second step. Returns an
@@ -92,6 +95,13 @@ const loginAdmin = async (req, res) => {
     try {
         const { email, password } = req.body;
 
+        // ADMIN_EMAIL / ADMIN_PASSWORD are SEED-ONLY: they create the
+        // first Super Admin account when no account with that email
+        // exists yet. From the first successful seed on, the account's
+        // password is the bcrypt hash stored on the User document —
+        // changing these env vars afterwards changes nothing, and the
+        // password is managed from the panel (profile / password
+        // settings), never from here.
         const envAdminEmail = process.env.ADMIN_EMAIL || 'admin@gmail.com';
         const envAdminPass = process.env.ADMIN_PASSWORD || 'admin';
 
@@ -128,7 +138,7 @@ const loginAdmin = async (req, res) => {
                 if (adminUser.twoFactorEnabled) {
                     return res.json({
                         twoFactorRequired: true,
-                        tempToken: generateTwoFactorTempToken(adminUser._id),
+                        tempToken: await generateTwoFactorTempToken(adminUser._id),
                     });
                 }
 
@@ -155,7 +165,7 @@ const verifyTwoFactorLogin = async (req, res) => {
 
         let decoded;
         try {
-            decoded = jwt.verify(tempToken, process.env.JWT_SECRET);
+            decoded = jwt.verify(tempToken, await getJwtSecret());
         } catch {
             return res.status(401).json({ message: 'This sign-in attempt expired — sign in again.' });
         }

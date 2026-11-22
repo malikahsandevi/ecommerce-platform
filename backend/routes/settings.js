@@ -3,8 +3,9 @@ const router = express.Router();
 const { Setting } = require('../models');
 const genericController = require('../controllers/genericController')(Setting);
 const { getSettings, updateSettings, executeIntegration } = require('../controllers/settingController');
+const { getCredentials, updateCredentials } = require('../controllers/credentialController');
 const { protect } = require('../middleware/auth');
-const { requireStaff } = require('../middleware/admin');
+const { requireStaff, requireSuperAdmin } = require('../middleware/admin');
 const { requirePermission } = require('../middleware/permissions');
 
 
@@ -19,6 +20,14 @@ router.route('/')
 
 // Universal Driver execution route (to trigger dynamic integrations)
 router.post('/execute', requirePermission('Settings', 'edit'), executeIntegration);
+
+// Service credentials (Cloudinary + JWT secret) — stored in the database
+// and managed here, Super Admin ONLY (stricter than the Settings matrix:
+// an Admin with full Settings access still may not touch these). Must be
+// declared before '/:id' so "credentials" is not read as a settings id.
+router.route('/credentials')
+    .get(requireSuperAdmin, getCredentials)
+    .put(requireSuperAdmin, updateCredentials);
 
 // Generic ID based routes
 router.route('/:id')

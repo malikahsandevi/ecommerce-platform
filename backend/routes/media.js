@@ -5,6 +5,7 @@ const genericController = require('../controllers/genericController')(Media);
 const cloudinary = require('../config/cloudinary');
 const { protect } = require('../middleware/auth');
 const { requireStaff } = require('../middleware/admin');
+const { getCloudinaryCredentials } = require('../utils/credentials');
 const { requirePermission } = require('../middleware/permissions');
 const {
     parseCloudinaryUrl,
@@ -171,23 +172,27 @@ router.post('/upload', protect, requirePermission('Media', 'create'), express.js
 // so any real photo died with a 413. Now the browser uploads the file
 // straight to Cloudinary with this one-time signature and only the small
 // registration JSON (below) ever touches the serverless function.
-router.get('/upload-signature', protect, requireStaff, requirePermission('Media', 'create'), (req, res) => {
+router.get('/upload-signature', protect, requireStaff, requirePermission('Media', 'create'), async (req, res) => {
     const timestamp = Math.round(Date.now() / 1000);
     // The caller's purpose picks the destination folder (storage
     // organization); only the fixed purpose keys are honoured.
     const folder = folderForPurpose(req.query.purpose);
+    // Credentials come from the DB store (Settings → Credentials;
+    // environment is only the seed/fallback) — a key rotated in the
+    // panel signs the very next upload, no redeploy needed.
+    const { cloudName, apiKey, apiSecret } = await getCloudinaryCredentials();
     // The delivery type is part of the signed parameters: the browser's
     // direct upload lands as an authenticated-type asset (asset
     // protection — see utils/cloudinaryUrl.js).
     const signature = cloudinary.utils.api_sign_request(
         { folder, timestamp, type: 'authenticated' },
-        process.env.CLOUDINARY_API_SECRET
+        apiSecret
     );
     res.json({
         signature,
         timestamp,
-        apiKey: process.env['CLOUDINARY_API_KEY'],
-        cloudName: process.env.CLOUDINARY_CLOUD_NAME,
+        apiKey,
+        cloudName,
         folder,
         type: 'authenticated',
     });

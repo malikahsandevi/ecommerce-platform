@@ -22,6 +22,30 @@ export interface SettingsDocument {
   appearance?: Record<string, unknown>;
 }
 
+/** Service credentials (GET /settings/credentials, Super Admin only).
+ *  Secrets arrive MASKED — `apiSecret` / `secret` hold a placeholder
+ *  when a value is stored, never the real value; the `*Configured`
+ *  flags say whether one exists. */
+export interface CredentialsData {
+  cloudinary: {
+    cloudName: string;
+    apiKey: string;
+    apiSecret: string;
+    apiSecretConfigured: boolean;
+  };
+  jwt: {
+    secret: string;
+    secretConfigured: boolean;
+  };
+}
+
+/** Save payload for the credentials. A secret left out (blank in the
+ *  form) keeps the stored value; a provided secret replaces it. */
+export interface CredentialsUpdate {
+  cloudinary: { cloudName: string; apiKey: string; apiSecret?: string };
+  jwt: { secret?: string };
+}
+
 export interface SettingsUser {
   _id: string;
   firstName?: string;
@@ -97,6 +121,20 @@ export const settingsService = {
    *  may read it; `canEdit` is true only for Super Admin. */
   async getPermissions(): Promise<RolePermissionsData> {
     const { data } = await apiClient.get<RolePermissionsData>("/permissions");
+    return data;
+  },
+
+  /** Service credentials, masked (Super Admin only — the API answers
+   *  403 for anyone else, and never returns a full secret). */
+  async getCredentials(): Promise<CredentialsData> {
+    const { data } = await apiClient.get<CredentialsData>("/settings/credentials");
+    return data;
+  },
+
+  /** Saves credentials to the backend store. Takes effect without a
+   *  redeploy. Returns the masked view of what is now stored. */
+  async updateCredentials(values: CredentialsUpdate): Promise<CredentialsData> {
+    const { data } = await apiClient.put<CredentialsData>("/settings/credentials", values);
     return data;
   },
 

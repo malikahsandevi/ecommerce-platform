@@ -24,6 +24,7 @@ app.use((req, res, next) => {
 // bodies are canonicalised back to the stored form so a signed URL the
 // client echoes back is never persisted.
 const { responseSigner, requestCanonicaliser } = require('./utils/cloudinaryUrl');
+const { refreshCredentials } = require('./utils/credentials');
 app.use('/api', requestCanonicaliser);
 app.use('/api', responseSigner);
 
@@ -38,6 +39,13 @@ app.get('/', (req, res) => {
 app.use('/api', async (req, res, next) => {
     try {
         await connectDB();
+        // Service credentials live in the database (Settings →
+        // Credentials), seeded from the environment on first boot.
+        // Refreshing here keeps every downstream reader — JWT verify,
+        // Cloudinary signing, URL signing — on the stored values; the
+        // refresh is TTL-cached and failure-proof (env fallback), so it
+        // never blocks a request.
+        await refreshCredentials();
         next();
     } catch (error) {
         res.status(500).json({ message: 'Database connection failed' });

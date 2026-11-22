@@ -6,6 +6,7 @@ import {
   Bell,
   Code2,
   CreditCard,
+  KeyRound,
   Link2,
   Palette,
   Settings,
@@ -33,6 +34,7 @@ type SettingMenu =
   | "Notifications"
   | "Users & Roles"
   | "Security"
+  | "Credentials"
   | "API / Integrations"
   | "Appearance";
 
@@ -44,6 +46,7 @@ const settingMenus: { name: SettingMenu; icon: LucideIcon }[] = [
   { name: "Notifications", icon: Bell },
   { name: "Users & Roles", icon: Users },
   { name: "Security", icon: ShieldCheck },
+  { name: "Credentials", icon: KeyRound },
   // { name: "API Settings", icon: Code2 },
   { name: "API / Integrations", icon: Code2 },
   { name: "Appearance", icon: Palette },
@@ -67,10 +70,14 @@ export default function SettingsPage() {
   };
 
   // The Users & Roles section is account management — roles without
-  // Users view don't see the menu entry at all.
-  const visibleMenus = settingMenus.filter(
-    (menu) => menu.name !== "Users & Roles" || canViewUsers,
-  );
+  // Users view don't see the menu entry at all. Credentials hold the
+  // store's service secrets — Super Admin only (the API enforces the
+  // same rule with a 403 for everyone else).
+  const visibleMenus = settingMenus.filter((menu) => {
+    if (menu.name === "Users & Roles") return canViewUsers;
+    if (menu.name === "Credentials") return user?.role === "Super Admin";
+    return true;
+  });
   const [activeMenu, setActiveMenu] = useState<SettingMenu>("General");
   const [settings, setSettings] = useState<SettingsDocument>({});
   const [users, setUsers] = useState<SettingsUser[]>([]);

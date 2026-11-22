@@ -1,3 +1,8 @@
+// Boot-time INITIAL config from the environment. At runtime the
+// effective credentials live in the database (Settings → Credentials,
+// see utils/credentials.js): the resolver re-applies them onto this
+// singleton whenever they change, so this env config is only the seed
+// the process starts with — never the source of truth afterwards.
 const cloudinary = require('cloudinary').v2;
 
 cloudinary.config({

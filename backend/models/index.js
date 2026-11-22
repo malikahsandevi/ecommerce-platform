@@ -11,6 +11,7 @@ const Setting = require('./Setting');
 const ActivityLog = require('./ActivityLog');
 const Analytics = require('./Analytics');
 const RolePermission = require('./RolePermission');
+const Credential = require('./Credential');
 
 module.exports = {
   User,
@@ -24,5 +25,6 @@ module.exports = {
   Setting,
   ActivityLog,
   Analytics,
-  RolePermission
+  RolePermission,
+  Credential
 };

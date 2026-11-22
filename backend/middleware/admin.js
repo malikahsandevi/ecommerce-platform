@@ -17,4 +17,21 @@ const requireStaff = (req, res, next) => {
     next();
 };
 
-module.exports = { requireStaff, STAFF_ROLES };
+// Super-Admin-only guard — stricter than the permission matrix on
+// purpose: some surfaces (service credentials) must stay out of reach
+// even for an Admin whose matrix grants full Settings access. Mirrors
+// the hard rule in utils/permissions.js (Super Admin is never governed
+// by the editable matrix).
+const requireSuperAdmin = (req, res, next) => {
+    if (!req.user) {
+        return res.status(401).json({ message: 'Not authorized — no token provided.' });
+    }
+    if (req.user.role !== 'Super Admin') {
+        return res.status(403).json({
+            message: 'Only a Super Admin can manage service credentials.',
+        });
+    }
+    next();
+};
+
+module.exports = { requireStaff, requireSuperAdmin, STAFF_ROLES };

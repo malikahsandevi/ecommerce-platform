@@ -29,6 +29,7 @@ import {
   SettingsToggle,
 } from "./SettingsControls";
 import type {
+  CredentialsUpdate,
   SettingsDocument,
   SettingsSection,
   SettingsUser,
@@ -178,6 +179,8 @@ export function SettingsPanel({
       );
     case "Security":
       return <SecurityPanel />;
+    case "Credentials":
+      return <CredentialsPanel />;
     case "API / Integrations":
       return (
         <IntegrationsPanel
@@ -1445,6 +1448,169 @@ const usageTypeOf = (item: Record<string, unknown>): UsageType => {
   if (raw === "ANALYTICS" || raw === "CUSTOM") return "API";
   return "API";
 };
+
+/**
+ * Service credentials — Cloudinary keys + the JWT signing secret, stored
+ * in the backend's database (not in hosting env vars) and editable here,
+ * Super Admin only (the page hides this menu for other roles and the
+ * API answers 403). Secrets are never shown: the API returns only a
+ * mask + a configured flag, so the secret fields start EMPTY — typing a
+ * new value replaces the stored secret, leaving a field blank keeps it.
+ * Saving takes effect immediately, no redeploy.
+ */
+function CredentialsPanel() {
+  const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [savingLocal, setSavingLocal] = useState(false);
+  const [cloudName, setCloudName] = useState("");
+  const [apiKey, setApiKey] = useState("");
+  const [apiSecret, setApiSecret] = useState("");
+  const [jwtSecret, setJwtSecret] = useState("");
+  const [apiSecretConfigured, setApiSecretConfigured] = useState(false);
+  const [jwtSecretConfigured, setJwtSecretConfigured] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    settingsService
+      .getCredentials()
+      .then((data) => {
+        if (cancelled) return;
+        setCloudName(data.cloudinary.cloudName || "");
+        setApiKey(data.cloudinary.apiKey || "");
+        setApiSecretConfigured(Boolean(data.cloudinary.apiSecretConfigured));
+        setJwtSecretConfigured(Boolean(data.jwt.secretConfigured));
+      })
+      .catch((loadError) => {
+        if (!cancelled) {
+          setLoadFailed(true);
+          toast.error(extractApiError(loadError));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const save = async () => {
+    setSavingLocal(true);
+    try {
+      const payload: CredentialsUpdate = {
+        cloudinary: { cloudName: cloudName.trim(), apiKey: apiKey.trim() },
+        jwt: {},
+      };
+      // Blank secret field = keep the stored secret; only a typed value
+      // is sent (and replaces it).
+      if (apiSecret.trim()) payload.cloudinary.apiSecret = apiSecret.trim();
+      if (jwtSecret.trim()) payload.jwt.secret = jwtSecret.trim();
+      const data = await settingsService.updateCredentials(payload);
+      setCloudName(data.cloudinary.cloudName || "");
+      setApiKey(data.cloudinary.apiKey || "");
+      setApiSecretConfigured(Boolean(data.cloudinary.apiSecretConfigured));
+      setJwtSecretConfigured(Boolean(data.jwt.secretConfigured));
+      setApiSecret("");
+      setJwtSecret("");
+      toast.success("Credentials saved — in effect now, no redeploy needed.");
+    } catch (saveError) {
+      toast.error(extractApiError(saveError));
+    } finally {
+      setSavingLocal(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <SettingsCard
+        title="Credentials"
+        description="Service keys for this store, stored securely in the database"
+      >
+        <p className="text-sm text-[var(--text-muted)]">Loading credentials…</p>
+      </SettingsCard>
+    );
+  }
+
+  if (loadFailed) {
+    return (
+      <SettingsCard
+        title="Credentials"
+        description="Service keys for this store, stored securely in the database"
+      >
+        <p className="text-sm text-[var(--text-muted)]">
+          Credentials could not be loaded. Only a Super Admin can view this section — if you are
+          one, try reloading the page.
+        </p>
+      </SettingsCard>
+    );
+  }
+
+  return (
+    <SettingsCard
+      title="Credentials"
+      description="Service keys for this store, stored securely in the database — changes take effect immediately, no redeploy needed"
+    >
+      <div className="space-y-8">
+        <div>
+          <SettingsSectionTitle title="Cloudinary (media storage)" />
+          <div className="mt-4 grid grid-cols-1 gap-5 md:grid-cols-2">
+            <SettingsInput
+              label="Cloud Name"
+              value={cloudName}
+              onChange={(event) => setCloudName(event.target.value)}
+              placeholder="your-cloud-name"
+              autoComplete="off"
+            />
+            <SettingsInput
+              label="API Key"
+              value={apiKey}
+              onChange={(event) => setApiKey(event.target.value)}
+              placeholder="123456789012345"
+              autoComplete="off"
+            />
+            <SettingsInput
+              label="API Secret"
+              type="password"
+              value={apiSecret}
+              onChange={(event) => setApiSecret(event.target.value)}
+              placeholder={
+                apiSecretConfigured ? "•••••••••• — leave blank to keep the current secret" : "Not set yet"
+              }
+              autoComplete="new-password"
+            />
+          </div>
+          <p className="mt-3 text-xs text-[var(--text-muted)]">
+            {apiSecretConfigured
+              ? "A secret is stored. It is never shown — type a new one only if you want to replace it."
+              : "No API secret is stored yet — enter one and save."}
+          </p>
+        </div>
+
+        <div>
+          <SettingsSectionTitle title="Session signing (JWT)" />
+          <div className="mt-4 grid grid-cols-1 gap-5 md:grid-cols-2">
+            <SettingsInput
+              label="JWT Secret"
+              type="password"
+              value={jwtSecret}
+              onChange={(event) => setJwtSecret(event.target.value)}
+              placeholder={
+                jwtSecretConfigured ? "•••••••••• — leave blank to keep the current secret" : "Not set yet"
+              }
+              autoComplete="new-password"
+            />
+          </div>
+          <p className="mt-3 max-w-xl text-xs text-[var(--text-muted)]">
+            This secret signs admin sign-in sessions. Replacing it signs out every admin session
+            (including yours) — everyone will need to sign in again.
+          </p>
+        </div>
+      </div>
+
+      <SettingsSaveButton onSave={() => void save()} saving={savingLocal} />
+    </SettingsCard>
+  );
+}
 
 function IntegrationsPanel({ data, saving, onSave }: SectionPanelProps<Array<Record<string, unknown>>>) {
   const [integrations, setIntegrations] = useState<DynamicIntegration[]>(() =>
