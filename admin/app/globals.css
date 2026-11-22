@@ -83,12 +83,17 @@ body {
   display: none;
 }
 
-/* Scrollbar arrow buttons (Chromium): every scrollable area shows a
-   small chevron button at both ends of its track — up/down on
-   vertical scrollbars, left/right on horizontal ones — and the thumb
-   travels between them. Muted chevron at rest, primary on hover.
-   Firefox has no scrollbar-button support and ignores these rules;
-   the sidebar nav above keeps its fully hidden scrollbar. */
+/* Scrollbar arrow buttons (Chromium): every scrollable area shows
+   ONE solid-triangle arrow button at each end of its track — the
+   classic scrollbar look — in the primary colour so the glyph reads
+   clearly on the track in both themes (darker primary on hover).
+   The thumb travels between the two buttons. Chromium renders
+   scrollbar buttons in pairs at each end (double-button mode); the
+   redundant inner pair (the down-arrow at the top end, the up-arrow
+   at the bottom end, and their horizontal twins) is hidden so each
+   end carries exactly one arrow. Firefox has no scrollbar-button
+   support and ignores these rules; the sidebar nav above keeps its
+   fully hidden scrollbar. */
 ::-webkit-scrollbar-button {
   display: block;
   background-color: transparent;
@@ -96,48 +101,39 @@ body {
   background-position: center;
   background-size: 6px 6px;
 }
+::-webkit-scrollbar-button:vertical:increment:start,
+::-webkit-scrollbar-button:vertical:decrement:end,
+::-webkit-scrollbar-button:horizontal:increment:start,
+::-webkit-scrollbar-button:horizontal:decrement:end {
+  display: none;
+}
 ::-webkit-scrollbar-button:vertical:decrement {
   height: 12px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2 6.5 5 3.5 8 6.5' fill='none' stroke='%2394a3b8' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M5 2 9 8 H1 Z' fill='%23f97316'/%3E%3C/svg%3E");
 }
 ::-webkit-scrollbar-button:vertical:increment {
   height: 12px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2 3.5 5 6.5 8 3.5' fill='none' stroke='%2394a3b8' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M5 8 1 2 H9 Z' fill='%23f97316'/%3E%3C/svg%3E");
 }
 ::-webkit-scrollbar-button:horizontal:decrement {
   width: 12px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M6.5 2 3.5 5 6.5 8' fill='none' stroke='%2394a3b8' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2 5 8 1 V9 Z' fill='%23f97316'/%3E%3C/svg%3E");
 }
 ::-webkit-scrollbar-button:horizontal:increment {
   width: 12px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M3.5 2 6.5 5 3.5 8' fill='none' stroke='%2394a3b8' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M8 5 2 9 V1 Z' fill='%23f97316'/%3E%3C/svg%3E");
 }
 ::-webkit-scrollbar-button:vertical:decrement:hover {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2 6.5 5 3.5 8 6.5' fill='none' stroke='%23f97316' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M5 2 9 8 H1 Z' fill='%23ea580c'/%3E%3C/svg%3E");
 }
 ::-webkit-scrollbar-button:vertical:increment:hover {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2 3.5 5 6.5 8 3.5' fill='none' stroke='%23f97316' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M5 8 1 2 H9 Z' fill='%23ea580c'/%3E%3C/svg%3E");
 }
 ::-webkit-scrollbar-button:horizontal:decrement:hover {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M6.5 2 3.5 5 6.5 8' fill='none' stroke='%23f97316' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2 5 8 1 V9 Z' fill='%23ea580c'/%3E%3C/svg%3E");
 }
 ::-webkit-scrollbar-button:horizontal:increment:hover {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M3.5 2 6.5 5 3.5 8' fill='none' stroke='%23f97316' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-}
-/* Sidebar collapsed state applied BEFORE first paint: the root layout's
-   inline script sets html[data-sidebar="collapsed"] from localStorage
-   before the body parses, so the server-rendered sidebar is already
-   collapsed in the first frame — no expanded→collapsed flash on
-   refresh. The Sidebar component initialises from the same attribute
-   and keeps it in sync when toggled. */
-html[data-sidebar="collapsed"] .admin-sidebar {
-  width: 68px !important;
-}
-html[data-sidebar="collapsed"] .admin-sidebar .sb-label {
-  display: none !important;
-}
-html[data-sidebar="collapsed"] .admin-sidebar .sb-center {
-  justify-content: center !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M8 5 2 9 V1 Z' fill='%23ea580c'/%3E%3C/svg%3E");
 }
 
 /* Global search placeholder: each hint line rolls up into place. */
