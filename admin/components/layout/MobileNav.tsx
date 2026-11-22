@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { Menu, Store, X } from "lucide-react";
 import SidebarItem from "@/components/ui/SidebarItem";
@@ -17,24 +17,51 @@ function initialsOf(name: string): string {
 }
 
 /**
- * Mobile navigation (below sm ONLY, per Ahsan's responsive spec): the
- * nav lives at the TOP of the screen — a normal static bar with the brand,
- * the signed-in admin's chip and a menu button that opens the full
- * nav (every item, permission-filtered exactly like the desktop
- * Sidebar). From sm to lg the left-edge overlay rail in Sidebar.tsx
- * takes over; at lg and up the docked desktop sidebar is untouched.
+ * Top-bar navigation below md ONLY (Ahsan's final sidebar model):
+ * under md the nav lives at the TOP of the screen — a normal static
+ * bar with the brand, the signed-in admin's chip and a menu button
+ * that opens the full nav (every item, permission-filtered exactly
+ * like the desktop Sidebar). From md up the docked desktop sidebar
+ * (Sidebar.tsx) takes over — same style as large devices — and this
+ * bar is hidden.
  */
 const MobileNav: React.FC = () => {
   const pathname = usePathname();
   const { user, hasPermission } = useAdminAuth();
   const [open, setOpen] = useState(false);
   const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null);
+  // The bar + its dropdown live inside this one container, so a press
+  // anywhere outside it (and outside the toggle button, which is also
+  // inside) is an outside click.
+  const barRef = useRef<HTMLDivElement>(null);
 
   // Landing anywhere (a nav tap, a notification click-through) closes
   // the menu — the panel never hovers over the page it navigated to.
   useEffect(() => {
     setOpen(false);
   }, [pathname]);
+
+  // Outside-click close (Ahsan: "mobile or tab view me jab user out of
+  // topbar menu (sidebar) ky click kry tu wo close ho jye"): a pointer
+  // press outside the bar closes the open menu; presses inside the bar
+  // or the menu itself leave it open. Escape closes it too.
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (barRef.current && !barRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open ]);
 
   const avatarSrc = user?.avatar?.trim();
   const showUserImage = Boolean(avatarSrc && failedAvatarUrl !== avatarSrc);
@@ -51,9 +78,9 @@ const MobileNav: React.FC = () => {
     // Normal static bar (Ahsan, 2026-11-22 fix round: the topbar is
     // NOT fixed/sticky at any size) — it scrolls away with the page;
     // z-50 only keeps its open dropdown above the content below.
-    <div className="sm:hidden z-50 mx-3 mt-3 shrink-0">
+    <div className="md:hidden z-50 mx-3 mt-3 shrink-0">
       {/* Top bar — same panel treatment as the desktop sidebar card. */}
-      <div className="relative flex items-center gap-2.5 shadow-xl px-3 py-2.5 bg-(--primary-light) rounded-2xl">
+      <div ref={barRef} className="relative flex items-center gap-2.5 shadow-xl px-3 py-2.5 bg-(--primary-light) rounded-2xl">
         <span className="w-9 h-9 shrink-0 rounded-xl bg-(--primary) text-white flex items-center justify-center shadow-sm">
           <Store className="w-[18px] h-[18px]" />
         </span>
