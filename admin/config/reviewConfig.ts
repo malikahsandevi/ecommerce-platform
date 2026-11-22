@@ -79,6 +79,15 @@ export const reviewConfig = {
     status: "Status",
   },
 
+  // The list only SHOWS a preview of the review body (Ahsan: "review
+  // ki lenght ko truncate ky sth kam karo, yha sirf show krna hai"):
+  // the Review cell renders at most 60 characters + "…". The full
+  // feedback stays in the data, on the cell's title tooltip, and in
+  // the details panel / edit form.
+  columnMaxChars: {
+    content: 60,
+  },
+
   // Map Data for CreateTable Component
   mapTableData: (review: ProductReview) => ({
     id: review._id || String(review.id),

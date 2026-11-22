@@ -17,6 +17,13 @@ export interface CreateTableProps<T extends Record<string, any>> {
    */
   columnAlign?: Record<string, "left" | "center">;
   /**
+   * Per-column character cap for the RENDERED cell text (long
+   * free-text columns — e.g. a review's body): the cell shows at most
+   * this many characters plus "…"; the full value stays in the data
+   * and on the cell's title tooltip.
+   */
+  columnMaxChars?: Record<string, number>;
+  /**
    * User-avatar rows only (the Customers table): the name-cell image
    * becomes an avatar-viewer trigger (eye overlay on hover, FLIP-morph
    * popup on click) with an initial-letter fallback if it fails.
@@ -117,6 +124,7 @@ export function CreateTable<T extends Record<string, any>>({
   onDeleteItem,
   columnHeaders,
   columnAlign,
+  columnMaxChars,
   enableAvatarViewer,
 }: CreateTableProps<T>) {
   const showActions = Boolean(onEditItem || onDeleteItem);
@@ -462,6 +470,16 @@ export function CreateTable<T extends Record<string, any>>({
                           }
                         })()
                       : null;
+                    // Character-capped preview for long free-text
+                    // columns (config-driven): the rendered text is
+                    // cut at the cap with an ellipsis; the cell's
+                    // title (set below from the raw value) and the
+                    // underlying data keep the FULL text.
+                    const charCap = columnMaxChars?.[colKeyStr];
+                    const previewText =
+                      !isUrlCell && charCap && displayText.length > charCap
+                        ? `${displayText.slice(0, charCap).trimEnd()}…`
+                        : displayText;
                     return (
                       <td
                         key={String(colKey) + idx}
@@ -473,7 +491,7 @@ export function CreateTable<T extends Record<string, any>>({
                         }
                       >
                         <span className="block truncate">
-                          {isUrlCell ? urlLabel : displayText}
+                          {isUrlCell ? urlLabel : previewText}
                         </span>
                       </td>
                     );

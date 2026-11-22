@@ -870,6 +870,11 @@ const PageLayout: React.FC = () => {
                     ? (currentConfig.columnAlign as Record<string, "left" | "center">)
                     : undefined
                 }
+                columnMaxChars={
+                  "columnMaxChars" in currentConfig
+                    ? (currentConfig.columnMaxChars as Record<string, number>)
+                    : undefined
+                }
                 enableAvatarViewer={Route.toLowerCase() === "customers"}
               />
             </div>
