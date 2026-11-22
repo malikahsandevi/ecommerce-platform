@@ -54,13 +54,14 @@ function AdminShellInner({ children }: { children: React.ReactNode }) {
           after first paint. The inert styling now toggles on the
           wrapper instead, so the sidebar never remounts. */}
       <div
-        className={`min-w-0 flex-1 flex gap-3 flex-col lg:flex-row ${
+        className={`min-w-0 flex-1 flex gap-3 flex-col sm:flex-row ${
           isAuthenticated ? "" : "pointer-events-none select-none"
         }`}
       >
-        {/* Below lg the nav moves to a top bar (MobileNav) and the
-            sidebar is hidden; at lg+ the row layout and the desktop
-            sidebar are exactly as before. */}
+        {/* Nav per Ahsan's responsive spec: below sm a top bar
+            (MobileNav); sm–lg a left icon rail whose full sidebar
+            floats over the panel as an overlay (Sidebar.tsx); at lg+
+            the docked desktop sidebar, exactly as before. */}
         <MobileNav />
         <Sidebar />
         <div className="flex-1 min-w-0">{children}</div>

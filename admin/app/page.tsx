@@ -341,11 +341,23 @@ export default function Page() {
             </div>
           )}
 
-          {/* Reference grid: main column + tall Top Categories rail */}
-          <div className="grid grid-cols-1 xl:grid-cols-4 gap-3 items-stretch">
-            <div className="xl:col-span-3 flex flex-col gap-3 min-w-0">
-              {/* Stat cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {/* Ahsan's dashboard grid spec — ONE grid, nine blocks:
+              1 stat cards (1.1/1.2/1.3) · 2 Revenue · 3 Monthly Target ·
+              4 Top Categories · 5 New Customers · 6 Inventory ·
+              7 Orders by Status · 8 Recent Orders · 9 Recent Activity.
+              <sm: single column, stat cards stacked.
+              sm–md: single column, the 3 stat cards in one line.
+              md–lg: 2 columns — 1 and 2 span both; 3|4 with 4 spanning
+              rows 3–4 beside 5; 6/7/8/9 span both.
+              lg+: 4 columns — 1 spans cols 1–3 (each stat card exactly
+              one column wide) with 4 in col 4 spanning rows 1–2;
+              2 spans cols 1–2, 3 in col 3; 5 | 6 (cols 2–3) | 7;
+              8 spans cols 1–3, 9 in col 4. Placement only — the blocks'
+              contents are unchanged. */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 items-stretch">
+            {/* Block 1 — the three stat cards as one block */}
+            <div className="md:col-span-2 lg:col-span-3 min-w-0">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 h-full">
                 <DashboardStatCard
                   title="Total Revenue"
                   value={statsLoading ? "" : fmtWholeMoney(stats.totalRevenue)}
@@ -368,50 +380,54 @@ export default function Page() {
                   loading={statsLoading}
                 />
               </div>
-
-              {/* Revenue chart + Monthly target */}
-              <div className="grid grid-cols-1 lg:grid-cols-5 gap-3 flex-1">
-                <section className="lg:col-span-3 min-w-0">
-                  <RevenueAnalytics
-                    dailyData={dailySeries}
-                    monthlyData={monthlySeries}
-                  />
-                </section>
-                <section className="lg:col-span-2 min-w-0">
-                  <MonthlyTargetCard data={monthlyTarget} />
-                </section>
-              </div>
             </div>
 
-            {/* Right rail — spans the stats + chart rows */}
+            {/* Block 2 — Revenue Analysis */}
+            <section className="md:col-span-2 min-w-0">
+              <RevenueAnalytics
+                dailyData={dailySeries}
+                monthlyData={monthlySeries}
+              />
+            </section>
+
+            {/* Block 3 — Monthly Target */}
             <section className="min-w-0">
+              <MonthlyTargetCard data={monthlyTarget} />
+            </section>
+
+            {/* Block 4 — Top Categories: md — right column spanning
+                rows 3–4; lg — pinned to col 4, rows 1–2 (explicit
+                start so auto-placement flows 2 and 3 in beneath 1). */}
+            <section className="md:row-span-2 lg:col-start-4 lg:row-start-1 min-w-0">
               <TopCategories
                 categoriesData={categories}
                 totalSales={totalSales}
                 loading={categories === undefined}
               />
             </section>
-          </div>
 
-          {/* Bottom row — mirrors the reference's three-card strip */}
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-12 gap-3">
-            <section className="xl:col-span-3 min-w-0">
+            {/* Block 5 — New Customers */}
+            <section className="min-w-0">
               <NewCustomersCard customers={newestCustomers} />
             </section>
-            <section className="md:col-span-2 xl:col-span-5 min-w-0">
+
+            {/* Block 6 — Inventory Overview */}
+            <section className="md:col-span-2 min-w-0">
               <InventoryOverviewCard data={inventory} />
             </section>
-            <section className="xl:col-span-4 min-w-0">
+
+            {/* Block 7 — Orders by Status */}
+            <section className="md:col-span-2 lg:col-span-1 min-w-0">
               <OrdersByStatusCard data={ordersByStatus} />
             </section>
-          </div>
 
-          {/* Existing real cards, kept below the new grid */}
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-3">
-            <section className="xl:col-span-2 min-w-0">
+            {/* Block 8 — Recent Orders */}
+            <section className="md:col-span-2 lg:col-span-3 min-w-0">
               <RecentOrdersCard orders={recentOrders} />
             </section>
-            <section className="min-w-0">
+
+            {/* Block 9 — Recent Activity */}
+            <section className="md:col-span-2 lg:col-span-1 min-w-0">
               <ActivityCard logs={activityLogs} />
             </section>
           </div>

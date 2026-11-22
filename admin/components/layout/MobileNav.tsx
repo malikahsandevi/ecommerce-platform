@@ -17,12 +17,12 @@ function initialsOf(name: string): string {
 }
 
 /**
- * Mobile navigation (below lg): the sidebar leaves the left edge and
- * the nav lives at the TOP of the screen instead — a sticky bar with
- * the brand, the signed-in admin's chip and a menu button that opens
- * the full nav (every item, permission-filtered exactly like the
- * desktop Sidebar). At lg and up this renders nothing and the desktop
- * sidebar is untouched.
+ * Mobile navigation (below sm ONLY, per Ahsan's responsive spec): the
+ * nav lives at the TOP of the screen — a sticky bar with the brand,
+ * the signed-in admin's chip and a menu button that opens the full
+ * nav (every item, permission-filtered exactly like the desktop
+ * Sidebar). From sm to lg the left-edge overlay rail in Sidebar.tsx
+ * takes over; at lg and up the docked desktop sidebar is untouched.
  */
 const MobileNav: React.FC = () => {
   const pathname = usePathname();
@@ -48,7 +48,7 @@ const MobileNav: React.FC = () => {
     link === "/" ? pathname === "/" : pathname.startsWith(link);
 
   return (
-    <div className="lg:hidden sticky top-3 z-50 mx-3 mt-3 shrink-0">
+    <div className="sm:hidden sticky top-3 z-50 mx-3 mt-3 shrink-0">
       {/* Top bar — same panel treatment as the desktop sidebar card. */}
       <div className="relative flex items-center gap-2.5 shadow-xl px-3 py-2.5 bg-(--primary-light) rounded-2xl">
         <span className="w-9 h-9 shrink-0 rounded-xl bg-(--primary) text-white flex items-center justify-center shadow-sm">

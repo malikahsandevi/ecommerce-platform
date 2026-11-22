@@ -174,7 +174,7 @@ export const TopBar = <T extends SearchableEntityRecord>({
   );
 
   return (
-    <header className="w-full min-h-14 bg-(--background) rounded-2xl shadow-sm border border-(--border) px-4 py-3 flex flex-wrap items-center justify-between gap-x-2 gap-y-2 select-none">
+    <header className="sticky top-3 max-sm:top-20 z-40 w-full min-h-14 bg-(--background) rounded-2xl shadow-sm border border-(--border) px-4 py-3 flex flex-wrap items-center justify-between gap-x-2 gap-y-2 select-none">
       {/* Dynamic Page Title & Subtitle — shrinkable: the title block
           yields (and truncates) before the controls are pushed out. */}
       <div className="min-w-0">
