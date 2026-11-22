@@ -17,11 +17,18 @@ const router = express.Router();
 router.use(protect, requireStaff);
 
 // GET /api/permissions/me — the signed-in user's own effective
-// permissions; the admin shell gates its UI on this.
+// permissions; the admin shell gates its UI on this. It also carries
+// the account's current name + avatar: the shell refreshes its stored
+// session from this response, and a profile photo set after the last
+// login would otherwise never reach the user chips (they kept showing
+// initials). The avatar passes through the response signer like every
+// other record's, so the chip gets a working signed URL.
 router.get('/me', async (req, res) => {
     try {
         res.json({
             role: req.user.role,
+            name: [req.user.firstName, req.user.lastName].filter(Boolean).join(' '),
+            avatar: req.user.avatar,
             permissions: await getEffectivePermissions(req.user.role),
         });
     } catch (error) {

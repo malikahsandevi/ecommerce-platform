@@ -77,6 +77,14 @@ const Sidebar: React.FC = () => {
     });
   };
 
+  // Signed-in user's photo for the footer card: the image when the
+  // account has one (and it loads), the initials circle otherwise —
+  // the same fallback pattern the TopBar chip uses. Keyed by URL so a
+  // changed photo gets a fresh attempt.
+  const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null);
+  const avatarSrc = user?.avatar?.trim();
+  const showUserImage = Boolean(avatarSrc && failedAvatarUrl !== avatarSrc);
+
   // Modules the signed-in role cannot view are hidden. While permissions
   // are still loading, hasPermission answers "yes" so nothing flickers.
   const canView = (module: string): boolean =>
@@ -159,9 +167,18 @@ const Sidebar: React.FC = () => {
                 }`}
                 title={collapsed ? user.name : undefined}
               >
-                <span className="w-7 h-7 shrink-0 rounded-full bg-(--primary) text-white flex items-center justify-center text-[10px] font-bold">
-                  {initialsOf(user.name || "Admin")}
-                </span>
+                {showUserImage ? (
+                  <img
+                    src={avatarSrc}
+                    alt={user.name || "Admin"}
+                    onError={() => setFailedAvatarUrl(avatarSrc ?? null)}
+                    className="w-7 h-7 shrink-0 rounded-full object-cover"
+                  />
+                ) : (
+                  <span className="w-7 h-7 shrink-0 rounded-full bg-(--primary) text-white flex items-center justify-center text-[10px] font-bold">
+                    {initialsOf(user.name || "Admin")}
+                  </span>
+                )}
                 {!collapsed && (
                   <span className="sb-label min-w-0 leading-tight">
                     <span className="block text-xs font-bold text-(--text) truncate">

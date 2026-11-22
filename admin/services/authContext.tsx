@@ -68,13 +68,29 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         apiClient
           .get('/permissions/me')
           .then((res) => {
-            const fresh = res.data as { role?: string; permissions?: PermissionMatrix };
+            const fresh = res.data as {
+              role?: string;
+              name?: string;
+              avatar?: string;
+              permissions?: PermissionMatrix;
+            };
             if (!fresh?.permissions) return;
             setUser((current) => {
               if (!current) return current;
               const updated: AdminUser = {
                 ...current,
                 role: fresh.role || current.role,
+                // Name + avatar refresh too: a profile photo set after
+                // this session's login must reach the TopBar/sidebar
+                // chips without a logout/login cycle. Same placeholder
+                // normalisation as completeLogin.
+                name: fresh.name || current.name,
+                avatar:
+                  fresh.avatar !== undefined
+                    ? fresh.avatar && fresh.avatar !== 'default-avatar.png'
+                      ? fresh.avatar
+                      : undefined
+                    : current.avatar,
                 permissions: fresh.permissions,
               };
               try {
