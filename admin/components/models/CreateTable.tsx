@@ -141,6 +141,8 @@ export function CreateTable<T extends Record<string, any>>({
     // right edge so the last header cell ends where the body cells end.
     const sbw = bodyWrap.offsetWidth - bodyWrap.clientWidth;
     headerWrap.style.paddingRight = `${sbw}px`;
+    headerWrap.style.setProperty("--sbw", `${sbw}px`);
+    bodyWrap.style.setProperty("--sbw", `${sbw}px`);
 
     const expectedCells = columns.length + (showActions ? 1 : 0);
     const firstRow = bodyTable.tBodies[0]?.rows[0];
@@ -158,21 +160,34 @@ export function CreateTable<T extends Record<string, any>>({
       // scrollLeft mirror) instead of crushing columns together.
       const ruler = getHeaderRuler();
       const headerCells = headerTable.tHead?.rows[0]?.cells;
-      const widths = measured.map((w, i) => {
+      const mins = measured.map((_, i) => {
         const label = headerCells?.[i]?.textContent?.trim() ?? "";
         ruler.textContent = label;
-        const min = Math.max(ruler.getBoundingClientRect().width + 26, 60);
-        return Math.max(w, min);
+        return Math.max(ruler.getBoundingClientRect().width + 22, 60);
       });
+      const widths = measured.map((w, i) => Math.max(w, mins[i]));
 
-      // Fill the container exactly when the columns fit; keep the
-      // wider sum when they overflow (horizontal scroll takes over).
+      // Fit the container exactly. Under-full: the leftover is shared
+      // out proportionally. Over-full: columns sitting above their
+      // header minimum give back space in proportion to their slack,
+      // so the table still fits edge-to-edge instead of scrolling —
+      // a column only keeps an overflowing width when every column
+      // is already at its one-line minimum.
       const available = bodyWrap.clientWidth;
       const total = widths.reduce((a, b) => a + b, 0);
       let finalWidths = widths;
       if (total > 0 && total < available) {
-        const extra = (available - total) / widths.length;
-        finalWidths = widths.map((w) => w + extra);
+        const extra = available - total;
+        finalWidths = widths.map((w) => w + (extra * w) / total);
+      } else if (total > available) {
+        const overflow = total - available;
+        const slack = widths.map((w, i) => Math.max(0, w - mins[i]));
+        const slackTotal = slack.reduce((a, b) => a + b, 0);
+        if (slackTotal >= overflow) {
+          finalWidths = widths.map(
+            (w, i) => w - (overflow * slack[i]) / slackTotal,
+          );
+        }
       }
       const finalTotal = finalWidths.reduce((a, b) => a + b, 0);
 
@@ -214,18 +229,18 @@ export function CreateTable<T extends Record<string, any>>({
       <div ref={headerWrapRef} className="overflow-hidden shrink-0">
         <table
           ref={headerTableRef}
-          className="w-full min-w-170 text-left border-collapse"
+          className="sync-table w-full min-w-170 text-left border-collapse"
         >
           <thead className="bg-[var(--surface)] border-b border-[var(--border)] text-[var(--text-muted)] font-semibold text-[11px] uppercase tracking-wide">
             <tr>
               {columns.map((colKey, index) => (
-                <th key={String(colKey) + index} className="px-3 py-3 whitespace-nowrap">
+                <th key={String(colKey) + index} className="px-2.5 py-3 whitespace-nowrap">
                   <div className="flex items-center gap-1 select-none whitespace-nowrap">
                     {columnHeaders?.[colKey] ?? String(colKey)}
                   </div>
                 </th>
               ))}
-              {showActions && <th className="px-3 py-3 w-20 whitespace-nowrap">Actions</th>}
+              {showActions && <th className="px-2.5 py-3 w-20 whitespace-nowrap">Actions</th>}
             </tr>
           </thead>
         </table>
@@ -242,7 +257,7 @@ export function CreateTable<T extends Record<string, any>>({
       >
         <table
           ref={bodyTableRef}
-          className="w-full min-w-170 text-left border-collapse"
+          className="sync-table w-full min-w-170 text-left border-collapse"
         >
           <tbody className="divide-y divide-[var(--border)] text-xs text-[var(--text)]">
           {hasData ? (
@@ -272,7 +287,7 @@ export function CreateTable<T extends Record<string, any>>({
                       return (
                         <td
                           key={String(colKey) + idx}
-                          className="px-3 py-2.5 align-middle font-mono text-[11px] text-[var(--text-muted)] whitespace-nowrap"
+                          className="px-2.5 py-2.5 align-middle font-mono text-[11px] text-[var(--text-muted)] whitespace-nowrap"
                           title={displayId}
                         >
                           {displayId}
@@ -283,7 +298,7 @@ export function CreateTable<T extends Record<string, any>>({
                     // 2. Status Column (Pill)
                     if (colKeyStr === "status") {
                       return (
-                        <td key={String(colKey) + idx} className="px-3 py-2.5 align-middle">
+                        <td key={String(colKey) + idx} className="px-2.5 py-2.5 align-middle">
                           <StatusPill status={rawValue} />
                         </td>
                       );
@@ -303,7 +318,7 @@ export function CreateTable<T extends Record<string, any>>({
                           imgUrl.startsWith("data:image"));
 
                       return (
-                        <td key={String(colKey) + idx} className="px-3 py-2.5 align-middle">
+                        <td key={String(colKey) + idx} className="px-2.5 py-2.5 align-middle">
                           <div className="flex items-center gap-2.5">
                             {enableAvatarViewer && isUrl ? (
                               <AvatarViewerTrigger
@@ -351,7 +366,7 @@ export function CreateTable<T extends Record<string, any>>({
 
                     // 4. Standard Cells
                     return (
-                      <td key={String(colKey) + idx} className="px-3 py-2.5 align-middle">
+                      <td key={String(colKey) + idx} className="px-2.5 py-2.5 align-middle">
                         {rawValue !== undefined && rawValue !== null && rawValue !== ""
                           ? String(rawValue)
                           : "-"}
@@ -360,7 +375,7 @@ export function CreateTable<T extends Record<string, any>>({
                   })}
 
                   {showActions && (
-                    <td className="px-3 py-2.5 align-middle">
+                    <td className="px-2.5 py-2.5 align-middle">
                       {/* Row actions are ALWAYS visible: muted gray on
                           rest, full colour on the hovered (or selected)
                           row — edit in the primary tone, delete in full

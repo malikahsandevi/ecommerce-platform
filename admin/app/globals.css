@@ -136,6 +136,26 @@ body {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M8 5 2 9 V1 Z' fill='%23ea580c'/%3E%3C/svg%3E");
 }
 
+/* The corner where the horizontal and vertical bars meet (and the
+   resizer) takes the theme's surface colour in both themes — never
+   the browser's default white sliver. */
+::-webkit-scrollbar-corner {
+  background: var(--surface);
+}
+::-webkit-resizer {
+  background: var(--surface);
+}
+
+/* Shared-table edge symmetry: the vertical scrollbar eats into the
+   table's right side, so the last column's right padding is reduced
+   by the scrollbar's width (--sbw, kept current by CreateTable's
+   width sync) — border-to-content distance then matches the left
+   edge exactly. */
+.sync-table th:last-child,
+.sync-table td:last-child {
+  padding-right: max(0px, calc(10px - var(--sbw, 0px)));
+}
+
 /* Close (X) buttons — one treatment everywhere (Ahsan's rule, first
    set on the avatar viewer): the resting state stays each button's
    own; on hover the button turns primary with a white glyph. Applied
