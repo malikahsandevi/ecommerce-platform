@@ -156,6 +156,19 @@ html[data-sidebar="collapsed"] .admin-sidebar .sb-center {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M8 5 2 9 V1 Z' fill='%23ea580c'/%3E%3C/svg%3E");
 }
 
+/* Number inputs: the browser's native spinner arrows are hidden
+   everywhere (webkit + Firefox) — the custom StepperButtons
+   (components/ui/NumberStepper) are the only steppers shown. */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
 /* The corner where the horizontal and vertical bars meet (and the
    resizer) takes the theme's surface colour in both themes — never
    the browser's default white sliver. */

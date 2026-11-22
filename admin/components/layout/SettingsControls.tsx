@@ -1,9 +1,10 @@
 "use client";
 
-import type { InputHTMLAttributes, ReactNode } from "react";
+import { useRef, type InputHTMLAttributes, type ReactNode } from "react";
 import { LoaderCircle, Save } from "lucide-react";
 import Button from "@/components/ui/Button";
 import Select from "@/components/ui/Select";
+import { StepperButtons, steppedValue } from "@/components/ui/NumberStepper";
 
 export function SettingsCard({
   title,
@@ -30,13 +31,42 @@ export function SettingsInput({
   className = "",
   ...props
 }: InputHTMLAttributes<HTMLInputElement> & { label: string }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const isNumber = props.type === "number";
+
+  // Custom steppers for number inputs: compute the stepped value, write
+  // it through the native setter and fire a real input event, so the
+  // caller's existing onChange (which reads event.target.value) runs
+  // exactly as if the value had been typed.
+  const handleStep = (dir: 1 | -1) => {
+    const input = inputRef.current;
+    if (!input) return;
+    const step =
+      props.step === "any" ? 1 : Number(props.step ?? 1) || 1;
+    const min = props.min !== undefined ? Number(props.min) : undefined;
+    const max = props.max !== undefined ? Number(props.max) : undefined;
+    const next = steppedValue(input.value, dir, step, min, max);
+    const setter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      "value",
+    )?.set;
+    setter?.call(input, String(next));
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  };
+
   return (
     <label className={`block ${className}`}>
       <span className="mb-2 block text-xs font-medium text-[var(--text-soft)]">{label}</span>
-      <input
-        {...props}
-        className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-sm text-[var(--text)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]"
-      />
+      <span className="relative block">
+        <input
+          ref={inputRef}
+          {...props}
+          className={`h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-sm text-[var(--text)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)] ${isNumber ? "pr-7" : ""}`}
+        />
+        {isNumber && (
+          <StepperButtons onStep={handleStep} disabled={props.disabled} />
+        )}
+      </span>
     </label>
   );
 }

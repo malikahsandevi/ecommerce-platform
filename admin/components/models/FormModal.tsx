@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import Select, { SelectOption } from "@/components/ui/Select";
 import Button from "@/components/ui/Button";
+import { StepperButtons, steppedValue } from "@/components/ui/NumberStepper";
 import MediaPickerModal from "@/components/models/MediaPickerModal";
 import ImageCropper from "@/components/models/ImageCropper";
 import ProductMediaManager, {
@@ -387,23 +388,34 @@ export const FormModal: React.FC<FormModalProps> = ({
             <label className="font-bold text-[var(--text)] block mb-1 text-xs">
               {field.label} {field.required && <span className="text-red-500">*</span>}
             </label>
-            <input
-              type="number"
-              required={field.required}
-              disabled={field.disabled}
-              min={field.min}
-              max={field.max}
-              step={field.step || 1}
-              value={rawValue === "" || rawValue === undefined ? "" : rawValue}
-              onChange={(e) =>
-                handleFieldChange(
-                  field.name,
-                  e.target.value === "" ? "" : Number(e.target.value)
-                )
-              }
-              placeholder={field.placeholder || "0"}
-              className="w-full px-3 py-2 bg-[var(--surface-muted)] border border-[var(--border)] rounded-xl outline-none text-xs text-[var(--text)] focus:border-[var(--primary)] transition-colors"
-            />
+            <div className="relative">
+              <input
+                type="number"
+                required={field.required}
+                disabled={field.disabled}
+                min={field.min}
+                max={field.max}
+                step={field.step || 1}
+                value={rawValue === "" || rawValue === undefined ? "" : rawValue}
+                onChange={(e) =>
+                  handleFieldChange(
+                    field.name,
+                    e.target.value === "" ? "" : Number(e.target.value)
+                  )
+                }
+                placeholder={field.placeholder || "0"}
+                className="w-full px-3 py-2 pr-7 bg-[var(--surface-muted)] border border-[var(--border)] rounded-xl outline-none text-xs text-[var(--text)] focus:border-[var(--primary)] transition-colors"
+              />
+              <StepperButtons
+                disabled={field.disabled}
+                onStep={(dir) =>
+                  handleFieldChange(
+                    field.name,
+                    steppedValue(rawValue, dir, field.step || 1, field.min, field.max)
+                  )
+                }
+              />
+            </div>
             {field.helperText && (
               <span className="text-[10px] text-[var(--text-muted)] mt-0.5 block">
                 {field.helperText}
