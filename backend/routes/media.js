@@ -6,6 +6,13 @@ const cloudinary = require('../config/cloudinary');
 const { protect } = require('../middleware/auth');
 const { requireStaff } = require('../middleware/admin');
 const { requirePermission } = require('../middleware/permissions');
+const {
+    parseCloudinaryUrl,
+    canonicalUrl,
+    signedUrl,
+    ensureAuthenticatedAsset,
+    destroyAsset,
+} = require('../utils/cloudinaryUrl');
 
 
 const UPLOAD_FOLDER = 'ecommerce-media';
@@ -104,6 +111,10 @@ router.post('/upload', protect, requirePermission('Media', 'create'), express.js
         const result = await cloudinary.uploader.upload(dataUrl, {
             folder: 'ecommerce-media',
             resource_type: 'auto',
+            // Asset protection: new uploads are authenticated-type
+            // assets — they only load through signed URLs (see
+            // utils/cloudinaryUrl.js).
+            type: 'authenticated',
         });
 
         const originalName = filename || result.original_filename || 'file';
@@ -112,7 +123,11 @@ router.post('/upload', protect, requirePermission('Media', 'create'), express.js
         const media = await Media.create({
             filename: result.public_id.split('/').pop(),
             originalName,
-            url: result.secure_url,
+            url: canonicalUrl({
+                resourceType: result.resource_type,
+                publicId: result.public_id,
+                format: result.format || extension,
+            }),
             path: result.public_id,
             mimeType,
             size: result.bytes || 0,
@@ -143,8 +158,11 @@ router.post('/upload', protect, requirePermission('Media', 'create'), express.js
 // registration JSON (below) ever touches the serverless function.
 router.get('/upload-signature', protect, requireStaff, requirePermission('Media', 'create'), (req, res) => {
     const timestamp = Math.round(Date.now() / 1000);
+    // The delivery type is part of the signed parameters: the browser's
+    // direct upload lands as an authenticated-type asset (asset
+    // protection — see utils/cloudinaryUrl.js).
     const signature = cloudinary.utils.api_sign_request(
-        { folder: UPLOAD_FOLDER, timestamp },
+        { folder: UPLOAD_FOLDER, timestamp, type: 'authenticated' },
         process.env.CLOUDINARY_API_SECRET
     );
     res.json({
@@ -153,6 +171,7 @@ router.get('/upload-signature', protect, requireStaff, requirePermission('Media'
         apiKey: process.env['CLOUDINARY_API_KEY'],
         cloudName: process.env.CLOUDINARY_CLOUD_NAME,
         folder: UPLOAD_FOLDER,
+        type: 'authenticated',
     });
 });
 
@@ -170,11 +189,30 @@ router.post('/register', protect, requireStaff, requirePermission('Media', 'crea
         }
 
         const lookupType = ['image', 'video', 'raw'].includes(resourceType) ? resourceType : 'image';
+        // Asset protection: uploads now land as authenticated-type
+        // assets. Verify against that type; if an asset somehow arrived
+        // as a public upload-type asset, migrate it on the spot so the
+        // library never holds a publicly reachable file.
         let resource;
         try {
-            resource = await cloudinary.api.resource(publicId, { resource_type: lookupType });
+            resource = await cloudinary.api.resource(publicId, {
+                resource_type: lookupType,
+                type: 'authenticated',
+            });
         } catch {
-            return res.status(400).json({ message: 'The uploaded file could not be verified on Cloudinary.' });
+            try {
+                const pub = await cloudinary.api.resource(publicId, {
+                    resource_type: lookupType,
+                    type: 'upload',
+                });
+                resource = await ensureAuthenticatedAsset({
+                    publicId,
+                    resourceType: lookupType,
+                    sourceUrl: pub.secure_url,
+                });
+            } catch {
+                return res.status(400).json({ message: 'The uploaded file could not be verified on Cloudinary.' });
+            }
         }
 
         const format = String(resource.format || '').toLowerCase();
@@ -201,7 +239,7 @@ router.post('/register', protect, requireStaff, requirePermission('Media', 'crea
             // A type the library does not accept — remove the orphaned
             // asset instead of leaving it on Cloudinary forever.
             try {
-                await cloudinary.uploader.destroy(publicId, { resource_type: resource.resource_type });
+                await destroyAsset(publicId, resource.resource_type);
             } catch { /* best effort */ }
             return res.status(400).json({ message: `Unsupported file type: ${finalMime || 'unknown'}` });
         }
@@ -211,7 +249,11 @@ router.post('/register', protect, requireStaff, requirePermission('Media', 'crea
         const media = await Media.create({
             filename: fallbackName,
             originalName: storedOriginalName,
-            url: resource.secure_url,
+            url: canonicalUrl({
+                resourceType: resource.resource_type || lookupType,
+                publicId,
+                format,
+            }),
             path: publicId,
             mimeType: finalMime,
             size: resource.bytes || 0,
@@ -399,13 +441,51 @@ router.put('/:id/file', protect, requirePermission('Media', 'edit'), async (req,
         const media = await Media.findById(req.params.id);
         if (!media) return res.status(404).json({ message: 'Not found' });
 
-        const { url, publicId, size, mimeType, format, dimensions, filename } = req.body || {};
-        if (!url || typeof url !== 'string' || !publicId || typeof publicId !== 'string') {
-            return res.status(400).json({ message: 'The new file url and publicId are required.' });
+        const { publicId, size, mimeType, format, dimensions, filename } = req.body || {};
+        if (!publicId || typeof publicId !== 'string') {
+            return res.status(400).json({ message: 'The new file publicId is required.' });
         }
         if (mimeType && !ALLOWED_MIME_TYPES.includes(mimeType)) {
             return res.status(400).json({ message: `Unsupported file type: ${mimeType}` });
         }
+
+        // Asset protection: the stored URL is derived from Cloudinary's
+        // own record of the new asset (never trusted from the client)
+        // and kept in the canonical unsigned authenticated form. An
+        // asset that arrived as a public upload is migrated on the spot.
+        const resourceTypeOf = (mime) =>
+            mime?.startsWith('video/')
+                ? 'video'
+                : mime === 'application/pdf' || mime === 'application/msword'
+                  ? 'raw'
+                  : 'image';
+        const newResourceType = resourceTypeOf(mimeType || media.mimeType);
+        let resource;
+        try {
+            resource = await cloudinary.api.resource(publicId, {
+                resource_type: newResourceType,
+                type: 'authenticated',
+            });
+        } catch {
+            try {
+                const pub = await cloudinary.api.resource(publicId, {
+                    resource_type: newResourceType,
+                    type: 'upload',
+                });
+                resource = await ensureAuthenticatedAsset({
+                    publicId,
+                    resourceType: newResourceType,
+                    sourceUrl: pub.secure_url,
+                });
+            } catch {
+                return res.status(400).json({ message: 'The replacement file could not be verified on Cloudinary.' });
+            }
+        }
+        const url = canonicalUrl({
+            resourceType: resource.resource_type || newResourceType,
+            publicId,
+            format: String(resource.format || format || '').toLowerCase(),
+        });
 
         const oldUrl = media.url;
         const oldPath = media.path;
@@ -413,11 +493,15 @@ router.put('/:id/file', protect, requirePermission('Media', 'edit'), async (req,
 
         media.url = url;
         media.path = publicId;
-        if (typeof size === 'number' && size >= 0) media.size = size;
+        if (typeof resource.bytes === 'number') media.size = resource.bytes;
+        else if (typeof size === 'number' && size >= 0) media.size = size;
         if (mimeType) media.mimeType = mimeType;
-        if (format) media.extension = String(format).toLowerCase();
+        if (resource.format) media.extension = String(resource.format).toLowerCase();
+        else if (format) media.extension = String(format).toLowerCase();
         if (filename) media.filename = String(filename);
-        if (dimensions && (dimensions.width || dimensions.height)) {
+        if (resource.width && resource.height) {
+            media.dimensions = { width: resource.width, height: resource.height };
+        } else if (dimensions && (dimensions.width || dimensions.height)) {
             media.dimensions = {
                 width: dimensions.width || undefined,
                 height: dimensions.height || undefined,
@@ -444,19 +528,16 @@ router.put('/:id/file', protect, requirePermission('Media', 'edit'), async (req,
             await Product.updateMany({ image: oldUrl }, { $set: { image: url } });
             await Brand.updateMany({ logo: oldUrl }, { $set: { logo: url } });
             await Category.updateMany({ image: oldUrl }, { $set: { image: url } });
+            await User.updateMany({ avatar: oldUrl }, { $set: { avatar: url } });
         }
 
-        // Best effort: remove the replaced file from Cloudinary. The
-        // record already points at the new asset, so a failure here only
-        // leaves an orphan behind — it must not fail the save.
+        // Best effort: remove the replaced file from Cloudinary (in
+        // whichever delivery type it exists). The record already points
+        // at the new asset, so a failure here only leaves an orphan
+        // behind — it must not fail the save.
         if (oldPath && oldPath !== publicId) {
             try {
-                const resourceType = oldMimeType?.startsWith('video/')
-                    ? 'video'
-                    : oldMimeType === 'application/pdf' || oldMimeType === 'application/msword'
-                      ? 'raw'
-                      : 'image';
-                await cloudinary.uploader.destroy(oldPath, { resource_type: resourceType });
+                await destroyAsset(oldPath, resourceTypeOf(oldMimeType));
             } catch {
                 /* orphan cleanup is best effort */
             }
@@ -464,6 +545,173 @@ router.put('/:id/file', protect, requirePermission('Media', 'edit'), async (req,
 
         await Media.withCodes([media]);
         res.json(media);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+});
+
+// POST /api/media/protect-migration — one-time, idempotent migration of
+// EXISTING assets to authenticated delivery (asset protection). Each
+// call migrates up to `batch` distinct assets: the asset is re-delivered
+// as an authenticated-type copy, its public copy is destroyed (with CDN
+// invalidation, so old public links die), and every stored reference —
+// media records, product galleries, brand logos, category images, user
+// avatars, settings logo/favicon — is rewritten to the canonical
+// unsigned authenticated URL. Super Admin only. The response reports
+// the old→new mapping per asset so the operator can archive it; call
+// repeatedly until `remaining` reaches 0.
+router.post('/protect-migration', protect, requirePermission('Media', 'edit'), async (req, res) => {
+    res.locals.skipUrlSigning = true; // the mapping must report raw stored values
+    try {
+        if (req.user?.role !== 'Super Admin') {
+            return res.status(403).json({ message: 'Only a Super Admin can run the media protection migration.' });
+        }
+        const { Setting } = require('../models');
+        const batchSize = Math.min(Math.max(Number(req.body?.batch) || 6, 1), 10);
+        const force = Boolean(req.body?.force);
+
+        // --- Collect every stored reference, grouped by asset ---------
+        const assetKey = (p) => `${p.resourceType}:${p.publicId}`;
+        const assets = new Map(); // key -> { parts, refs: Set<string> }
+        const noteValue = (value) => {
+            const parts = parseCloudinaryUrl(value);
+            if (!parts) return;
+            const key = assetKey(parts);
+            if (!assets.has(key)) assets.set(key, { parts, refs: new Set() });
+            assets.get(key).refs.add(value);
+        };
+        const noteDeep = (value, depth = 0) => {
+            if (depth > 8 || value === null || value === undefined) return;
+            if (typeof value === 'string') return noteValue(value);
+            if (Array.isArray(value)) return value.forEach((v) => noteDeep(v, depth + 1));
+            if (typeof value === 'object') Object.values(value).forEach((v) => noteDeep(v, depth + 1));
+        };
+
+        const [mediaDocs, productDocs, brandDocs, categoryDocs, userDocs, settingDoc] =
+            await Promise.all([
+                Media.find().select('url path').lean(),
+                Product.find().select('image images').lean(),
+                Brand.find().select('logo').lean(),
+                Category.find().select('image').lean(),
+                User.find().select('avatar').lean(),
+                Setting.findOne().select('general').lean(),
+            ]);
+        mediaDocs.forEach((d) => noteValue(d.url));
+        productDocs.forEach((d) => { noteValue(d.image); (d.images || []).forEach((e) => noteValue(e?.url)); });
+        brandDocs.forEach((d) => noteValue(d.logo));
+        categoryDocs.forEach((d) => noteValue(d.image));
+        userDocs.forEach((d) => noteValue(d.avatar));
+        if (settingDoc?.general) { noteValue(settingDoc.general.logo); noteValue(settingDoc.general.favicon); }
+
+        // An asset needs work when any stored reference is not already
+        // the canonical authenticated form (or when forced to re-verify).
+        const pending = [...assets.values()].filter(({ parts, refs }) => {
+            if (force) return true;
+            const canonical = canonicalUrl(parts);
+            return [...refs].some((ref) => ref !== canonical);
+        });
+
+        const batch = pending.slice(0, batchSize);
+        const processed = [];
+        const failures = [];
+
+        for (const { parts, refs } of batch) {
+            const canonical = canonicalUrl(parts);
+            try {
+                const uploadRef = [...refs].find((ref) => {
+                    const p = parseCloudinaryUrl(ref);
+                    return p && p.deliveryType === 'upload';
+                });
+                const sourceUrl = uploadRef || signedUrl([...refs][0]);
+                await ensureAuthenticatedAsset({
+                    publicId: parts.publicId,
+                    resourceType: parts.resourceType,
+                    sourceUrl,
+                });
+                processed.push({
+                    publicId: parts.publicId,
+                    resourceType: parts.resourceType,
+                    from: [...refs],
+                    to: canonical,
+                });
+            } catch (error) {
+                failures.push({
+                    publicId: parts.publicId,
+                    resourceType: parts.resourceType,
+                    error: error.message || String(error),
+                });
+            }
+        }
+
+        // --- Rewrite stored references for the migrated assets --------
+        if (processed.length) {
+            const migrated = new Map(processed.map((p) => [`${p.resourceType}:${p.publicId}`, p.to]));
+            const rewriteValue = (value) => {
+                const parts = parseCloudinaryUrl(value);
+                if (!parts) return value;
+                return migrated.get(assetKey(parts)) || value;
+            };
+            const rewriteDoc = async (model, id, fields) => {
+                const update = {};
+                for (const [field, value] of Object.entries(fields)) {
+                    if (value !== undefined) update[field] = value;
+                }
+                if (Object.keys(update).length) {
+                    await model.updateOne({ _id: id }, { $set: update });
+                }
+            };
+
+            const media = await Media.find().select('url path');
+            for (const doc of media) {
+                const next = rewriteValue(doc.url);
+                if (next !== doc.url) await rewriteDoc(Media, doc._id, { url: next });
+            }
+            const products = await Product.find().select('image images');
+            for (const doc of products) {
+                const fields = {};
+                const nextImage = rewriteValue(doc.image || '');
+                if (doc.image && nextImage !== doc.image) fields.image = nextImage;
+                let imagesChanged = false;
+                const nextImages = (doc.images || []).map((entry) => {
+                    const next = rewriteValue(entry?.url || '');
+                    if (entry && next !== entry.url) imagesChanged = true;
+                    return entry ? { ...entry.toObject(), url: next } : entry;
+                });
+                if (imagesChanged) fields.images = nextImages;
+                await rewriteDoc(Product, doc._id, fields);
+            }
+            const brands = await Brand.find().select('logo');
+            for (const doc of brands) {
+                const next = rewriteValue(doc.logo || '');
+                if (doc.logo && next !== doc.logo) await rewriteDoc(Brand, doc._id, { logo: next });
+            }
+            const categories = await Category.find().select('image');
+            for (const doc of categories) {
+                const next = rewriteValue(doc.image || '');
+                if (doc.image && next !== doc.image) await rewriteDoc(Category, doc._id, { image: next });
+            }
+            const users = await User.find().select('avatar');
+            for (const doc of users) {
+                const next = rewriteValue(doc.avatar || '');
+                if (doc.avatar && next !== doc.avatar) await rewriteDoc(User, doc._id, { avatar: next });
+            }
+            const setting = await Setting.findOne().select('general');
+            if (setting?.general) {
+                const fields = {};
+                const nextLogo = rewriteValue(setting.general.logo || '');
+                if (setting.general.logo && nextLogo !== setting.general.logo) fields['general.logo'] = nextLogo;
+                const nextFavicon = rewriteValue(setting.general.favicon || '');
+                if (setting.general.favicon && nextFavicon !== setting.general.favicon) fields['general.favicon'] = nextFavicon;
+                await rewriteDoc(Setting, setting._id, fields);
+            }
+        }
+
+        res.json({
+            processed,
+            failures,
+            remaining: pending.length - processed.length - failures.length + failures.length,
+            totalAssets: assets.size,
+        });
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
@@ -487,7 +735,7 @@ router.route('/:id')
                         : media.mimeType === 'application/pdf' || media.mimeType === 'application/msword'
                           ? 'raw'
                           : 'image';
-                    await cloudinary.uploader.destroy(media.path, { resource_type: resourceType });
+                    await destroyAsset(media.path, resourceType);
                 } catch {
                     /* the record is still deleted below */
                 }

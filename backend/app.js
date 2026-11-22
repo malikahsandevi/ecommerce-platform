@@ -18,6 +18,15 @@ app.use((req, res, next) => {
     next();
 });
 
+// Media asset protection (see utils/cloudinaryUrl.js): stored Cloudinary
+// URLs are UNSIGNED authenticated-type URLs that answer 401 anywhere
+// outside this API. Responses get freshly signed delivery URLs; request
+// bodies are canonicalised back to the stored form so a signed URL the
+// client echoes back is never persisted.
+const { responseSigner, requestCanonicaliser } = require('./utils/cloudinaryUrl');
+app.use('/api', requestCanonicaliser);
+app.use('/api', responseSigner);
+
 // Health route — database ke baghair bhi jawab deta hai.
 app.get('/', (req, res) => {
     res.send('Server live hai!');

@@ -407,7 +407,7 @@ export const mediaService = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   uploadAsset: async (file: File): Promise<any> => {
     const sigRes = await apiClient.get('/media/upload-signature');
-    const { signature, timestamp, apiKey, cloudName, folder } = sigRes.data;
+    const { signature, timestamp, apiKey, cloudName, folder, type } = sigRes.data;
 
     const form = new FormData();
     form.append('file', file);
@@ -415,6 +415,9 @@ export const mediaService = {
     form.append('timestamp', String(timestamp));
     form.append('signature', signature);
     form.append('folder', folder);
+    // Part of the backend's signature: the upload lands as an
+    // authenticated-type asset (only reachable through signed URLs).
+    if (type) form.append('type', String(type));
 
     try {
       const res = await axios.post(
