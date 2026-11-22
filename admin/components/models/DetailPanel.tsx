@@ -178,7 +178,7 @@ export function DetailPanel<T extends DetailPanelData>({
                 )}
 
                 {selectedItem.gallery && selectedItem.gallery.length > 0 && (
-                  <div className="flex items-center gap-2 overflow-x-auto px-[3px] py-[2px]">
+                  <div className="flex items-center gap-2 overflow-x-auto px-[3px] py-[2px] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-[var(--surface)] [&::-webkit-scrollbar-thumb]:bg-[var(--primary)] [&::-webkit-scrollbar-thumb]:rounded-full">
                     {selectedItem.gallery.map((img, idx) => (
                       <img
                         key={idx}
