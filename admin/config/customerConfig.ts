@@ -251,6 +251,7 @@ export const customerConfig = {
       // Profile images are always saved exactly 1:1 — choosing one
       // (Upload or Select) goes through the cropper first.
       cropToSquare: true,
+      uploadPurpose: "profiles",
     },
 
     // Section 2: Account & Role Settings

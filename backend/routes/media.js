@@ -17,6 +17,21 @@ const {
 
 const UPLOAD_FOLDER = 'ecommerce-media';
 
+// Storage organization: uploads are saved into a per-purpose folder
+// under the one root, so the Cloudinary library stays sorted by what
+// an image is FOR. Callers pass a purpose KEY (never a raw folder
+// string); unknown or missing purposes land in the general library.
+const PURPOSE_FOLDERS = {
+    products: `${UPLOAD_FOLDER}/products`,
+    categories: `${UPLOAD_FOLDER}/categories`,
+    brands: `${UPLOAD_FOLDER}/brands`,
+    profiles: `${UPLOAD_FOLDER}/profiles`,
+    settings: `${UPLOAD_FOLDER}/settings`,
+    library: `${UPLOAD_FOLDER}/library`,
+};
+const folderForPurpose = (purpose) =>
+    PURPOSE_FOLDERS[purpose] || PURPOSE_FOLDERS.library;
+
 // Mime types the Media schema accepts.
 const ALLOWED_MIME_TYPES = [
     'image/jpeg',
@@ -109,7 +124,7 @@ router.post('/upload', protect, requirePermission('Media', 'create'), express.js
         }
 
         const result = await cloudinary.uploader.upload(dataUrl, {
-            folder: 'ecommerce-media',
+            folder: folderForPurpose(req.body?.purpose),
             resource_type: 'auto',
             // Asset protection: new uploads are authenticated-type
             // assets — they only load through signed URLs (see
@@ -158,11 +173,14 @@ router.post('/upload', protect, requirePermission('Media', 'create'), express.js
 // registration JSON (below) ever touches the serverless function.
 router.get('/upload-signature', protect, requireStaff, requirePermission('Media', 'create'), (req, res) => {
     const timestamp = Math.round(Date.now() / 1000);
+    // The caller's purpose picks the destination folder (storage
+    // organization); only the fixed purpose keys are honoured.
+    const folder = folderForPurpose(req.query.purpose);
     // The delivery type is part of the signed parameters: the browser's
     // direct upload lands as an authenticated-type asset (asset
     // protection — see utils/cloudinaryUrl.js).
     const signature = cloudinary.utils.api_sign_request(
-        { folder: UPLOAD_FOLDER, timestamp, type: 'authenticated' },
+        { folder, timestamp, type: 'authenticated' },
         process.env.CLOUDINARY_API_SECRET
     );
     res.json({
@@ -170,7 +188,7 @@ router.get('/upload-signature', protect, requireStaff, requirePermission('Media'
         timestamp,
         apiKey: process.env['CLOUDINARY_API_KEY'],
         cloudName: process.env.CLOUDINARY_CLOUD_NAME,
-        folder: UPLOAD_FOLDER,
+        folder,
         type: 'authenticated',
     });
 });
@@ -711,6 +729,254 @@ router.post('/protect-migration', protect, requirePermission('Media', 'edit'), a
             failures,
             remaining: pending.length - processed.length - failures.length + failures.length,
             totalAssets: assets.size,
+        });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+});
+
+// POST /api/media/folder-migration — one-time, idempotent organization
+// of EXISTING assets into the per-purpose folders. Each asset's owner
+// decides its folder (product references → products, category images →
+// categories, brand logos → brands, user avatars → profiles, settings
+// logo/favicon → settings, unreferenced → library). The asset is
+// RENAMED on Cloudinary (delivery type preserved — a public asset is
+// first re-delivered as authenticated, completing its protection),
+// then every stored reference is rewritten to the new canonical URL,
+// exactly like the protection migration. Super Admin only.
+// Body: { dryRun?: boolean, batch?: number } — dryRun returns the full
+// plan without moving anything; otherwise up to `batch` assets move
+// per call and the response reports the old→new mapping per asset.
+router.post('/folder-migration', protect, requirePermission('Media', 'edit'), async (req, res) => {
+    res.locals.skipUrlSigning = true; // mappings must report raw stored values
+    try {
+        if (req.user?.role !== 'Super Admin') {
+            return res.status(403).json({ message: 'Only a Super Admin can run the media folder migration.' });
+        }
+        const { Setting } = require('../models');
+        const dryRun = Boolean(req.body?.dryRun);
+        const batchSize = Math.min(Math.max(Number(req.body?.batch) || 6, 1), 10);
+        const assetKey = (p) => `${p.resourceType}:${p.publicId}`;
+
+        const [mediaDocs, productDocs, brandDocs, categoryDocs, userDocs, settingDoc] =
+            await Promise.all([
+                Media.find().select('url path').lean(),
+                Product.find().select('image images').lean(),
+                Brand.find().select('logo').lean(),
+                Category.find().select('image').lean(),
+                User.find().select('avatar').lean(),
+                Setting.findOne().select('general').lean(),
+            ]);
+
+        // Ownership claims, in priority order — the first claim wins.
+        const ownerOf = new Map();
+        const claim = (value, folder) => {
+            const parts = parseCloudinaryUrl(value);
+            if (!parts) return;
+            const key = assetKey(parts);
+            if (!ownerOf.has(key)) ownerOf.set(key, folder);
+        };
+        productDocs.forEach((d) => { claim(d.image, 'products'); (d.images || []).forEach((e) => claim(e?.url, 'products')); });
+        categoryDocs.forEach((d) => claim(d.image, 'categories'));
+        brandDocs.forEach((d) => claim(d.logo, 'brands'));
+        userDocs.forEach((d) => claim(d.avatar, 'profiles'));
+        if (settingDoc?.general) { claim(settingDoc.general.logo, 'settings'); claim(settingDoc.general.favicon, 'settings'); }
+
+        // The plan: one move per distinct asset that is not already in
+        // its owner's folder. Non-Cloudinary values are left alone.
+        const planByKey = new Map();
+        for (const doc of mediaDocs) {
+            const parts = parseCloudinaryUrl(doc.url);
+            if (!parts) continue;
+            const key = assetKey(parts);
+            if (planByKey.has(key)) continue;
+            const folder = ownerOf.get(key) || 'library';
+            const base = parts.publicId.split('/').pop();
+            const toPath = `${UPLOAD_FOLDER}/${folder}/${base}`;
+            if (parts.publicId === toPath) continue;
+            planByKey.set(key, {
+                mediaId: doc._id,
+                parts,
+                folder,
+                fromPath: parts.publicId,
+                toPath,
+                fromUrl: canonicalUrl(parts),
+                toUrl: canonicalUrl({ ...parts, publicId: toPath }),
+            });
+        }
+        const plan = [...planByKey.values()];
+
+        if (dryRun) {
+            return res.json({
+                dryRun: true,
+                totalPlanned: plan.length,
+                plan: plan.map((p) => ({
+                    mediaId: p.mediaId, folder: p.folder,
+                    fromPath: p.fromPath, toPath: p.toPath,
+                    from: p.fromUrl, to: p.toUrl,
+                })),
+            });
+        }
+
+        const batch = plan.slice(0, batchSize);
+        const processed = [];
+        const failures = [];
+
+        for (const item of batch) {
+            try {
+                // Locate the asset and its delivery type.
+                let dtype = 'authenticated';
+                let found = true;
+                try {
+                    await cloudinary.api.resource(item.fromPath, {
+                        resource_type: item.parts.resourceType,
+                        type: 'authenticated',
+                    });
+                } catch {
+                    try {
+                        await cloudinary.api.resource(item.fromPath, {
+                            resource_type: item.parts.resourceType,
+                            type: 'upload',
+                        });
+                        dtype = 'upload';
+                    } catch {
+                        found = false;
+                    }
+                }
+                if (!found) throw new Error('asset not found on Cloudinary');
+
+                // A public asset is re-delivered as authenticated
+                // first (same public_id), so the rename below keeps
+                // the protected delivery type.
+                if (dtype === 'upload') {
+                    await ensureAuthenticatedAsset({
+                        publicId: item.fromPath,
+                        resourceType: item.parts.resourceType,
+                        sourceUrl: signedUrl(item.fromUrl),
+                    });
+                    dtype = 'authenticated';
+                }
+
+                // The target name must be free in both delivery types.
+                let occupied = false;
+                for (const t of ['authenticated', 'upload']) {
+                    try {
+                        await cloudinary.api.resource(item.toPath, {
+                            resource_type: item.parts.resourceType,
+                            type: t,
+                        });
+                        occupied = true;
+                    } catch { /* free in this type */ }
+                }
+                if (occupied) throw new Error('target public_id already exists');
+
+                await cloudinary.uploader.rename(item.fromPath, item.toPath, {
+                    resource_type: item.parts.resourceType,
+                    type: dtype,
+                    invalidate: true,
+                });
+
+                // Verify the moved asset answers as authenticated —
+                // protection must survive the move.
+                await cloudinary.api.resource(item.toPath, {
+                    resource_type: item.parts.resourceType,
+                    type: 'authenticated',
+                });
+
+                processed.push({
+                    mediaId: item.mediaId,
+                    folder: item.folder,
+                    resourceType: item.parts.resourceType,
+                    fromPath: item.fromPath,
+                    toPath: item.toPath,
+                    from: item.fromUrl,
+                    to: item.toUrl,
+                });
+            } catch (error) {
+                failures.push({
+                    mediaId: item.mediaId,
+                    fromPath: item.fromPath,
+                    error: error.message || String(error),
+                });
+            }
+        }
+
+        // Rewrite every stored reference for the moved assets (media
+        // url + path included), keyed by asset identity so any stored
+        // form of the old URL follows.
+        if (processed.length) {
+            const movedByKey = new Map(
+                processed.map((p) => [`${p.resourceType}:${p.fromPath}`, p]),
+            );
+            const rewriteValue = (value) => {
+                const parts = parseCloudinaryUrl(value);
+                if (!parts) return value;
+                const hit = movedByKey.get(assetKey(parts));
+                return hit ? hit.to : value;
+            };
+            const rewriteDoc = async (model, id, fields) => {
+                if (Object.keys(fields).length) {
+                    await model.updateOne({ _id: id }, { $set: fields });
+                }
+            };
+
+            const media = await Media.find().select('url path');
+            for (const doc of media) {
+                const next = rewriteValue(doc.url);
+                if (next !== doc.url) {
+                    const parts = parseCloudinaryUrl(doc.url);
+                    const hit = parts ? movedByKey.get(assetKey(parts)) : null;
+                    await rewriteDoc(Media, doc._id, {
+                        url: next,
+                        ...(hit ? { path: hit.toPath } : {}),
+                    });
+                }
+            }
+            const products = await Product.find().select('image images');
+            for (const doc of products) {
+                const fields = {};
+                const nextImage = rewriteValue(doc.image || '');
+                if (doc.image && nextImage !== doc.image) fields.image = nextImage;
+                let imagesChanged = false;
+                const nextImages = (doc.images || []).map((entry) => {
+                    const next = rewriteValue(entry?.url || '');
+                    if (entry && next !== entry.url) imagesChanged = true;
+                    return entry ? { ...entry.toObject(), url: next } : entry;
+                });
+                if (imagesChanged) fields.images = nextImages;
+                await rewriteDoc(Product, doc._id, fields);
+            }
+            const brands = await Brand.find().select('logo');
+            for (const doc of brands) {
+                const next = rewriteValue(doc.logo || '');
+                if (doc.logo && next !== doc.logo) await rewriteDoc(Brand, doc._id, { logo: next });
+            }
+            const categories = await Category.find().select('image');
+            for (const doc of categories) {
+                const next = rewriteValue(doc.image || '');
+                if (doc.image && next !== doc.image) await rewriteDoc(Category, doc._id, { image: next });
+            }
+            const users = await User.find().select('avatar');
+            for (const doc of users) {
+                const next = rewriteValue(doc.avatar || '');
+                if (doc.avatar && next !== doc.avatar) await rewriteDoc(User, doc._id, { avatar: next });
+            }
+            const setting = await Setting.findOne().select('general');
+            if (setting?.general) {
+                const fields = {};
+                const nextLogo = rewriteValue(setting.general.logo || '');
+                if (setting.general.logo && nextLogo !== setting.general.logo) fields['general.logo'] = nextLogo;
+                const nextFavicon = rewriteValue(setting.general.favicon || '');
+                if (setting.general.favicon && nextFavicon !== setting.general.favicon) fields['general.favicon'] = nextFavicon;
+                await rewriteDoc(Setting, setting._id, fields);
+            }
+        }
+
+        res.json({
+            processed,
+            failures,
+            remaining: plan.length - processed.length,
+            totalPlanned: plan.length,
         });
     } catch (error) {
         res.status(500).json({ message: error.message });

@@ -66,6 +66,12 @@ export interface FormField {
    * Used for profile avatars, which render round everywhere.
    */
   cropToSquare?: boolean;
+  /**
+   * Image fields only: the storage purpose folder uploads for this
+   * field land in (see services/resourceRegistry MEDIA_PURPOSES).
+   * Defaults to the general library folder.
+   */
+  uploadPurpose?: import("@/services/resourceRegistry").MediaPurpose;
   min?: number;
   max?: number;
   step?: number;
@@ -233,7 +239,11 @@ export const FormModal: React.FC<FormModalProps> = ({
     if (!file) return;
     setImageUpload({ field: fieldName, busy: true, error: "" });
     try {
-      const uploaded = await mediaService.upload({ file, title: file.name });
+      const uploaded = await mediaService.upload({
+        file,
+        title: file.name,
+        purpose: fields.find((f) => f.name === fieldName)?.uploadPurpose,
+      });
       if (!uploaded?.url) throw new Error("The upload did not return a URL.");
       handleFieldChange(fieldName, uploaded.url);
       setImageUpload({ field: fieldName, busy: false, error: "" });
@@ -873,6 +883,11 @@ export const FormModal: React.FC<FormModalProps> = ({
         isOpen={cropTarget !== null}
         imageUrl={cropTarget?.url ?? null}
         sourceName={cropTarget?.name}
+        uploadPurpose={
+          cropTarget
+            ? fields.find((f) => f.name === cropTarget.field)?.uploadPurpose
+            : undefined
+        }
         onClose={() => setCropTarget(null)}
         onApply={({ url }) => {
           if (cropTarget) {

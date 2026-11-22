@@ -18,7 +18,7 @@ import {
   FolderTree,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
-import { mediaService } from "@/services/resourceRegistry";
+import { mediaService, purposeFromAssetUrl } from "@/services/resourceRegistry";
 
 /** One product in the Edit Media panel's "Used In" list. */
 export interface MediaUsageProduct {
@@ -881,7 +881,12 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
                 processedNameFor(currentItem.file.name, mime),
                 { type: mime },
               );
-              const uploaded = await mediaService.uploadAsset(optimizedFile);
+              // The replacement stays in the same folder family as
+              // the record it replaces (storage organization).
+              const uploaded = await mediaService.uploadAsset(
+                optimizedFile,
+                purposeFromAssetUrl(currentItem.previewUrl),
+              );
               const updated = await mediaService.replaceFile(
                 String(currentItem.id),
                 {

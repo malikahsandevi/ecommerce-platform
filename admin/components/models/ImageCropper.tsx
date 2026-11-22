@@ -14,6 +14,9 @@ export interface ImageCropperProps {
    *  picker). The cropped file is named after it; without it the name
    *  is derived from the image URL's file segment. */
   sourceName?: string | null;
+  /** Storage purpose folder the cropped upload lands in (the field
+   *  the cropper was opened from decides). Defaults to the library. */
+  uploadPurpose?: import("@/services/resourceRegistry").MediaPurpose;
   onClose: () => void;
   /** Receives the URL of the cropped image after it has been uploaded
    *  and registered in the media library. */
@@ -60,6 +63,7 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({
   isOpen,
   imageUrl,
   sourceName,
+  uploadPurpose,
   onClose,
   onApply,
 }) => {
@@ -171,7 +175,7 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({
       // media record shows.
       const name = cropedFileName(sourceName, imageUrl);
       const file = new File([blob], name, { type: "image/jpeg" });
-      const record = await mediaService.upload({ file, title: name });
+      const record = await mediaService.upload({ file, title: name, purpose: uploadPurpose });
       if (!record?.url) throw new Error("The upload did not return a URL.");
       onApply({ url: record.url });
     } catch (error) {

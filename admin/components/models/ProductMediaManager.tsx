@@ -57,7 +57,7 @@ export const ProductMediaManager: React.FC<ProductMediaManagerProps> = ({
       const next = [...images];
       for (const file of Array.from(files)) {
         if (next.length >= maxImages) break;
-        const uploaded = await mediaService.upload({ file, title: file.name });
+        const uploaded = await mediaService.upload({ file, title: file.name, purpose: "products" });
         if (!uploaded?.url) throw new Error("The upload did not return a URL.");
         next.push({
           url: uploaded.url,

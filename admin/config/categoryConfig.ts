@@ -197,6 +197,7 @@ export const categoryConfig = {
       colSpan: 2,
       placeholder: "https://...",
       section: "Visual Assets",
+      uploadPurpose: "categories",
     },
 
     // Section 3: Description

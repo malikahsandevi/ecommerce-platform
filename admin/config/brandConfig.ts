@@ -170,6 +170,7 @@ export const brandConfig = {
       colSpan: 2,
       placeholder: "https://...",
       section: "Visual Assets",
+      uploadPurpose: "brands",
     },
 
     // Section 3: Description

@@ -401,6 +401,34 @@ export function getResourceService(pathname: string): ResourceService | null {
   };
 }
 
+/**
+ * Storage organization: every upload declares what the image is FOR,
+ * and the backend saves it into that purpose's folder under
+ * `ecommerce-media/` (products/, categories/, brands/, profiles/,
+ * settings/, library/). The backend validates the key — these are
+ * the only values that exist.
+ */
+export const MEDIA_PURPOSES = [
+  "products",
+  "categories",
+  "brands",
+  "profiles",
+  "settings",
+  "library",
+] as const;
+export type MediaPurpose = (typeof MEDIA_PURPOSES)[number];
+
+/** The purpose folder an existing asset URL already lives in (used
+ *  when replacing a file behind a record — the replacement stays in
+ *  the same folder family). Defaults to the general library. */
+export function purposeFromAssetUrl(url?: string): MediaPurpose {
+  const match = (url || "").match(/\/ecommerce-media\/([a-z]+)\//);
+  const key = match?.[1];
+  return (MEDIA_PURPOSES as readonly string[]).includes(key ?? "")
+    ? (key as MediaPurpose)
+    : "library";
+}
+
 export const mediaService = {
   /**
    * Uploads the file DIRECTLY to Cloudinary with a signature issued by
@@ -419,8 +447,10 @@ export const mediaService = {
    * `replaceFile`, which swaps the file behind an existing record.
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  uploadAsset: async (file: File): Promise<any> => {
-    const sigRes = await apiClient.get('/media/upload-signature');
+  uploadAsset: async (file: File, purpose?: MediaPurpose): Promise<any> => {
+    const sigRes = await apiClient.get('/media/upload-signature', {
+      params: purpose ? { purpose } : undefined,
+    });
     const { signature, timestamp, apiKey, cloudName, folder, type } = sigRes.data;
 
     const form = new FormData();
@@ -453,7 +483,7 @@ export const mediaService = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   upload: async (data: any) => {
     const file = data.file as File;
-    const uploaded = await mediaService.uploadAsset(file);
+    const uploaded = await mediaService.uploadAsset(file, data.purpose as MediaPurpose | undefined);
 
     // Small JSON registration — the backend reads the file's real facts
     // (URL, size, format, dimensions) back from Cloudinary itself.
