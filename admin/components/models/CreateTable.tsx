@@ -11,11 +11,40 @@ export interface CreateTableProps<T extends Record<string, any>> {
   onDeleteItem?: (item: T) => void;
   columnHeaders?: { [key in keyof T]?: string };
   /**
+   * Per-column alignment overrides from the resource config. The
+   * default rule (see defaultColumnAlign) already covers the standard
+   * keys; a config only lists the columns that break it.
+   */
+  columnAlign?: Record<string, "left" | "center">;
+  /**
    * User-avatar rows only (the Customers table): the name-cell image
    * becomes an avatar-viewer trigger (eye overlay on hover, FLIP-morph
    * popup on click) with an initial-letter fallback if it fails.
    */
   enableAvatarViewer?: boolean;
+}
+
+/**
+ * Column alignment rule (Ahsan's): the identifier/text columns — ID,
+ * SKU, order number, and every name column — start from the LEFT;
+ * every other column is CENTRED, its header sitting centred over its
+ * centred content. Resource configs can override a column through
+ * their `columnAlign` map when a key breaks the rule.
+ */
+function defaultColumnAlign(key: string): "left" | "center" {
+  const k = key.toLowerCase();
+  if (
+    k === "_id" ||
+    k === "id" ||
+    k === "sku" ||
+    k === "ordernumber" ||
+    k === "name" ||
+    k === "title" ||
+    k.endsWith("name")
+  ) {
+    return "left";
+  }
+  return "center";
 }
 
 /**
@@ -87,9 +116,13 @@ export function CreateTable<T extends Record<string, any>>({
   onEditItem,
   onDeleteItem,
   columnHeaders,
+  columnAlign,
   enableAvatarViewer,
 }: CreateTableProps<T>) {
   const showActions = Boolean(onEditItem || onDeleteItem);
+
+  const alignFor = (key: string): "left" | "center" =>
+    columnAlign?.[key] ?? defaultColumnAlign(key);
   const [internalSelectedItem, setInternalSelectedItem] = useState<T | null>(null);
 
   const currentSelectedItem =
@@ -248,14 +281,20 @@ export function CreateTable<T extends Record<string, any>>({
         >
           <thead className="bg-[var(--surface)] border-b border-[var(--border)] text-[var(--text-muted)] font-semibold text-[11px] uppercase tracking-wide">
             <tr>
-              {columns.map((colKey, index) => (
-                <th key={String(colKey) + index} className="px-2.5 py-3 whitespace-nowrap">
-                  <div className="flex items-center gap-1 select-none whitespace-nowrap">
-                    {columnHeaders?.[colKey] ?? String(colKey)}
-                  </div>
-                </th>
-              ))}
-              {showActions && <th className="px-2.5 py-3 w-20 whitespace-nowrap">Actions</th>}
+              {columns.map((colKey, index) => {
+                const align = alignFor(String(colKey));
+                return (
+                  <th
+                    key={String(colKey) + index}
+                    className={`px-2.5 py-3 whitespace-nowrap ${align === "center" ? "text-center" : "text-left"}`}
+                  >
+                    <div className={`flex items-center gap-1 select-none whitespace-nowrap ${align === "center" ? "justify-center" : ""}`}>
+                      {columnHeaders?.[colKey] ?? String(colKey)}
+                    </div>
+                  </th>
+                );
+              })}
+              {showActions && <th className="px-2.5 py-3 w-20 whitespace-nowrap text-center">Actions</th>}
             </tr>
           </thead>
         </table>
@@ -292,6 +331,10 @@ export function CreateTable<T extends Record<string, any>>({
                   {columns.map((colKey, idx) => {
                     const rawValue = item[colKey];
                     const colKeyStr = String(colKey).toLowerCase();
+                    const alignClass =
+                      alignFor(String(colKey)) === "center"
+                        ? "text-center"
+                        : "text-left";
 
                     // 1. ID Column — the short public code when the row
                     // carries one, otherwise the truncated raw id.
@@ -302,7 +345,7 @@ export function CreateTable<T extends Record<string, any>>({
                       return (
                         <td
                           key={String(colKey) + idx}
-                          className="px-2.5 py-2.5 align-middle font-mono text-[11px] text-[var(--text-muted)] whitespace-nowrap overflow-hidden"
+                          className={`px-2.5 py-2.5 align-middle font-mono text-[11px] text-[var(--text-muted)] whitespace-nowrap overflow-hidden ${alignClass}`}
                           title={displayId}
                         >
                           <span className="block truncate">{displayId}</span>
@@ -313,7 +356,7 @@ export function CreateTable<T extends Record<string, any>>({
                     // 2. Status Column (Pill)
                     if (colKeyStr === "status") {
                       return (
-                        <td key={String(colKey) + idx} className="px-2.5 py-2.5 align-middle overflow-hidden">
+                        <td key={String(colKey) + idx} className={`px-2.5 py-2.5 align-middle overflow-hidden ${alignClass}`}>
                           <StatusPill status={rawValue} />
                         </td>
                       );
@@ -335,7 +378,7 @@ export function CreateTable<T extends Record<string, any>>({
                       return (
                         <td
                           key={String(colKey) + idx}
-                          className="px-2.5 py-2.5 align-middle overflow-hidden"
+                          className={`px-2.5 py-2.5 align-middle overflow-hidden ${alignClass}`}
                           title={rawValue !== undefined && rawValue !== null ? String(rawValue) : undefined}
                         >
                           <div className="flex items-center gap-2.5 min-w-0">
@@ -391,7 +434,7 @@ export function CreateTable<T extends Record<string, any>>({
                     return (
                       <td
                         key={String(colKey) + idx}
-                        className="px-2.5 py-2.5 align-middle overflow-hidden"
+                        className={`px-2.5 py-2.5 align-middle overflow-hidden ${alignClass}`}
                         title={
                           typeof rawValue === "string" || typeof rawValue === "number"
                             ? String(rawValue)
@@ -408,13 +451,13 @@ export function CreateTable<T extends Record<string, any>>({
                   })}
 
                   {showActions && (
-                    <td className="px-2.5 py-2.5 align-middle overflow-hidden">
+                    <td className="px-2.5 py-2.5 align-middle overflow-hidden text-center">
                       {/* Row actions are ALWAYS visible: muted gray on
                           rest, full colour on the hovered (or selected)
                           row — edit in the primary tone, delete in full
                           red — with a smooth colour transition both
                           ways. */}
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1 justify-center">
                         {onEditItem && (
                           <button
                             type="button"

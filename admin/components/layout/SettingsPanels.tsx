@@ -883,10 +883,10 @@ function UsersPanel({
           <thead className="bg-[var(--surface)] text-xs text-[var(--text-muted)]">
             <tr>
               <th className="px-4 py-3 whitespace-nowrap">Name</th>
-              <th className="px-4 py-3 whitespace-nowrap">Email</th>
-              <th className="px-4 py-3 whitespace-nowrap">Role</th>
-              <th className="px-4 py-3 whitespace-nowrap">Status</th>
-              <th className="px-4 py-3 text-right whitespace-nowrap">Actions</th>
+              <th className="px-4 py-3 whitespace-nowrap text-center">Email</th>
+              <th className="px-4 py-3 whitespace-nowrap text-center">Role</th>
+              <th className="px-4 py-3 whitespace-nowrap text-center">Status</th>
+              <th className="px-4 py-3 text-center whitespace-nowrap">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -898,8 +898,8 @@ function UsersPanel({
                     {[user.firstName, user.lastName].filter(Boolean).join(" ") || user.name || "Unnamed user"}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-[var(--text-soft)]">{user.email}</td>
-                <td className="px-4 py-3">
+                <td className="px-4 py-3 text-[var(--text-soft)] text-center">{user.email}</td>
+                <td className="px-4 py-3 text-center">
                   <select
                     aria-label={`Role for ${user.email}`}
                     value={user.role || "Customer"}
@@ -914,7 +914,7 @@ function UsersPanel({
                     ))}
                   </select>
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-4 py-3 text-center">
                   <button
                     type="button"
                     disabled={!canEditUsers}
@@ -929,7 +929,7 @@ function UsersPanel({
                     {user.isActive === false ? "Inactive" : "Active"}
                   </button>
                 </td>
-                <td className="px-4 py-3 text-right">
+                <td className="px-4 py-3 text-center">
                   {/* Same row-action rule as the shared resource
                       tables: always visible, muted at rest, full
                       colour on the hovered row. (This table's row

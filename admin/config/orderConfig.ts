@@ -133,6 +133,13 @@ export const orderConfig = {
   searchFields: ["orderNumber", "status", "paymentStatus", "trackingNumber", "code"],
 
   // Table Headers
+  // Alignment overrides: the Customer column holds the customer's
+  // name, so it follows the name-column rule (left) even though its
+  // key does not end in "name".
+  columnAlign: {
+    customer: "left",
+  },
+
   columnHeaders: {
     orderNumber: "Order #",
     customer: "Customer",
