@@ -58,6 +58,14 @@ export interface FormField {
    * after creation — e.g. a review's Product and Customer.
    */
   disableOnEdit?: boolean;
+  /**
+   * Image fields only: the image must be saved EXACTLY square (1:1).
+   * Choosing a new image — via Upload or the library Select — opens
+   * the 1:1 cropper first and nothing is uploaded until the crop is
+   * applied; clicking the current image re-opens the cropper on it.
+   * Used for profile avatars, which render round everywhere.
+   */
+  cropToSquare?: boolean;
   min?: number;
   max?: number;
   step?: number;
@@ -160,7 +168,21 @@ export const FormModal: React.FC<FormModalProps> = ({
     /** Original file name when known (picker items carry it) — the
      *  cropper names its output after it. */
     name?: string;
+    /** The url is a local object URL of a just-chosen file (square-crop
+     *  fields route uploads through the cropper before anything is
+     *  sent) — revoked as soon as the cropper closes. */
+    objectUrl?: boolean;
   } | null>(null);
+
+  // Revoke a pending object URL the moment its cropper closes (Apply,
+  // Cancel, Esc — every exit path clears cropTarget).
+  const cropObjectUrlRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!cropTarget && cropObjectUrlRef.current) {
+      URL.revokeObjectURL(cropObjectUrlRef.current);
+      cropObjectUrlRef.current = null;
+    }
+  }, [cropTarget]);
 
   // Backdrop dismissal: a click closes the form only when the press
   // BOTH started and ended on the overlay itself — clicks inside the
@@ -189,6 +211,21 @@ export const FormModal: React.FC<FormModalProps> = ({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [isOpen, cropTarget, pickerField, onClose]);
+
+  // A file chosen for an image field. Square-crop fields (profile
+  // avatars) do NOT upload yet: the cropper opens on the local file
+  // first, and only the applied 1:1 crop is ever uploaded. Other
+  // fields upload straight away, as before.
+  const handleImageChosen = (field: FormField, file: File | undefined) => {
+    if (!file) return;
+    if (field.cropToSquare) {
+      const url = URL.createObjectURL(file);
+      cropObjectUrlRef.current = url;
+      setCropTarget({ field: field.name, url, fromPicker: false, name: file.name, objectUrl: true });
+      return;
+    }
+    void handleImageFile(field.name, file);
+  };
 
   // Image fields accept a pasted URL or a real file — files go through the
   // media library upload endpoint and the field receives the hosted URL.
@@ -629,7 +666,7 @@ export const FormModal: React.FC<FormModalProps> = ({
                   accept="image/*"
                   className="hidden"
                   onChange={(e) => {
-                    void handleImageFile(field.name, e.target.files?.[0]);
+                    handleImageChosen(field, e.target.files?.[0]);
                     e.target.value = "";
                   }}
                 />

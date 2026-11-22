@@ -248,6 +248,9 @@ export const customerConfig = {
       colSpan: 2,
       placeholder: "https://...",
       section: "Personal Information",
+      // Profile images are always saved exactly 1:1 — choosing one
+      // (Upload or Select) goes through the cropper first.
+      cropToSquare: true,
     },
 
     // Section 2: Account & Role Settings
