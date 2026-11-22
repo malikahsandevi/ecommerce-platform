@@ -16,7 +16,7 @@ interface NewCustomersCardProps {
 
 /** Same thin styled scrollbar as the media panel's scroll areas. */
 const SCROLLBAR_CLASSES =
-  "[&::-webkit-scrollbar]:w-[6px] [&::-webkit-scrollbar]:h-[6px] [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[var(--primary)] [&::-webkit-scrollbar-thumb]:rounded-[4px] [&::-webkit-scrollbar-button]:hidden [scrollbar-width:thin] [scrollbar-color:var(--primary)_transparent]";
+  "[&::-webkit-scrollbar]:w-[6px] [&::-webkit-scrollbar]:h-[6px] [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[var(--primary)] [&::-webkit-scrollbar-thumb]:rounded-[4px] [scrollbar-width:thin] [scrollbar-color:var(--primary)_transparent]";
 
 /** One customer row is exactly 56px tall (h-14, border included), so
  *  the list shows exactly 3 rows: 3 × 56 = 168px. */

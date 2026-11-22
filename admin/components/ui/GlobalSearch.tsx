@@ -244,7 +244,7 @@ export const GlobalSearch: React.FC = () => {
       )}
 
       {showPanel && (
-        <div className="absolute left-0 right-0 top-full z-50 mt-2 max-h-80 overflow-y-auto rounded-xl border border-neutral-800 bg-white py-1 shadow-[0_16px_40px_-8px_rgba(0,0,0,0.45)] animate-in fade-in zoom-in-95 duration-100 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-button]:hidden [&::-webkit-scrollbar-track]:bg-neutral-100 [&::-webkit-scrollbar-thumb]:bg-[var(--primary)] [&::-webkit-scrollbar-thumb]:rounded-full">
+        <div className="absolute left-0 right-0 top-full z-50 mt-2 max-h-80 overflow-y-auto rounded-xl border border-neutral-800 bg-white py-1 shadow-[0_16px_40px_-8px_rgba(0,0,0,0.45)] animate-in fade-in zoom-in-95 duration-100 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-neutral-100 [&::-webkit-scrollbar-thumb]:bg-[var(--primary)] [&::-webkit-scrollbar-thumb]:rounded-full">
           {scope !== "all" && (
             <p className="border-b border-neutral-200 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-500">
               {SCOPE_LABEL[scope]} only

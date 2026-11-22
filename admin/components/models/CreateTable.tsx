@@ -190,7 +190,7 @@ export function CreateTable<T extends Record<string, any>>({
             headerWrapRef.current.scrollLeft = bodyWrapRef.current.scrollLeft;
           }
         }}
-        className="overflow-auto flex-1 w-full min-h-0 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-[var(--surface)] [&::-webkit-scrollbar-thumb]:bg-[var(--primary)] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-button]:hidden"
+        className="overflow-auto flex-1 w-full min-h-0 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-[var(--surface)] [&::-webkit-scrollbar-thumb]:bg-[var(--primary)] [&::-webkit-scrollbar-thumb]:rounded-full"
       >
         <table
           ref={bodyTableRef}

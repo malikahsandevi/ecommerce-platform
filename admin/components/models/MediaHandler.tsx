@@ -141,7 +141,7 @@ const MIME_LABEL: Record<string, string> = {
 const REENCODABLE = ["image/png", "image/jpeg", "image/webp"];
 
 const SCROLLBAR_CLASSES =
-  "[&::-webkit-scrollbar]:w-[6px] [&::-webkit-scrollbar]:h-[6px] [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[var(--primary)] [&::-webkit-scrollbar-thumb]:rounded-[4px] [&::-webkit-scrollbar-button]:hidden [scrollbar-width:thin] [scrollbar-color:var(--primary)_transparent]";
+  "[&::-webkit-scrollbar]:w-[6px] [&::-webkit-scrollbar]:h-[6px] [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[var(--primary)] [&::-webkit-scrollbar-thumb]:rounded-[4px] [scrollbar-width:thin] [scrollbar-color:var(--primary)_transparent]";
 
 const formatBytes = (bytes?: number): string => {
   if (bytes === undefined || bytes === null) return "—";

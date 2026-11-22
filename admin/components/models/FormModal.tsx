@@ -818,7 +818,7 @@ export const FormModal: React.FC<FormModalProps> = ({
         <form
           id="itemFormModal"
           onSubmit={handleSave}
-          className="p-4 sm:p-6 space-y-6 overflow-y-auto flex flex-col flex-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-button]:hidden [&::-webkit-scrollbar-track]:bg-[var(--surface-muted)] [&::-webkit-scrollbar-thumb]:bg-[var(--primary)] [&::-webkit-scrollbar-thumb]:rounded-full"
+          className="p-4 sm:p-6 space-y-6 overflow-y-auto flex flex-col flex-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-[var(--surface-muted)] [&::-webkit-scrollbar-thumb]:bg-[var(--primary)] [&::-webkit-scrollbar-thumb]:rounded-full"
         >
           {groupedSections.length > 0 ? (
             groupedSections.map((section) => (
