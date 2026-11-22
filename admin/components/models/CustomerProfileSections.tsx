@@ -1,12 +1,16 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { ChevronRight } from "lucide-react";
 import {
   customerProfileService,
   type CustomerProfile,
-  type ProfileProduct,
 } from "@/services/resourceRegistry";
 import { formatMoney, useStoreCurrency } from "@/services/currency";
+import {
+  ProfileCardsPopup,
+  type ProfilePopupKind,
+} from "@/components/models/ProfileCardsPopup";
 
 const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <span className="mb-1 block border-t border-[var(--border)] pt-2 text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)]">
@@ -18,49 +22,33 @@ const EmptyLine: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <p className="text-[11px] text-[var(--text-muted)]">{children}</p>
 );
 
-const ProductRows: React.FC<{ items: ProfileProduct[]; emptyText: string }> = ({
-  items,
-  emptyText,
-}) =>
-  items.length > 0 ? (
-    <div className="space-y-1.5">
-      {items.map((product) => (
-        <div
-          key={product.id}
-          className="flex items-center gap-2 rounded border border-[var(--border)] bg-[var(--background)] px-2 py-1.5"
-        >
-          {product.image ? (
-            <img
-              src={product.image}
-              alt=""
-              className="h-7 w-7 shrink-0 rounded-md border border-[var(--border)] object-cover"
-            />
-          ) : (
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[var(--primary-soft)] text-[10px] font-bold text-[var(--primary)]">
-              {(product.name.trim().charAt(0) || "P").toUpperCase()}
-            </span>
-          )}
-          <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-[var(--text)]">
-            {product.name}
-          </span>
-          {product.quantity !== undefined && (
-            <span className="shrink-0 text-[11px] font-semibold text-[var(--text-muted)]">
-              × {product.quantity}
-            </span>
-          )}
-        </div>
-      ))}
-    </div>
-  ) : (
-    <EmptyLine>{emptyText}</EmptyLine>
-  );
+/** One clickable profile block: label + count, opens its card popup. */
+const EntryRow: React.FC<{
+  label: string;
+  count: number;
+  onClick: () => void;
+}> = ({ label, count, onClick }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className="flex w-full cursor-pointer items-center justify-between gap-2 rounded border border-[var(--border)] bg-[var(--background)] px-2 py-2 text-left transition-colors hover:border-[var(--primary)]"
+  >
+    <span className="text-[11px] font-medium text-[var(--text)]">{label}</span>
+    <span className="flex shrink-0 items-center gap-1 text-[11px] font-bold text-[var(--text)]">
+      {count}
+      <ChevronRight size={13} className="text-[var(--text-muted)]" />
+    </span>
+  </button>
+);
 
 /**
  * The customer details panel's shopping-profile sections, fed by
  * GET /users/:id/profile: order-derived stats and history (computed
  * by the backend from the customer's Orders on every request) plus
  * the stored favorites / liked / cart / favorite categories. Every
- * block renders an honest empty state when there is no data.
+ * block is an entry that opens a popup showing the actual items as
+ * cards — figures alone never stand in for the data. Every block
+ * renders an honest empty state when there is no data.
  */
 export const CustomerProfileSections: React.FC<{ customerId: string }> = ({
   customerId,
@@ -68,11 +56,13 @@ export const CustomerProfileSections: React.FC<{ customerId: string }> = ({
   useStoreCurrency();
   const [profile, setProfile] = useState<CustomerProfile | null>(null);
   const [failed, setFailed] = useState(false);
+  const [popup, setPopup] = useState<ProfilePopupKind | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setProfile(null);
     setFailed(false);
+    setPopup(null);
     customerProfileService
       .getProfile(customerId)
       .then((data) => {
@@ -103,16 +93,37 @@ export const CustomerProfileSections: React.FC<{ customerId: string }> = ({
     );
   }
 
-  const stats: [string, string][] = [
-    ["Total Spend", formatMoney(profile.stats.totalSpend, 2)],
-    ["Total Orders", String(profile.stats.totalOrders)],
-    ["Average Order", formatMoney(profile.stats.averageOrderValue, 2)],
-    [
-      "Last Order",
-      profile.stats.lastOrderDate
+  const statTiles: { label: string; value: string; kind?: ProfilePopupKind }[] = [
+    {
+      label: "Total Spend",
+      value: formatMoney(profile.stats.totalSpend, 2),
+      kind: "spend",
+    },
+    {
+      label: "Total Orders",
+      value: String(profile.stats.totalOrders),
+      kind: "orders",
+    },
+    { label: "Average Order", value: formatMoney(profile.stats.averageOrderValue, 2) },
+    {
+      label: "Last Order",
+      value: profile.stats.lastOrderDate
         ? new Date(profile.stats.lastOrderDate).toLocaleDateString()
         : "—",
-    ],
+    },
+  ];
+
+  const entries: { label: string; count: number; kind: ProfilePopupKind }[] = [
+    { label: "Purchased", count: profile.purchasedProducts.length, kind: "purchased" },
+    { label: "Used Coupons", count: profile.usedCoupons.length, kind: "coupons" },
+    {
+      label: "Favorite Categories",
+      count: profile.favoriteCategories.length,
+      kind: "categories",
+    },
+    { label: "Favorites", count: profile.favorites.length, kind: "favorites" },
+    { label: "Liked", count: profile.liked.length, kind: "liked" },
+    { label: "Cart", count: profile.cart.length, kind: "cart" },
   ];
 
   return (
@@ -120,110 +131,53 @@ export const CustomerProfileSections: React.FC<{ customerId: string }> = ({
       <div>
         <SectionTitle>Shopping Profile</SectionTitle>
         <div className="grid grid-cols-2 gap-2 text-xs">
-          {stats.map(([label, value]) => (
-            <div
-              key={label}
-              className="rounded border border-[var(--border)] bg-[var(--background)] p-1.5"
-            >
-              <span className="block text-[10px] text-[var(--text-muted)]">{label}</span>
-              <span className="font-bold text-[var(--text)]">{value}</span>
-            </div>
-          ))}
+          {statTiles.map((tile) =>
+            tile.kind ? (
+              <button
+                key={tile.label}
+                type="button"
+                onClick={() => setPopup(tile.kind!)}
+                className="cursor-pointer rounded border border-[var(--border)] bg-[var(--background)] p-1.5 text-left transition-colors hover:border-[var(--primary)]"
+              >
+                <span className="flex items-center justify-between text-[10px] text-[var(--text-muted)]">
+                  {tile.label}
+                  <ChevronRight size={11} />
+                </span>
+                <span className="font-bold text-[var(--text)]">{tile.value}</span>
+              </button>
+            ) : (
+              <div
+                key={tile.label}
+                className="rounded border border-[var(--border)] bg-[var(--background)] p-1.5"
+              >
+                <span className="block text-[10px] text-[var(--text-muted)]">
+                  {tile.label}
+                </span>
+                <span className="font-bold text-[var(--text)]">{tile.value}</span>
+              </div>
+            ),
+          )}
         </div>
       </div>
 
-      <div>
-        <SectionTitle>Purchased</SectionTitle>
-        {profile.purchased.length > 0 ? (
-          <div className="space-y-2">
-            {profile.purchased.map((order) => (
-              <div
-                key={order.id}
-                className="rounded border border-[var(--border)] bg-[var(--background)] p-2"
-              >
-                <div className="flex items-center justify-between gap-2 text-[11px]">
-                  <span className="font-bold text-[var(--text)]">{order.orderNumber}</span>
-                  <span className="font-bold text-[var(--text)]">
-                    {formatMoney(order.total, 2)}
-                  </span>
-                </div>
-                <div className="mt-0.5 flex items-center justify-between gap-2 text-[10px] text-[var(--text-muted)]">
-                  <span>{new Date(order.date).toLocaleDateString()}</span>
-                  <span className="capitalize">{order.status}</span>
-                </div>
-                <div className="mt-1.5 space-y-0.5 border-t border-dashed border-[var(--border)] pt-1.5">
-                  {order.items.map((item, idx) => (
-                    <div
-                      key={idx}
-                      className="flex items-center justify-between gap-2 text-[11px]"
-                    >
-                      <span className="min-w-0 truncate text-[var(--text-soft)]">
-                        {item.name} × {item.quantity}
-                      </span>
-                      <span className="shrink-0 font-medium text-[var(--text)]">
-                        {formatMoney(item.price * item.quantity, 2)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <EmptyLine>No orders yet</EmptyLine>
-        )}
-      </div>
+      {entries.map((entry) => (
+        <div key={entry.kind}>
+          <SectionTitle>{entry.label}</SectionTitle>
+          <EntryRow
+            label={entry.label}
+            count={entry.count}
+            onClick={() => setPopup(entry.kind)}
+          />
+        </div>
+      ))}
 
-      <div>
-        <SectionTitle>Used Coupons</SectionTitle>
-        {profile.usedCoupons.length > 0 ? (
-          <div className="flex flex-wrap gap-1">
-            {profile.usedCoupons.map((coupon) => (
-              <span
-                key={coupon.code}
-                className="rounded border border-[var(--border)] bg-[var(--background)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--text)]"
-              >
-                {coupon.code} × {coupon.timesUsed}
-              </span>
-            ))}
-          </div>
-        ) : (
-          <EmptyLine>No coupons used yet</EmptyLine>
-        )}
-      </div>
-
-      <div>
-        <SectionTitle>Favorite Categories</SectionTitle>
-        {profile.favoriteCategories.length > 0 ? (
-          <div className="flex flex-wrap gap-1">
-            {profile.favoriteCategories.map((category) => (
-              <span
-                key={category.id}
-                className="rounded-full bg-[var(--primary-soft)] px-2 py-0.5 text-[10px] font-semibold text-[var(--primary)]"
-              >
-                {category.name}
-              </span>
-            ))}
-          </div>
-        ) : (
-          <EmptyLine>No favorite categories yet</EmptyLine>
-        )}
-      </div>
-
-      <div>
-        <SectionTitle>Favorites</SectionTitle>
-        <ProductRows items={profile.favorites} emptyText="No favorites yet" />
-      </div>
-
-      <div>
-        <SectionTitle>Liked</SectionTitle>
-        <ProductRows items={profile.liked} emptyText="No liked products yet" />
-      </div>
-
-      <div>
-        <SectionTitle>Cart</SectionTitle>
-        <ProductRows items={profile.cart} emptyText="Cart is empty" />
-      </div>
+      {popup && (
+        <ProfileCardsPopup
+          kind={popup}
+          profile={profile}
+          onClose={() => setPopup(null)}
+        />
+      )}
     </div>
   );
 };

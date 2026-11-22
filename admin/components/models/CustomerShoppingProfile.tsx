@@ -1,13 +1,17 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { Check } from "lucide-react";
+import { Check, ChevronRight } from "lucide-react";
 import { apiClient } from "@/services/api";
 import {
   customerProfileService,
   type CustomerProfile,
-  type ProfileProduct,
 } from "@/services/resourceRegistry";
+import {
+  EMPTY_CUSTOMER_PROFILE,
+  ProfileCardsPopup,
+  type ProfilePopupKind,
+} from "@/components/models/ProfileCardsPopup";
 
 export const FAVORITE_CATEGORY_LIMIT = 3;
 
@@ -24,48 +28,26 @@ interface CustomerShoppingProfileProps {
   onChange: (ids: string[]) => void;
 }
 
-const ProductRow: React.FC<{ product: ProfileProduct }> = ({ product }) => (
-  <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-2 py-1.5">
-    {product.image ? (
-      <img
-        src={product.image}
-        alt=""
-        className="h-7 w-7 shrink-0 rounded-md border border-[var(--border)] object-cover"
-      />
-    ) : (
-      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[var(--primary-soft)] text-[10px] font-bold text-[var(--primary)]">
-        {(product.name.trim().charAt(0) || "P").toUpperCase()}
-      </span>
-    )}
-    <span className="min-w-0 flex-1 truncate text-xs font-medium text-[var(--text)]">
-      {product.name}
-    </span>
-    {product.quantity !== undefined && (
-      <span className="shrink-0 text-[11px] font-semibold text-[var(--text-muted)]">
-        × {product.quantity}
-      </span>
-    )}
-  </div>
-);
-
-const ReadOnlyList: React.FC<{ title: string; items: ProfileProduct[]; emptyText: string }> = ({
-  title,
-  items,
-  emptyText,
-}) => (
+/** A stored-list entry: title + count; opens the shared card popup. */
+const PopupEntry: React.FC<{
+  title: string;
+  count: number;
+  onClick: () => void;
+}> = ({ title, count, onClick }) => (
   <div>
     <span className="mb-1 block text-[11px] font-semibold text-[var(--text-soft)]">
       {title}
     </span>
-    {items.length > 0 ? (
-      <div className="space-y-1.5">
-        {items.map((product) => (
-          <ProductRow key={product.id} product={product} />
-        ))}
-      </div>
-    ) : (
-      <p className="text-[11px] text-[var(--text-muted)]">{emptyText}</p>
-    )}
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex w-full cursor-pointer items-center justify-between gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-2 py-2 text-left transition-colors hover:border-[var(--primary)]"
+    >
+      <span className="text-xs font-medium text-[var(--text)]">
+        {count} {count === 1 ? "product" : "products"}
+      </span>
+      <ChevronRight size={14} className="shrink-0 text-[var(--text-muted)]" />
+    </button>
   </div>
 );
 
@@ -73,8 +55,9 @@ const ReadOnlyList: React.FC<{ title: string; items: ProfileProduct[]; emptyText
  * The customer form's "Shopping Profile" section. Favorite Categories
  * is the editable piece — a picker capped at 3 (the backend rejects a
  * 4th with a clear error too). Favorites / Liked / Cart are the
- * customer's own app-side data: shown read-only, exactly as stored,
- * with honest empty states — nothing is invented for new customers.
+ * customer's own app-side data: each entry opens the shared card
+ * popup (view-only) showing the actual stored products — nothing is
+ * invented for new customers.
  */
 export const CustomerShoppingProfile: React.FC<CustomerShoppingProfileProps> = ({
   customerId,
@@ -83,6 +66,7 @@ export const CustomerShoppingProfile: React.FC<CustomerShoppingProfileProps> = (
 }) => {
   const [categories, setCategories] = useState<CategoryOption[]>([]);
   const [profile, setProfile] = useState<CustomerProfile | null>(null);
+  const [popup, setPopup] = useState<ProfilePopupKind | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -182,17 +166,29 @@ export const CustomerShoppingProfile: React.FC<CustomerShoppingProfileProps> = (
         )}
       </div>
 
-      <ReadOnlyList
+      <PopupEntry
         title="Favorites"
-        items={profile?.favorites ?? []}
-        emptyText="No favorites yet"
+        count={profile?.favorites.length ?? 0}
+        onClick={() => setPopup("favorites")}
       />
-      <ReadOnlyList
+      <PopupEntry
         title="Liked"
-        items={profile?.liked ?? []}
-        emptyText="No liked products yet"
+        count={profile?.liked.length ?? 0}
+        onClick={() => setPopup("liked")}
       />
-      <ReadOnlyList title="Cart" items={profile?.cart ?? []} emptyText="Cart is empty" />
+      <PopupEntry
+        title="Cart"
+        count={profile?.cart.length ?? 0}
+        onClick={() => setPopup("cart")}
+      />
+
+      {popup && (
+        <ProfileCardsPopup
+          kind={popup}
+          profile={profile ?? EMPTY_CUSTOMER_PROFILE}
+          onClose={() => setPopup(null)}
+        />
+      )}
     </div>
   );
 };

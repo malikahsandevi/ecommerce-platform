@@ -530,6 +530,25 @@ export interface ProfileProduct {
   quantity?: number;
 }
 
+export interface ProfileOrder {
+  id: string;
+  orderNumber: string;
+  status: string;
+  total: number;
+  date: string;
+  items: { name: string; quantity: number; price: number; image: string }[];
+}
+
+/** One bought product line, flattened from its order (Purchased popup). */
+export interface ProfilePurchasedProduct {
+  name: string;
+  image: string;
+  quantity: number;
+  price: number;
+  orderNumber: string;
+  date: string;
+}
+
 export interface CustomerProfile {
   favorites: ProfileProduct[];
   liked: ProfileProduct[];
@@ -541,15 +560,17 @@ export interface CustomerProfile {
     averageOrderValue: number;
     lastOrderDate: string | null;
   };
-  purchased: {
-    id: string;
-    orderNumber: string;
-    status: string;
-    total: number;
-    date: string;
-    items: { name: string; quantity: number; price: number; image: string }[];
+  purchased: ProfileOrder[];
+  /** All non-cancelled orders (Total Spend / Total Orders popups). */
+  orders: ProfileOrder[];
+  purchasedProducts: ProfilePurchasedProduct[];
+  usedCoupons: {
+    code: string;
+    timesUsed: number;
+    discountType: string | null;
+    discountValue: number | null;
+    lastUsed: string | null;
   }[];
-  usedCoupons: { code: string; timesUsed: number }[];
 }
 
 /**

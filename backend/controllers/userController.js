@@ -240,7 +240,7 @@ const getUserProfile = async (req, res) => {
         // Orders carry a required `user` ref — that is the match.
         const orders = await Order.find({ user: user._id })
             .sort({ createdAt: -1 })
-            .populate('coupon', 'code')
+            .populate('coupon', 'code discountType discountValue')
             .lean();
 
         const activeOrders = orders.filter((order) => order.status !== 'cancelled');
@@ -249,11 +249,37 @@ const getUserProfile = async (req, res) => {
         const averageOrderValue = totalOrders > 0 ? totalSpend / totalOrders : 0;
         const lastOrderDate = activeOrders.length > 0 ? activeOrders[0].createdAt : null;
 
-        const couponCounts = new Map();
+        // Per-coupon usage over the active orders. Orders are sorted
+        // newest first, so the first sighting of a code is its most
+        // recent use.
+        const couponUsage = new Map();
         for (const order of activeOrders) {
-            const code = order.coupon?.code;
-            if (code) couponCounts.set(code, (couponCounts.get(code) || 0) + 1);
+            const coupon = order.coupon;
+            if (!coupon?.code) continue;
+            const entry = couponUsage.get(coupon.code) || {
+                code: coupon.code,
+                timesUsed: 0,
+                discountType: coupon.discountType || null,
+                discountValue: coupon.discountValue ?? null,
+                lastUsed: order.createdAt,
+            };
+            entry.timesUsed += 1;
+            couponUsage.set(coupon.code, entry);
         }
+
+        const orderBrief = (order) => ({
+            id: order._id,
+            orderNumber: order.orderNumber,
+            status: order.status,
+            total: order.total,
+            date: order.createdAt,
+            items: (order.items || []).map((item) => ({
+                name: item.name,
+                quantity: item.quantity,
+                price: item.price,
+                image: item.image || '',
+            })),
+        });
 
         res.json({
             favorites: (user.favorites || []).map(productBrief).filter(Boolean),
@@ -277,23 +303,22 @@ const getUserProfile = async (req, res) => {
                 averageOrderValue,
                 lastOrderDate,
             },
-            purchased: orders.slice(0, 5).map((order) => ({
-                id: order._id,
-                orderNumber: order.orderNumber,
-                status: order.status,
-                total: order.total,
-                date: order.createdAt,
-                items: (order.items || []).map((item) => ({
+            purchased: orders.slice(0, 5).map(orderBrief),
+            // Card views (additive): every non-cancelled order for the
+            // Total Spend / Total Orders popups, and the bought products
+            // flattened per order line for the Purchased popup.
+            orders: activeOrders.map(orderBrief),
+            purchasedProducts: activeOrders.flatMap((order) =>
+                (order.items || []).map((item) => ({
                     name: item.name,
+                    image: item.image || '',
                     quantity: item.quantity,
                     price: item.price,
-                    image: item.image || '',
+                    orderNumber: order.orderNumber,
+                    date: order.createdAt,
                 })),
-            })),
-            usedCoupons: [...couponCounts.entries()].map(([code, timesUsed]) => ({
-                code,
-                timesUsed,
-            })),
+            ),
+            usedCoupons: [...couponUsage.values()],
         });
     } catch (error) {
         res.status(500).json({ message: error.message });
