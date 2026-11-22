@@ -88,6 +88,10 @@ export const brandConfig = {
         ? new Date(brand.createdAt).toLocaleDateString()
         : "—",
     },
+    // The Website row gets the panel's copy button (full URL copied;
+    // the row itself shows the value truncated with the full URL on
+    // its title) — the same pattern the Media URL uses.
+    copyableAttributes: brand.website ? { Website: brand.website } : undefined,
     description: brand.description || "",
   }),
 

@@ -430,7 +430,36 @@ export function CreateTable<T extends Record<string, any>>({
                     // own cell: a long unbroken value (phone, email,
                     // SKU) truncates with an ellipsis instead of
                     // spilling into the next column; the full value
-                    // stays on the cell's title tooltip.
+                    // stays on the cell's title tooltip. A URL value
+                    // (a website column, or any http(s) string) renders
+                    // as a one-line LINK showing only the host — the
+                    // part after the protocol — never the raw full URL.
+                    const displayText =
+                      rawValue !== undefined && rawValue !== null && rawValue !== ""
+                        ? String(rawValue)
+                        : "-";
+                    const isUrlCell =
+                      typeof rawValue === "string" &&
+                      (/^https?:\/\//i.test(rawValue) ||
+                        (colKeyStr === "website" &&
+                          rawValue.includes(".") &&
+                          !rawValue.includes(" ")));
+                    const urlHref = isUrlCell
+                      ? /^https?:\/\//i.test(displayText)
+                        ? displayText
+                        : `https://${displayText}`
+                      : null;
+                    const urlLabel = isUrlCell
+                      ? (() => {
+                          try {
+                            return new URL(urlHref!).host;
+                          } catch {
+                            return displayText
+                              .replace(/^https?:\/\//i, "")
+                              .split("/")[0];
+                          }
+                        })()
+                      : null;
                     return (
                       <td
                         key={String(colKey) + idx}
@@ -442,9 +471,19 @@ export function CreateTable<T extends Record<string, any>>({
                         }
                       >
                         <span className="block truncate">
-                          {rawValue !== undefined && rawValue !== null && rawValue !== ""
-                            ? String(rawValue)
-                            : "-"}
+                          {isUrlCell ? (
+                            <a
+                              href={urlHref!}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(event) => event.stopPropagation()}
+                              className="text-[var(--primary)] hover:underline"
+                            >
+                              {urlLabel}
+                            </a>
+                          ) : (
+                            displayText
+                          )}
                         </span>
                       </td>
                     );
