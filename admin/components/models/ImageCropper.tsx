@@ -213,7 +213,7 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({
               Drag the image to centre it — the circle is how it will appear.
             </p>
           </div>
-          <Button variant="ghost" size="sm" icon={X} onClick={onClose} aria-label="Close editor" />
+          <Button variant="ghost" size="sm" icon={X} onClick={onClose} aria-label="Close editor" className="close-x" />
         </div>
 
         {/* FRAME */}

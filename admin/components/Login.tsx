@@ -116,7 +116,7 @@ export const AdminLoginPopup: React.FC<AdminLoginPopupProps> = ({
                 type="button"
                 onClick={onDismissNotice}
                 aria-label="Dismiss notice"
-                className="shrink-0 hover:opacity-70"
+                className="close-x shrink-0 rounded-md p-0.5"
               >
                 <X className="w-3.5 h-3.5" />
               </button>

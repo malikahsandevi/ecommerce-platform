@@ -158,7 +158,7 @@ export function DetailPanel<T extends DetailPanelData>({
               {onClose && (
                 <button
                   onClick={onClose}
-                  className="text-[var(--text-muted)] hover:text-[var(--text)] cursor-pointer p-1 rounded-lg hover:bg-[var(--background)] transition-colors"
+                  className="close-x text-[var(--text-muted)] cursor-pointer p-1 rounded-lg"
                 >
                   <X className="w-4 h-4" />
                 </button>

@@ -155,7 +155,7 @@ function ToastCard({
         type="button"
         onClick={dismiss}
         aria-label="Dismiss"
-        className="shrink-0 rounded-md p-0.5 text-[var(--text-muted)] transition-colors hover:text-[var(--text)] cursor-pointer"
+        className="close-x shrink-0 rounded-md p-0.5 text-[var(--text-muted)] cursor-pointer"
       >
         <X className="h-3.5 w-3.5" />
       </button>

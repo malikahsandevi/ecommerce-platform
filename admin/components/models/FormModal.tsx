@@ -804,6 +804,7 @@ export const FormModal: React.FC<FormModalProps> = ({
             icon={X}
             onClick={onClose}
             aria-label="Close modal"
+            className="close-x"
           />
         </div>
 

@@ -330,7 +330,7 @@ export const ProfileCardsPopup: React.FC<{
             <h3 className="font-bold text-[var(--text)] text-base">{view.title}</h3>
             <p className="text-[11px] text-[var(--text-muted)] mt-0.5">{view.summary}</p>
           </div>
-          <Button variant="ghost" size="sm" icon={X} onClick={onClose} aria-label="Close" />
+          <Button variant="ghost" size="sm" icon={X} onClick={onClose} aria-label="Close" className="close-x" />
         </div>
         <div className="flex-1 overflow-y-auto p-4 sm:p-5 min-h-40 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-[var(--primary)] [&::-webkit-scrollbar-thumb]:rounded-full">
           {view.isEmpty ? (

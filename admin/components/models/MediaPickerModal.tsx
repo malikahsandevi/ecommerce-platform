@@ -155,7 +155,7 @@ export const MediaPickerModal: React.FC<MediaPickerModalProps> = ({
                 : "Pick images from the media library to add to this product."}
             </p>
           </div>
-          <Button variant="ghost" size="sm" icon={X} onClick={onClose} aria-label="Close picker" />
+          <Button variant="ghost" size="sm" icon={X} onClick={onClose} aria-label="Close picker" className="close-x" />
         </div>
 
         {/* SEARCH */}

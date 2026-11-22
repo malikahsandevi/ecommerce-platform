@@ -1989,7 +1989,7 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
               Strictly accepts Images, Videos, Audios, and Documents only.
             </p>
           </div>
-          <Button variant="ghost" size="md" className="border-none" onClick={onClose}>
+          <Button variant="ghost" size="md" className="border-none close-x" onClick={onClose}>
             <X size={20} />
           </Button>
         </div>
