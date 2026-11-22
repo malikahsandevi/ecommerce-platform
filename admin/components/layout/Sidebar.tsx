@@ -162,7 +162,7 @@ const Sidebar: React.FC = () => {
             {/* Signed-in admin */}
             {user && (
               <div
-                className={`sb-center mt-1.5 flex items-center rounded-xl bg-(--background)/70 p-1.5 ${
+                className={`sb-center mt-1.5 flex items-center p-1.5 ${
                   collapsed ? "justify-center" : "gap-2.5"
                 }`}
                 title={collapsed ? user.name : undefined}
@@ -172,10 +172,10 @@ const Sidebar: React.FC = () => {
                     src={avatarSrc}
                     alt={user.name || "Admin"}
                     onError={() => setFailedAvatarUrl(avatarSrc ?? null)}
-                    className="w-7 h-7 shrink-0 rounded-full object-cover"
+                    className="w-7 h-7 shrink-0 rounded-full object-cover ring-2 ring-(--primary)"
                   />
                 ) : (
-                  <span className="w-7 h-7 shrink-0 rounded-full bg-(--primary) text-white flex items-center justify-center text-[10px] font-bold">
+                  <span className="w-7 h-7 shrink-0 rounded-full bg-(--primary) text-white flex items-center justify-center text-[10px] font-bold ring-2 ring-(--primary)">
                     {initialsOf(user.name || "Admin")}
                   </span>
                 )}

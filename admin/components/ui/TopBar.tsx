@@ -106,11 +106,11 @@ export const TopBar = <T extends SearchableEntityRecord>({
       src={avatarSrc}
       alt={user.name}
       onError={() => avatarSrc && setFailedAvatar(avatarSrc)}
-      className="w-9 h-9 min-w-9 min-h-9 shrink-0 rounded-full object-cover border border-(--primary-light)"
+      className="w-9 h-9 min-w-9 min-h-9 shrink-0 rounded-full object-cover ring-2 ring-(--primary)"
     />
   ) : (
     <span
-      className="w-9 h-9 min-w-9 min-h-9 shrink-0 rounded-full bg-(--primary) text-white flex items-center justify-center text-xs font-bold tracking-wide"
+      className="w-9 h-9 min-w-9 min-h-9 shrink-0 rounded-full bg-(--primary) text-white flex items-center justify-center text-xs font-bold tracking-wide ring-2 ring-(--primary)"
       aria-label={`${user.name} profile`}
     >
       {initialsOf(user.name)}
