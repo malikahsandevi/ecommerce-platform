@@ -174,27 +174,34 @@ export const TopBar = <T extends SearchableEntityRecord>({
   );
 
   return (
-    <header className="w-full min-h-14 bg-(--background) rounded-2xl shadow-sm border border-(--border) px-4 py-3 flex items-center justify-between select-none">
-      {/* Dynamic Page Title & Subtitle */}
-      <div>
+    <header className="w-full min-h-14 bg-(--background) rounded-2xl shadow-sm border border-(--border) px-4 py-3 flex flex-wrap items-center justify-between gap-x-2 gap-y-2 select-none">
+      {/* Dynamic Page Title & Subtitle — shrinkable: the title block
+          yields (and truncates) before the controls are pushed out. */}
+      <div className="min-w-0">
         {showBreadcrumbs && (
           <nav aria-label="Breadcrumb" className="text-[10px] font-medium text-(--text-muted) leading-tight mb-0.5">
             Home <span aria-hidden="true" className="mx-0.5">/</span>{" "}
             <span className="text-(--primary)">{title}</span>
           </nav>
         )}
-        <h1 className="text-md md:text-xl font-bold text-(--text) leading-tight">
+        <h1 className="text-md md:text-xl font-bold text-(--text) leading-tight truncate">
           {title}
         </h1>
         {subtitle && (
-          <p className="text-[10px] text-(--text-muted) font-medium w-auto">
+          <p className="text-[10px] text-(--text-muted) font-medium w-auto truncate">
             {subtitle}
           </p>
         )}
       </div>
 
-      {/* Right Controls */}
-      <div className="flex items-center gap-1" ref={containerRef}>
+      {/* Right Controls — fluid: the row takes the space the title
+          leaves (the search inside shrinks first), and below md it
+          wraps onto its own full-width row instead of overflowing
+          the page sideways. */}
+      <div
+        className="flex items-center gap-1 min-w-0 flex-1 justify-end max-md:basis-full max-md:order-2"
+        ref={containerRef}
+      >
         {/* Global search (all sources) or the legacy page-local bar */}
         {globalSearch ? (
           <GlobalSearch />
@@ -233,7 +240,7 @@ export const TopBar = <T extends SearchableEntityRecord>({
             </button>
 
             {activePopup === "msg" && (
-              <div className="absolute right-0 mt-2 w-80 bg-(--background) rounded-2xl shadow-xl border border-(--border) z-50 p-4">
+              <div className="absolute right-0 mt-2 w-80 max-w-[calc(100vw-1.5rem)] bg-(--background) rounded-2xl shadow-xl border border-(--border) z-50 p-4">
                 <div className="flex items-center justify-between pb-3 border-b border-(--border)">
                   <h4 className="text-sm font-bold text-(--text)">Messages</h4>
                   {freshIds.size > 0 && (
@@ -302,7 +309,7 @@ export const TopBar = <T extends SearchableEntityRecord>({
             </button>
 
             {activePopup === "notif" && (
-              <div className="absolute right-0 mt-2 w-80 bg-(--background) rounded-2xl shadow-xl border border-(--border) z-50 p-4">
+              <div className="absolute right-0 mt-2 w-80 max-w-[calc(100vw-1.5rem)] bg-(--background) rounded-2xl shadow-xl border border-(--border) z-50 p-4">
                 <div className="flex items-center justify-between pb-3 border-b border-(--border)">
                   <h4 className="text-sm font-bold text-(--text)">Notifications</h4>
                   {freshIds.size > 0 && (

@@ -854,7 +854,7 @@ const PageLayout: React.FC = () => {
       </header>
 
       <div className="flex flex-1 flex-col min-h-0 w-full overflow-y-auto lg:flex-row lg:overflow-hidden gap-3">
-        <section className="flex flex-1 flex-col lg:min-w-158 min-h-0 bg-[var(--background)] space-y-3 lg:overflow-hidden">
+        <section className="flex flex-1 flex-col min-w-0 xl:min-w-158 min-h-0 bg-[var(--background)] space-y-3 lg:overflow-hidden">
           <div className="w-full shrink-0">
             {isMediaPage ? (
               <MediaStats items={items} isLoading={isBusy} />

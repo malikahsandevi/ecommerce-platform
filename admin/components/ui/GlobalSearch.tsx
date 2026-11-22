@@ -246,11 +246,13 @@ export const GlobalSearch: React.FC = () => {
   return (
     <div
       ref={containerRef}
-      // A definite width: the TopBar's right side sizes to content, so a
-      // flex/w-full box collapses to the input's intrinsic width (~220px).
-      // 480px is ~1.5x the old SearchBar's 320px cap, viewport-capped so
-      // the bar never overflows smaller screens.
-      className="relative w-[480px] max-w-[58vw]"
+      // Fluid width with a 480px cap (~1.5x the old SearchBar's 320px):
+      // the TopBar's controls row is a flex-1 flex row, so this box
+      // takes whatever space the title and icon cluster leave — up to
+      // 480px on wide screens, shrinking (never overflowing) on narrow
+      // ones. A fixed 480px width used to push the whole TopBar past
+      // the viewport below ~1150px and give the page a sideways scroll.
+      className="relative min-w-0 flex-1 max-w-[480px]"
     >
       <Search className="absolute left-3 top-1/2 z-10 h-3.5 w-3.5 -translate-y-1/2 pointer-events-none text-[var(--text-muted)] opacity-70" />
       <input

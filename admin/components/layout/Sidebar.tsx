@@ -106,7 +106,7 @@ const Sidebar: React.FC = () => {
   return (
     <aside
       suppressHydrationWarning
-      className={`admin-sidebar h-[calc(100dvh-24px)] sticky top-3 left-3 z-50 shrink-0 transition-all duration-300 ${
+      className={`admin-sidebar max-lg:hidden h-[calc(100dvh-24px)] sticky top-3 left-3 z-50 shrink-0 transition-all duration-300 ${
         collapsed ? "w-[68px]" : "w-60"
       }`}
     >

@@ -57,6 +57,13 @@ body {
   background-color: var(--background);
   color: var(--text);
   transition: background-color 0.2s ease, color 0.2s ease;
+  /* The page itself never scrolls sideways: the layouts are built to
+     fit (fluid TopBar, internal table scrollers), and this is the
+     last-resort guard against content-driven overflow (an unbroken
+     product name, a wide chart label). `clip` — not `hidden` — so no
+     scroll container is created and position:sticky (the sidebar,
+     the mobile top bar) keeps sticking to the viewport. */
+  overflow-x: clip;
 }
 
 *,

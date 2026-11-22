@@ -2,6 +2,7 @@
 
 import React, { useEffect, useLayoutEffect } from "react";
 import Sidebar from "@/components/layout/Sidebar";
+import MobileNav from "@/components/layout/MobileNav";
 import AdminLoginPopup from "@/components/Login";
 import { ConfirmDialogHost } from "@/components/ui/ConfirmDialog";
 import { ToastHost } from "@/components/ui/Toast";
@@ -53,10 +54,14 @@ function AdminShellInner({ children }: { children: React.ReactNode }) {
           after first paint. The inert styling now toggles on the
           wrapper instead, so the sidebar never remounts. */}
       <div
-        className={`min-w-0 flex-1 flex gap-3 ${
+        className={`min-w-0 flex-1 flex gap-3 flex-col lg:flex-row ${
           isAuthenticated ? "" : "pointer-events-none select-none"
         }`}
       >
+        {/* Below lg the nav moves to a top bar (MobileNav) and the
+            sidebar is hidden; at lg+ the row layout and the desktop
+            sidebar are exactly as before. */}
+        <MobileNav />
         <Sidebar />
         <div className="flex-1 min-w-0">{children}</div>
       </div>

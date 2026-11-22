@@ -73,7 +73,10 @@ export const NewCustomersCard: React.FC<NewCustomersCardProps> = ({ customers })
         </div>
       ) : (
         <ul
-          className={`flex flex-col divide-y divide-(--border) overflow-y-auto ${SCROLLBAR_CLASSES}`}
+          // pr-2: rows clear the scrollbar by 8px — the joined-date at
+          // the row's right edge used to end flush against the bar and
+          // its last glyph disappeared under the thumb.
+          className={`flex flex-col divide-y divide-(--border) overflow-y-auto pr-2 ${SCROLLBAR_CLASSES}`}
           style={{ maxHeight: ROW_H * 3 }}
         >
           {customers.map((customer) => (
