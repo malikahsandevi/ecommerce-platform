@@ -166,15 +166,17 @@ html[data-sidebar="collapsed"] .admin-sidebar .sb-center {
   background: var(--surface);
 }
 
-/* Shared-table edge symmetry: the vertical scrollbar eats into the
-   table's right side, so the last column's right padding is reduced
-   by the scrollbar's width (--sbw, kept current by CreateTable's
-   width sync) — border-to-content distance then matches the left
-   edge exactly. */
-.sync-table th:last-child,
-.sync-table td:last-child {
-  padding-right: max(0px, calc(10px - var(--sbw, 0px)));
-}
+/* Shared-table edge symmetry (structural, no arithmetic): every cell
+   — first and last included — keeps the same 10px horizontal padding,
+   and CreateTable's width sync sizes the body table to the scroller's
+   CLIENT width, so the scrollbar sits OUTSIDE the table's measured
+   area: the first content starts 10px after the left border and the
+   last content ends 10px before the scrollbar — left inset == right
+   inset by construction. (The previous rule cut the last cell's
+   padding by the scrollbar width; on machines where the scrollbar
+   reserves real width that left the last column 4px — or 0px — from
+   the bar while the left kept 10px, and headless tests never saw it
+   because overlay scrollbars reserve 0px there.) */
 
 /* Close (X) buttons — one treatment everywhere (Ahsan's rule, first
    set on the avatar viewer): the resting state stays each button's

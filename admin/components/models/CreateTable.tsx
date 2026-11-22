@@ -172,10 +172,11 @@ export function CreateTable<T extends Record<string, any>>({
 
     // Reserve exactly the body's vertical-scrollbar width on the header's
     // right edge so the last header cell ends where the body cells end.
+    // The body table itself is sized to the scroller's client width
+    // (see the fit step below), which keeps the first/last cell insets
+    // structurally equal — no padding arithmetic anywhere.
     const sbw = bodyWrap.offsetWidth - bodyWrap.clientWidth;
     headerWrap.style.paddingRight = `${sbw}px`;
-    headerWrap.style.setProperty("--sbw", `${sbw}px`);
-    bodyWrap.style.setProperty("--sbw", `${sbw}px`);
 
     const expectedCells = columns.length + (showActions ? 1 : 0);
     const firstRow = bodyTable.tBodies[0]?.rows[0];
