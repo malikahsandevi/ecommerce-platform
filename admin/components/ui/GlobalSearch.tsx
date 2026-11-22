@@ -68,6 +68,20 @@ const SCOPE_LABEL: Record<Exclude<ScopeName, "all">, string> = {
 };
 
 /**
+ * Placeholder hints that teach the search syntax. While the box is
+ * empty they cycle continuously — each line rolls up and the next
+ * rolls in (see .search-hint-roll in globals.css). With the panel's
+ * Animations setting off, only the first line shows, statically.
+ */
+const SEARCH_HINTS = [
+  "Search products, categories, brands, media...",
+  "Type a name or code — e.g. Wireless Headphones",
+  "Search one place only: headphones//products",
+  "Scopes: //products · //categories · //brands · //media",
+];
+const HINT_INTERVAL_MS = 2800;
+
+/**
  * Split a raw query into search text + scope, splitting on the LAST
  * `//`. Spaces around the `//` are plain whitespace, so "home//products",
  * "home //products", "home// products" and "home // products" all parse
@@ -109,6 +123,36 @@ export const GlobalSearch: React.FC = () => {
   const [results, setResults] = useState<GlobalSearchResult[]>([]);
   const [activeIndex, setActiveIndex] = useState(-1);
   const requestSeq = useRef(0);
+  const [hintIndex, setHintIndex] = useState(0);
+  const [animationsOff, setAnimationsOff] = useState(false);
+
+  // Track the panel's Animations setting (services/appearance.ts
+  // mirrors it onto <html data-animations="off">).
+  useEffect(() => {
+    const read = () =>
+      setAnimationsOff(
+        document.documentElement.getAttribute("data-animations") === "off",
+      );
+    read();
+    const observer = new MutationObserver(read);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-animations"],
+    });
+    return () => observer.disconnect();
+  }, []);
+
+  // Cycle the placeholder hints while the box is empty.
+  useEffect(() => {
+    if (query || animationsOff) return;
+    const id = setInterval(
+      () => setHintIndex((i) => (i + 1) % SEARCH_HINTS.length),
+      HINT_INTERVAL_MS,
+    );
+    return () => clearInterval(id);
+  }, [query, animationsOff]);
+
+  const showHintOverlay = !query && !animationsOff;
 
   const { text, scope, invalidTag } = parseQuery(query);
 
@@ -232,11 +276,28 @@ export const GlobalSearch: React.FC = () => {
             goToResult(results[activeIndex]);
           }
         }}
-        placeholder="Search products, categories, brands, media..."
+        placeholder={showHintOverlay ? "" : SEARCH_HINTS[0]}
         autoComplete="off"
         aria-label="Global search"
         className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] py-1.5 pl-8 pr-1 text-sm font-medium text-[var(--text)] outline-none transition-all placeholder:text-[var(--text-muted)]"
       />
+      {showHintOverlay && (
+        // The cycling placeholder: an overlay line aligned with the
+        // input's text (pl-8) that stops before the Ctrl+/ chip. It
+        // never captures clicks — the input focuses normally.
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-y-0 left-8 right-14 flex items-center overflow-hidden"
+        >
+          <span
+            key={hintIndex}
+            data-search-hint
+            className="search-hint-roll block truncate text-sm font-medium text-[var(--text-muted)]"
+          >
+            {SEARCH_HINTS[hintIndex]}
+          </span>
+        </span>
+      )}
       {!query && (
         <kbd className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 rounded border border-[var(--border)] bg-[var(--surface-muted)] px-1.5 py-0.5 text-[9px] font-semibold text-[var(--text-muted)]">
           Ctrl+/

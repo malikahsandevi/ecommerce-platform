@@ -140,6 +140,21 @@ html[data-sidebar="collapsed"] .admin-sidebar .sb-center {
   justify-content: center !important;
 }
 
+/* Global search placeholder: each hint line rolls up into place. */
+@keyframes search-hint-roll {
+  from {
+    transform: translateY(70%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+.search-hint-roll {
+  animation: search-hint-roll 0.45s ease both;
+}
+
 /* Settings → Appearance → Animations off: neutralise transitions and
    animations panel-wide (the attribute is set by services/appearance.ts). */
 [data-animations="off"] *,
