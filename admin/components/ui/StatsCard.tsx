@@ -31,7 +31,7 @@ const themeStyles: Record<
   },
   orange: {
     dotBg: "bg-[var(--primary)]",
-    iconBg: "bg-[var(--primary-light,rgba(249,115,22,0.1))]",
+    iconBg: "bg-[var(--primary-soft)]",
     iconColor: "text-[var(--primary)]",
   },
   blue: {

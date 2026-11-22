@@ -431,7 +431,7 @@ export function DetailPanel<T extends DetailPanelData>({
       ) : (
         /* Empty State */
         <div className="p-6  flex flex-col items-center justify-center text-center flex-1">
-          <div className="w-14 h-14 bg-[var(--primary-light)] text-[var(--primary)] rounded-2xl flex items-center justify-center mb-3">
+          <div className="w-14 h-14 bg-[var(--primary-soft)] text-[var(--primary)] rounded-2xl flex items-center justify-center mb-3">
             <Package className="w-7 h-7" />
           </div>
 

@@ -326,6 +326,15 @@ export function getResourceService(pathname: string): ResourceService | null {
       return res.data;
     },
     loadOptions: async () => {
+      // Entity dropdown labels carry the record's public code BEFORE
+      // its name ("#CODE · Name") so a record can be tracked at a
+      // glance — in the open menu and in the closed trigger alike.
+      // Records without a code fall back to a short id slice.
+      const entityLabel = (
+        record: { _id: string; code?: string },
+        name: string,
+      ) => `#${record.code || String(record._id).slice(0, 6).toUpperCase()} · ${name}`;
+
       if (apiEndpoint === 'products' || apiEndpoint === 'categories') {
         const [categoriesResponse, brandsResponse] = await Promise.all([
           apiClient.get('/categories'),
@@ -340,14 +349,14 @@ export function getResourceService(pathname: string): ResourceService | null {
         return {
           categoryOptions: (categoriesResponse.data || [])
             .filter(isEnabled)
-            .map((category: { _id: string; name: string }) => ({
-              label: category.name,
+            .map((category: { _id: string; code?: string; name: string }) => ({
+              label: entityLabel(category, category.name),
               value: category._id,
             })),
           brandOptions: (brandsResponse.data || [])
             .filter(isEnabled)
-            .map((brand: { _id: string; name: string }) => ({
-              label: brand.name,
+            .map((brand: { _id: string; code?: string; name: string }) => ({
+              label: entityLabel(brand, brand.name),
               value: brand._id,
             })),
         };
@@ -360,23 +369,28 @@ export function getResourceService(pathname: string): ResourceService | null {
 
         return {
           productOptions: (productsResponse.data || []).map(
-            (product: { _id: string; name: string }) => ({
-              label: product.name,
+            (product: { _id: string; code?: string; name: string }) => ({
+              label: entityLabel(product, product.name),
               value: product._id,
             }),
           ),
           userOptions: (usersResponse.data || []).map(
             (user: {
               _id: string;
+              code?: string;
               firstName?: string;
               lastName?: string;
               username?: string;
+              name?: string;
               email: string;
             }) => ({
-              label:
+              label: entityLabel(
+                user,
                 [user.firstName, user.lastName].filter(Boolean).join(' ') ||
-                user.username ||
-                user.email,
+                  user.name ||
+                  user.username ||
+                  user.email,
+              ),
               value: user._id,
             }),
           ),

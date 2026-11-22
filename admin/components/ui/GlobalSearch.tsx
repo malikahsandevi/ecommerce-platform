@@ -244,19 +244,19 @@ export const GlobalSearch: React.FC = () => {
       )}
 
       {showPanel && (
-        <div className="absolute left-0 right-0 top-full z-50 mt-2 max-h-80 overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--surface)] py-1 shadow-lg animate-in fade-in zoom-in-95 duration-100 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-button]:hidden [&::-webkit-scrollbar-track]:bg-[var(--surface-muted)] [&::-webkit-scrollbar-thumb]:bg-[var(--primary)] [&::-webkit-scrollbar-thumb]:rounded-full">
+        <div className="absolute left-0 right-0 top-full z-50 mt-2 max-h-80 overflow-y-auto rounded-xl border border-neutral-800 bg-white py-1 shadow-[0_16px_40px_-8px_rgba(0,0,0,0.45)] animate-in fade-in zoom-in-95 duration-100 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-button]:hidden [&::-webkit-scrollbar-track]:bg-neutral-100 [&::-webkit-scrollbar-thumb]:bg-[var(--primary)] [&::-webkit-scrollbar-thumb]:rounded-full">
           {scope !== "all" && (
-            <p className="border-b border-[var(--border)] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+            <p className="border-b border-neutral-200 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-500">
               {SCOPE_LABEL[scope]} only
             </p>
           )}
           {loading ? (
-            <p className="flex items-center gap-2 px-3 py-2.5 text-xs text-[var(--text-muted)]">
+            <p className="flex items-center gap-2 px-3 py-2.5 text-xs text-neutral-500">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
               Searching…
             </p>
           ) : results.length === 0 ? (
-            <p className="px-3 py-2.5 text-xs text-[var(--text-muted)]">
+            <p className="px-3 py-2.5 text-xs text-neutral-500">
               No results found
             </p>
           ) : (
@@ -277,11 +277,11 @@ export const GlobalSearch: React.FC = () => {
                   onMouseEnter={() => setActiveIndex(index)}
                   className={`flex w-full cursor-pointer items-center gap-2.5 px-3 py-2 text-left transition-colors ${
                     index === activeIndex
-                      ? "bg-[var(--primary-light,var(--surface-muted))]"
-                      : "hover:bg-[var(--surface-muted)]"
+                      ? "bg-orange-100"
+                      : "hover:bg-neutral-100"
                   }`}
                 >
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--background)]">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-neutral-200 bg-neutral-50">
                     {result.image ? (
                       <img
                         src={result.image}
@@ -289,15 +289,15 @@ export const GlobalSearch: React.FC = () => {
                         className="h-full w-full object-cover"
                       />
                     ) : (
-                      <TypeIcon className="h-4 w-4 text-[var(--text-muted)]" />
+                      <TypeIcon className="h-4 w-4 text-neutral-400" />
                     )}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-xs font-medium text-[var(--text)]">
+                    <span className="block truncate text-xs font-medium text-neutral-900">
                       {result.name}
                     </span>
                     {metaLine && (
-                      <span className="block truncate text-[10px] text-[var(--text-muted)]">
+                      <span className="block truncate text-[10px] text-neutral-500">
                         {metaLine}
                       </span>
                     )}
@@ -315,11 +315,11 @@ export const GlobalSearch: React.FC = () => {
             // Not a result — a one-row notice (same height/padding as a
             // result row) naming the invalid tag; the results above are
             // the all-sources matches for the text before the `//`.
-            <div className="flex items-center gap-2.5 bg-[var(--surface-muted)]/60 px-3 py-2">
+            <div className="flex items-center gap-2.5 bg-neutral-100 px-3 py-2">
               <span className="flex h-8 w-8 shrink-0 items-center justify-center">
                 <CircleAlert className="h-4 w-4 text-amber-500" />
               </span>
-              <span className="min-w-0 flex-1 truncate text-xs text-[var(--text-muted)]">
+              <span className="min-w-0 flex-1 truncate text-xs text-neutral-500">
                 &quot;{invalidTag}&quot; invalid tag — results from &quot;
                 {text}&quot;
               </span>

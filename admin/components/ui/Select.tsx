@@ -143,22 +143,27 @@ const Select: React.FC<SelectProps> = ({
         />
       </button>
 
-      {/* Dropdown Options List */}
+      {/* Dropdown Options List — ALWAYS a light menu (Ahsan's rule):
+          light background, dark text, a clearly visible dark border and
+          a solid opaque surface + strong shadow, in BOTH themes, so the
+          menu never blends into a dark form and nothing behind it bleeds
+          through. The closed trigger keeps the themed look; only the
+          open menu is light. */}
       {isOpen && (
         <div
-          className={`absolute right-0 left-0 z-50 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-lg max-h-56 overflow-y-auto py-1 animate-in fade-in zoom-in-95 duration-100 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-button]:hidden [&::-webkit-scrollbar-track]:bg-[var(--surface-muted)] [&::-webkit-scrollbar-thumb]:bg-[var(--primary)] [&::-webkit-scrollbar-thumb]:rounded-full ${dropdownDirectionClasses}`}
+          className={`absolute right-0 left-0 z-50 bg-white text-neutral-900 border border-neutral-800 rounded-xl shadow-[0_16px_40px_-8px_rgba(0,0,0,0.45)] max-h-56 overflow-y-auto py-1 animate-in fade-in zoom-in-95 duration-100 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-button]:hidden [&::-webkit-scrollbar-track]:bg-neutral-100 [&::-webkit-scrollbar-thumb]:bg-[var(--primary)] [&::-webkit-scrollbar-thumb]:rounded-full ${dropdownDirectionClasses}`}
         >
           {searchable && (
-            <div className="sticky top-0 bg-[var(--surface)] px-2 pt-2 pb-1.5">
+            <div className="sticky top-0 bg-white px-2 pt-2 pb-1.5">
               <div className="relative">
-                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--text-muted)]" />
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-neutral-500" />
                 <input
                   type="text"
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   onClick={(event) => event.stopPropagation()}
                   placeholder={searchPlaceholder}
-                  className="h-8 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] pl-8 pr-2.5 text-xs text-[var(--text)] outline-none transition focus:border-[var(--primary)]"
+                  className="h-8 w-full rounded-lg border border-neutral-400 bg-white pl-8 pr-2.5 text-xs text-neutral-900 placeholder:text-neutral-400 outline-none transition focus:border-[var(--primary)]"
                 />
               </div>
             </div>
@@ -166,7 +171,7 @@ const Select: React.FC<SelectProps> = ({
           {options.length === 0 && (emptyText || emptyActionLabel) ? (
             <div className="px-3 py-2.5">
               {emptyText && (
-                <p className="text-xs text-[var(--text-muted)]">{emptyText}</p>
+                <p className="text-xs text-neutral-500">{emptyText}</p>
               )}
               {emptyActionLabel && onEmptyAction && (
                 <button
@@ -183,7 +188,7 @@ const Select: React.FC<SelectProps> = ({
               )}
             </div>
           ) : visibleOptions.length === 0 ? (
-            <p className="px-3 py-2.5 text-xs text-[var(--text-muted)]">
+            <p className="px-3 py-2.5 text-xs text-neutral-500">
               No matches found
             </p>
           ) : (
@@ -200,8 +205,8 @@ const Select: React.FC<SelectProps> = ({
                 }}
                 className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between cursor-pointer transition-colors ${
                   isSelected
-                    ? "bg-[var(--primary-light,var(--surface-muted))] text-[var(--primary)] font-bold"
-                    : "text-[var(--text)] hover:bg-[var(--surface-muted)]"
+                    ? "bg-orange-100 text-neutral-900 font-bold shadow-[inset_3px_0_0_var(--primary)]"
+                    : "text-neutral-800 hover:bg-neutral-100"
                 }`}
               >
                 <span className="truncate">{option.label}</span>

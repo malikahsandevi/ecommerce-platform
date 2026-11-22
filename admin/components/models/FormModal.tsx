@@ -494,12 +494,12 @@ export const FormModal: React.FC<FormModalProps> = ({
               {tagsList.map((tag) => (
                 <span
                   key={tag}
-                  className="px-2.5 py-1 bg-[var(--primary-light,#fff7ed)] border border-[var(--primary-border,#fed7aa)] text-[var(--primary)] rounded-lg text-[10px] font-bold flex items-center gap-1"
+                  className="px-2.5 py-1 bg-[var(--primary)] border border-transparent text-[var(--primary-text)] rounded-lg text-[10px] font-bold flex items-center gap-1"
                 >
                   <TagIcon className="w-2.5 h-2.5" />
                   {tag}
                   <X
-                    className="w-3 h-3 cursor-pointer hover:text-red-500"
+                    className="w-3 h-3 cursor-pointer hover:text-red-200"
                     onClick={() => handleRemoveTag(field.name, tag)}
                   />
                 </span>

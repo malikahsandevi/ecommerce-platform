@@ -165,7 +165,7 @@ export const TopBar = <T extends SearchableEntityRecord>({
               }
               className={`relative p-0.5 md:p-2 rounded-xl transition-colors ${
                 activePopup === "msg"
-                  ? "bg-(--primary-light) text-(--primary-dark)"
+                  ? "bg-(--primary-soft) text-(--primary)"
                   : "text-(--text-muted) hover:text-(--text) hover:bg-(--primary-soft)"
               }`}
             >
@@ -179,7 +179,7 @@ export const TopBar = <T extends SearchableEntityRecord>({
               <div className="absolute right-0 mt-2 w-80 bg-(--background) rounded-2xl shadow-xl border border-(--border) z-50 p-4">
                 <div className="flex items-center justify-between pb-3 border-b border-(--border)">
                   <h4 className="text-sm font-bold text-(--text)">Messages</h4>
-                  <span className="text-[10px] bg-(--primary-light) text-(--primary-dark) px-2 py-0.5 rounded-full font-bold">
+                  <span className="text-[10px] bg-(--primary) text-(--primary-text) px-2 py-0.5 rounded-full font-bold">
                     {unreadMsgCount} New
                   </span>
                 </div>
@@ -222,7 +222,7 @@ export const TopBar = <T extends SearchableEntityRecord>({
               }
               className={`relative p-0.5 md:p-2 rounded-xl transition-colors ${
                 activePopup === "notif"
-                  ? "bg-(--primary-light) text-(--primary-dark)"
+                  ? "bg-(--primary-soft) text-(--primary)"
                   : "text-(--text-muted) hover:text-(--text) hover:bg-(--primary-soft)"
               }`}
             >
