@@ -103,6 +103,29 @@ html[data-sidebar="collapsed"] .admin-sidebar .sb-center {
   justify-content: center !important;
 }
 
+/* Custom scrollbar — the shared DEFAULT for every scrollable area
+   (Chromium): thin 6px bar, themed track, primary thumb. This global
+   rule is what stops any scroller from falling back to the thick
+   native Windows bar: a scroll container needs no classes of its own
+   to be custom (the TopBar notifications/messages lists shipped with
+   plain overflow-y-auto and rendered native until this rule landed).
+   Per-element Tailwind variants (e.g. the transparent track on the
+   media thumbnail strips, the surface-muted track on Select menus)
+   carry higher specificity and still refine individual scrollers;
+   .no-scrollbar above still wins on the sidebar nav, whose bar stays
+   hidden by design. */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--surface);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--primary);
+  border-radius: 9999px;
+}
+
 /* Scrollbar arrow buttons (Chromium): every scrollable area shows
    ONE solid-triangle arrow button at each end of its track — the
    classic scrollbar look — in the primary colour so the glyph reads
