@@ -2,48 +2,12 @@
 
 import React, { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import {
-  FolderTree,
-  Image as ImageIcon,
-  LayoutDashboard,
-  Package,
-  PanelLeftClose,
-  PanelLeftOpen,
-  Settings,
-  ShoppingCart,
-  Star,
-  Store,
-  Tag,
-  Ticket,
-  Users,
-  type LucideIcon,
-} from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen, Store } from "lucide-react";
 import SidebarItem from "@/components/ui/SidebarItem";
 import { useAdminAuth } from "@/services/authContext";
-
-interface SidebarConfig {
-  name: string;
-  icon: LucideIcon;
-  link: string;
-  /** Permission module that gates this entry (ITEM: role permissions). */
-  module: string;
-}
-
-const TOP_ITEMS: SidebarConfig[] = [
-  { name: "Dashboard", icon: LayoutDashboard, link: "/", module: "Dashboard" },
-  { name: "Products", icon: Package, link: "/products", module: "Products" },
-  { name: "Orders", icon: ShoppingCart, link: "/orders", module: "Orders" },
-  { name: "Customers", icon: Users, link: "/customers", module: "Customers" },
-  { name: "Category", icon: FolderTree, link: "/categories", module: "Categories" },
-  { name: "Brands", icon: Tag, link: "/brands", module: "Brands" },
-  { name: "Coupons", icon: Ticket, link: "/coupons", module: "Coupons" },
-  { name: "Media", icon: ImageIcon, link: "/media", module: "Media" },
-  { name: "Reviews", icon: Star, link: "/reviews", module: "Reviews" },
-];
-
-const BOTTOM_ITEMS: SidebarConfig[] = [
-  { name: "Settings", icon: Settings, link: "/setting", module: "Settings" },
-];
+// Page names/icons/links live in ONE shared config — the DetailPanel
+// empty state looks up the same icons via getPageIcon().
+import { TOP_NAV_ITEMS, BOTTOM_NAV_ITEMS } from "@/config/navItems";
 
 /** Keeps the pre-paint attribute (root layout inline script + globals.css)
  *  in step with the React state, so the two never disagree. */
@@ -117,8 +81,8 @@ const Sidebar: React.FC = () => {
   // are still loading, hasPermission answers "yes" so nothing flickers.
   const canView = (module: string): boolean =>
     typeof hasPermission === "function" ? hasPermission(module, "view") : true;
-  const topItems = TOP_ITEMS.filter((item) => canView(item.module));
-  const bottomItems = BOTTOM_ITEMS.filter((item) => canView(item.module));
+  const topItems = TOP_NAV_ITEMS.filter((item) => canView(item.module));
+  const bottomItems = BOTTOM_NAV_ITEMS.filter((item) => canView(item.module));
 
   const isActive = (link: string) =>
     link === "/" ? pathname === "/" : pathname.startsWith(link);

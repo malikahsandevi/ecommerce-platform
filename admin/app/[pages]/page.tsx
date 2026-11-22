@@ -20,6 +20,7 @@ import { confirmDialog } from "@/components/ui/ConfirmDialog";
 import { toast } from "@/components/ui/Toast";
 
 import { getRouteConfigByPath } from "@/config";
+import { getPageIcon } from "@/config/navItems";
 import { extractApiError, PaginationMeta } from "@/services/api";
 import { useAdminAuth } from "@/services/authContext";
 import { useStoreCurrency } from "@/services/currency";
@@ -873,6 +874,7 @@ const PageLayout: React.FC = () => {
         <DetailPanel
           selectedItem={selectedDetailData as never}
           panelTitle={`${Route} Details`}
+          emptyIcon={getPageIcon(Route)}
           onClose={() => setSelectedRawRow(null)}
           onEdit={canEdit ? handleEditItem : undefined}
           onDelete={
