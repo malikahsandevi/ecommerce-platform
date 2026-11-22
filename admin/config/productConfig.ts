@@ -137,7 +137,7 @@ export const productConfig = {
   // Table Column Labels
   columnHeaders: {
     _id: "ID",
-    name: "Product Name",
+    name: "Name",
     sku: "SKU",
     category: "Category",
     price: "Price",

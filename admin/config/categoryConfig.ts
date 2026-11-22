@@ -65,9 +65,9 @@ export const categoryConfig = {
   // Table Column Labels
   columnHeaders: {
     _id: "ID",
-    name: "Category Name",
+    name: "Name",
     slug: "Slug",
-    sortOrder: "Sort Order",
+    sortOrder: "Sort",
     productsCount: "Products",
     status: "Status",
   },

@@ -79,8 +79,8 @@ export const couponConfig = {
   // Table Column Labels
   columnHeaders: {
     _id: "ID",
-    code: "Coupon Code",
-    type: "Discount Type",
+    code: "Code",
+    type: "Type",
     value: "Value",
     usage: "Usage",
     status: "Status",

@@ -80,7 +80,7 @@ export const mediaConfig = {
 
   columnHeaders: {
     _id: "ID",
-    name: "File Name",
+    name: "Name",
     type: "Type",
     size: "Size",
     dimensions: "Dimensions",

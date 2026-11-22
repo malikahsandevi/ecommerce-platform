@@ -882,11 +882,11 @@ function UsersPanel({
         <table className="w-full min-w-[600px] text-left text-sm">
           <thead className="bg-[var(--surface)] text-xs text-[var(--text-muted)]">
             <tr>
-              <th className="px-4 py-3">Name</th>
-              <th className="px-4 py-3">Email</th>
-              <th className="px-4 py-3">Role</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3 text-right">Actions</th>
+              <th className="px-4 py-3 whitespace-nowrap">Name</th>
+              <th className="px-4 py-3 whitespace-nowrap">Email</th>
+              <th className="px-4 py-3 whitespace-nowrap">Role</th>
+              <th className="px-4 py-3 whitespace-nowrap">Status</th>
+              <th className="px-4 py-3 text-right whitespace-nowrap">Actions</th>
             </tr>
           </thead>
           <tbody>

@@ -53,7 +53,7 @@ export const brandConfig = {
 
   columnHeaders: {
     _id: "ID",
-    name: "Brand Name",
+    name: "Name",
     slug: "Slug",
     website: "Website",
     productsCount: "Products",

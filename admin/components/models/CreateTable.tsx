@@ -18,6 +18,22 @@ export interface CreateTableProps<T extends Record<string, any>> {
   enableAvatarViewer?: boolean;
 }
 
+/**
+ * Offscreen ruler in the header's own type style (11px, semibold,
+ * uppercase, tracking-wide) used to measure the one-line width each
+ * header label needs — columns never get narrower than that.
+ */
+let headerRuler: HTMLSpanElement | null = null;
+function getHeaderRuler(): HTMLSpanElement {
+  if (!headerRuler) {
+    headerRuler = document.createElement("span");
+    headerRuler.style.cssText =
+      "position:absolute;visibility:hidden;white-space:nowrap;font-size:11px;font-weight:600;letter-spacing:0.025em;text-transform:uppercase;";
+    document.body.appendChild(headerRuler);
+  }
+  return headerRuler;
+}
+
 // Helper function to truncate long MongoDB or UUID IDs
 const formatId = (idValue: any): string => {
   const str = String(idValue || "");
@@ -129,25 +145,57 @@ export function CreateTable<T extends Record<string, any>>({
     const expectedCells = columns.length + (showActions ? 1 : 0);
     const firstRow = bodyTable.tBodies[0]?.rows[0];
     if (firstRow && expectedCells > 0 && firstRow.cells.length === expectedCells) {
-      const widths = Array.from(firstRow.cells).map(
+      const measured = Array.from(firstRow.cells).map(
         (cell) => cell.getBoundingClientRect().width,
       );
-      let colgroup = headerTable.querySelector("colgroup");
-      if (!colgroup) {
-        colgroup = document.createElement("colgroup");
-        headerTable.prepend(colgroup);
-      }
-      while (colgroup.children.length < widths.length) {
-        colgroup.appendChild(document.createElement("col"));
-      }
-      while (colgroup.children.length > widths.length) {
-        colgroup.lastElementChild?.remove();
-      }
-      widths.forEach((w, i) => {
-        (colgroup!.children[i] as HTMLElement).style.width = `${w}px`;
+
+      // One-line headers: a column may never be narrower than its
+      // header label needs on a single line. The header font is
+      // measured with an offscreen ruler in the header's own style
+      // (11px, semibold, uppercase, tracking-wide) plus the cell's
+      // horizontal padding. When the minimums overflow the container
+      // the body wrapper scrolls horizontally (header follows via the
+      // scrollLeft mirror) instead of crushing columns together.
+      const ruler = getHeaderRuler();
+      const headerCells = headerTable.tHead?.rows[0]?.cells;
+      const widths = measured.map((w, i) => {
+        const label = headerCells?.[i]?.textContent?.trim() ?? "";
+        ruler.textContent = label;
+        const min = Math.max(ruler.getBoundingClientRect().width + 26, 60);
+        return Math.max(w, min);
       });
-      headerTable.style.tableLayout = "fixed";
-      headerTable.style.width = `${bodyTable.getBoundingClientRect().width}px`;
+
+      // Fill the container exactly when the columns fit; keep the
+      // wider sum when they overflow (horizontal scroll takes over).
+      const available = bodyWrap.clientWidth;
+      const total = widths.reduce((a, b) => a + b, 0);
+      let finalWidths = widths;
+      if (total > 0 && total < available) {
+        const extra = (available - total) / widths.length;
+        finalWidths = widths.map((w) => w + extra);
+      }
+      const finalTotal = finalWidths.reduce((a, b) => a + b, 0);
+
+      const applyWidths = (table: HTMLTableElement) => {
+        let colgroup = table.querySelector("colgroup");
+        if (!colgroup) {
+          colgroup = document.createElement("colgroup");
+          table.prepend(colgroup);
+        }
+        while (colgroup.children.length < finalWidths.length) {
+          colgroup.appendChild(document.createElement("col"));
+        }
+        while (colgroup.children.length > finalWidths.length) {
+          colgroup.lastElementChild?.remove();
+        }
+        finalWidths.forEach((w, i) => {
+          (colgroup!.children[i] as HTMLElement).style.width = `${w}px`;
+        });
+        table.style.tableLayout = "fixed";
+        table.style.width = `${finalTotal}px`;
+      };
+      applyWidths(headerTable);
+      applyWidths(bodyTable);
     }
     headerWrap.scrollLeft = bodyWrap.scrollLeft;
   };
@@ -171,13 +219,13 @@ export function CreateTable<T extends Record<string, any>>({
           <thead className="bg-[var(--surface)] border-b border-[var(--border)] text-[var(--text-muted)] font-semibold text-[11px] uppercase tracking-wide">
             <tr>
               {columns.map((colKey, index) => (
-                <th key={String(colKey) + index} className="px-3 py-3">
-                  <div className="flex items-center gap-1 select-none">
+                <th key={String(colKey) + index} className="px-3 py-3 whitespace-nowrap">
+                  <div className="flex items-center gap-1 select-none whitespace-nowrap">
                     {columnHeaders?.[colKey] ?? String(colKey)}
                   </div>
                 </th>
               ))}
-              {showActions && <th className="px-3 py-3 w-20">Actions</th>}
+              {showActions && <th className="px-3 py-3 w-20 whitespace-nowrap">Actions</th>}
             </tr>
           </thead>
         </table>

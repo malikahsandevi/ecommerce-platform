@@ -64,12 +64,12 @@ export const RecentOrdersCard: React.FC<RecentOrdersProps> = ({ orders }) => {
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="text-[11px] uppercase tracking-wide text-(--text-muted) border-b border-(--border)">
-                <th className="py-2 pr-3 font-semibold">Order</th>
-                <th className="py-2 pr-3 font-semibold">Customer</th>
-                <th className="py-2 pr-3 font-semibold">Product</th>
-                <th className="py-2 pr-3 font-semibold">Qty</th>
-                <th className="py-2 pr-3 font-semibold">Total</th>
-                <th className="py-2 font-semibold">Status</th>
+                <th className="py-2 pr-3 font-semibold whitespace-nowrap">Order</th>
+                <th className="py-2 pr-3 font-semibold whitespace-nowrap">Customer</th>
+                <th className="py-2 pr-3 font-semibold whitespace-nowrap">Product</th>
+                <th className="py-2 pr-3 font-semibold whitespace-nowrap">Qty</th>
+                <th className="py-2 pr-3 font-semibold whitespace-nowrap">Total</th>
+                <th className="py-2 font-semibold whitespace-nowrap">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-(--border)">
