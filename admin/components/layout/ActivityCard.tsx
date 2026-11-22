@@ -10,6 +10,7 @@ import {
   TriangleAlert,
   type LucideIcon,
 } from "lucide-react";
+import { useLanguage } from "@/services/i18n";
 
 export interface ActivityLogItem {
   id: string;
@@ -55,9 +56,10 @@ export const ActivityCard: React.FC<{ logs?: ActivityLogItem[] }> = ({ logs }) =
     );
   }
 
+  const { t } = useLanguage();
   return (
     <div className="bg-(--background) p-5 rounded-2xl shadow-sm border border-(--border) h-full w-full flex flex-col">
-      <h3 className="text-base font-bold text-(--text) mb-4">Recent Activity</h3>
+      <h3 className="text-base font-bold text-(--text) mb-4">{t("Recent Activity")}</h3>
 
       {logs.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center gap-1.5 py-8 text-center">

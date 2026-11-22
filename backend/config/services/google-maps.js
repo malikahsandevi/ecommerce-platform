@@ -18,7 +18,8 @@ module.exports = {
             "key": "apiKey",
             "label": "API Key",
             "secret": true,
-            "required": true
+            "required": true,
+            "placeholder": "Paste the API key — hidden after saving"
         }
     ],
     "endpoints": [

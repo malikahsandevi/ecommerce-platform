@@ -1,5 +1,6 @@
 import React from "react";
 import { Ellipsis, ReceiptText } from "lucide-react";
+import { useLanguage } from "@/services/i18n";
 
 export interface OrderStatusCount {
   status: string;
@@ -50,10 +51,11 @@ export const OrdersByStatusCard: React.FC<OrdersByStatusCardProps> = ({ data }) 
     }))
     .sort((a, b) => b.count - a.count);
 
+  const { t } = useLanguage();
   return (
     <div className="p-5 w-full h-full bg-(--background) rounded-2xl shadow-sm border border-(--border) flex flex-col">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-base font-bold text-(--text)">Orders by Status</h3>
+        <h3 className="text-base font-bold text-(--text)">{t("Orders by Status")}</h3>
         <Ellipsis className="w-5 h-5 text-(--text-muted)" />
       </div>
 

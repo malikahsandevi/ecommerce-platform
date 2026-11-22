@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowRight, ShoppingBag } from "lucide-react";
 import { StatusPill } from "@/components/models/CreateTable";
 import { formatMoney, useStoreCurrency } from "@/services/currency";
+import { useLanguage } from "@/services/i18n";
 
 export interface DashboardOrder {
   id: string;
@@ -36,10 +37,11 @@ export const RecentOrdersCard: React.FC<RecentOrdersProps> = ({ orders }) => {
     );
   }
 
+  const { t } = useLanguage();
   return (
     <div className="bg-(--background) p-5 rounded-2xl shadow-sm border border-(--border) h-full w-full flex flex-col">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-base font-bold text-(--text)">Recent Orders</h3>
+        <h3 className="text-base font-bold text-(--text)">{t("Recent Orders")}</h3>
         <Link
           href="/orders"
           className="inline-flex items-center gap-1 text-xs font-semibold text-(--primary) hover:text-(--primary-dark) transition-colors"

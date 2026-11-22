@@ -16,7 +16,8 @@ module.exports = {
             "key": "pixelId",
             "label": "Pixel ID",
             "secret": false,
-            "required": true
+            "required": true,
+            "placeholder": "e.g. 123456789012345"
         }
     ],
     "endpoints": []

@@ -16,12 +16,13 @@ export interface ServiceFieldDef {
   type?: "text" | "number" | "select";
   options?: string[];
   default?: string;
+  /** Input placeholder — a format hint/example, never a fake secret. */
+  placeholder?: string;
 }
 
 export interface SubServiceDef {
   id: string;
   name: string;
-  builtIn?: boolean;
   hasFixedBase: boolean;
   fields: ServiceFieldDef[];
   endpoints: { name: string; path: string; method: string }[];
@@ -46,7 +47,7 @@ export const SERVICE_CATALOGUE: ServiceCategoryDef[] = [
     label: "Storage",
     subServices: [
       {
-        id: "cloudinary", name: "Cloudinary", builtIn: true, hasFixedBase: true,
+        id: "cloudinary", name: "Cloudinary", hasFixedBase: true,
         fields: [F("cloudName", "Cloud Name"), F("apiKey", "API Key"), F("apiSecret", "API Secret", true)],
         endpoints: [{ name: "ping", path: "/ping", method: "GET" }],
       },
@@ -83,6 +84,57 @@ export const SERVICE_CATALOGUE: ServiceCategoryDef[] = [
         id: "razorpay", name: "Razorpay", hasFixedBase: true,
         fields: [F("keyId", "Key ID"), F("keySecret", "Key Secret", true)],
         endpoints: [{ name: "payments", path: "/payments", method: "GET" }],
+      },
+      {
+        id: "square", name: "Square", hasFixedBase: true,
+        fields: [F("accessToken", "Access Token", true), F("locationId", "Location ID")],
+        endpoints: [{ name: "locations", path: "/locations", method: "GET" }],
+      },
+      {
+        id: "adyen", name: "Adyen", hasFixedBase: true,
+        fields: [
+          F("apiKey", "API Key", true), F("merchantAccount", "Merchant Account"),
+          F("environment", "Environment", false, { type: "select", options: ["Test", "Live"], default: "Test" }),
+        ],
+        endpoints: [{ name: "paymentMethods", path: "/paymentMethods", method: "POST" }],
+      },
+      {
+        id: "checkout-com", name: "Checkout.com", hasFixedBase: true,
+        fields: [F("secretKey", "Secret Key", true), F("publishableKey", "Publishable Key")],
+        endpoints: [],
+      },
+      {
+        id: "braintree", name: "Braintree", hasFixedBase: true,
+        fields: [
+          F("merchantId", "Merchant ID"), F("publicKey", "Public Key"), F("privateKey", "Private Key", true),
+          F("environment", "Environment", false, { type: "select", options: ["Sandbox", "Production"], default: "Sandbox" }),
+        ],
+        endpoints: [],
+      },
+      {
+        id: "mollie", name: "Mollie", hasFixedBase: true,
+        fields: [F("apiKey", "API Key", true)],
+        endpoints: [{ name: "methods", path: "/methods", method: "GET" }],
+      },
+      {
+        id: "paddle", name: "Paddle", hasFixedBase: true,
+        fields: [F("apiKey", "API Key", true), F("clientToken", "Client Token")],
+        endpoints: [{ name: "products", path: "/products", method: "GET" }],
+      },
+      {
+        id: "jazzcash", name: "JazzCash", hasFixedBase: false,
+        fields: [F("merchantId", "Merchant ID"), F("password", "Password", true), F("integritySalt", "Integrity Salt", true)],
+        endpoints: [],
+      },
+      {
+        id: "easypaisa", name: "Easypaisa", hasFixedBase: false,
+        fields: [F("storeId", "Store ID"), F("hashKey", "Hash Key", true)],
+        endpoints: [],
+      },
+      {
+        id: "payfast", name: "PayFast", hasFixedBase: false,
+        fields: [F("merchantId", "Merchant ID"), F("securedKey", "Secured Key", true)],
+        endpoints: [],
       },
     ],
   },
@@ -163,9 +215,9 @@ export const SERVICE_CATALOGUE: ServiceCategoryDef[] = [
         endpoints: [],
       },
       {
-        id: "store-session-jwt", name: "Store Session (JWT)", builtIn: true, hasFixedBase: false,
+        id: "store-session-jwt", name: "Store Session (JWT)", hasFixedBase: false,
         fields: [F("jwtSecret", "JWT Secret", true)],
-        endpoints: [],
+        endpoints: [{ name: "verify", path: "/", method: "GET" }],
       },
     ],
   },
@@ -234,6 +286,73 @@ export const SERVICE_CATALOGUE: ServiceCategoryDef[] = [
     ],
   },
 ];
+
+/** Input placeholders per field key — format hints/examples only.
+ *  Secret fields get a textual "hidden after saving" hint, never a
+ *  fake real-looking secret. Mirrors the backend definitions'
+ *  placeholder metadata (config/services). */
+const PLACEHOLDER_BY_KEY: Record<string, string> = {
+  cloudName: "e.g. my-cloud-name",
+  accessKey: "Access key ID (starts with AKIA…)",
+  bucket: "e.g. store-media",
+  region: "e.g. eu-west-1",
+  accountId: "Your account ID",
+  publishableKey: "e.g. pk_live_…",
+  clientId: "Client ID from the provider dashboard",
+  keyId: "e.g. rzp_live_…",
+  providerName: "e.g. Hostinger / cPanel mail",
+  host: "e.g. smtp.example.com",
+  port: "587",
+  username: "e.g. mail@yourdomain.com",
+  fromEmail: "name@example.com",
+  fromName: "e.g. My Store",
+  domain: "e.g. mg.yourdomain.com",
+  accountSid: "e.g. AC… (34 characters)",
+  fromNumber: "e.g. +14155552671",
+  from: "e.g. MyStore",
+  appId: "Your app ID",
+  merchantId: "Your merchant ID",
+  publicKey: "Your public key",
+  locationId: "Your Square location ID",
+  merchantAccount: "e.g. MyStoreECOM",
+  storeId: "Your store ID",
+  clientToken: "Client-side token from the dashboard",
+  accountNumber: "e.g. 123456789",
+  measurementId: "e.g. G-XXXXXXXXXX",
+  pixelId: "e.g. 123456789012345",
+};
+const SECRET_PLACEHOLDER_BY_KEY: Record<string, string> = {
+  apiKey: "Paste the API key — hidden after saving",
+  apiSecret: "Paste the API secret — hidden after saving",
+  secretKey: "Paste the secret key — hidden after saving",
+  webhookSecret: "e.g. whsec_… — hidden after saving",
+  clientSecret: "Paste the client secret — hidden after saving",
+  keySecret: "Paste the key secret — hidden after saving",
+  password: "Paste the password — hidden after saving",
+  authToken: "Paste the auth token — hidden after saving",
+  appSecret: "Paste the app secret — hidden after saving",
+  jwtSecret: "A long random string — hidden after saving",
+  privateKey: "Paste the private key — hidden after saving",
+  integritySalt: "Paste the integrity salt — hidden after saving",
+  hashKey: "Paste the hash key — hidden after saving",
+  securedKey: "Paste the secured key — hidden after saving",
+  apiToken: "Paste the API token — hidden after saving",
+  accessToken: "Paste the access token — hidden after saving",
+  accountPin: "Paste the account PIN — hidden after saving",
+};
+// apiKey is a plain identifier for some providers (Cloudinary) and a
+// secret for others — the per-field secret flag decides, like the
+// backend script that wrote the same values into the definitions.
+for (const category of SERVICE_CATALOGUE) {
+  for (const sub of category.subServices) {
+    for (const field of sub.fields) {
+      if (field.type === "select" || field.placeholder) continue;
+      field.placeholder = field.secret
+        ? (SECRET_PLACEHOLDER_BY_KEY[field.key] ?? "Paste the value — hidden after saving")
+        : (PLACEHOLDER_BY_KEY[field.key] ?? (field.key === "apiKey" ? "e.g. 123456789012345" : `e.g. ${field.label}`));
+    }
+  }
+}
 
 export const categoryById = (id: string): ServiceCategoryDef | undefined =>
   SERVICE_CATALOGUE.find((category) => category.id === id);

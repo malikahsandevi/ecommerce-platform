@@ -39,12 +39,14 @@ app.get('/', (req, res) => {
 app.use('/api', async (req, res, next) => {
     try {
         await connectDB();
-        // Service credentials live in the database (Settings →
-        // Credentials), seeded from the environment on first boot.
-        // Refreshing here keeps every downstream reader — JWT verify,
-        // Cloudinary signing, URL signing — on the stored values; the
-        // refresh is TTL-cached and failure-proof (env fallback), so it
-        // never blocks a request.
+        // Service credentials live in the database as normal service
+        // entries (Settings → API / Integrations); the first refresh
+        // also runs the one-time migration that moves the legacy
+        // Credential store's values into those entries. Refreshing
+        // here keeps every downstream reader — JWT verify, Cloudinary
+        // signing, URL signing — on the stored values; the refresh is
+        // TTL-cached and failure-proof (env fallback), so it never
+        // blocks a request.
         await refreshCredentials();
         next();
     } catch (error) {

@@ -16,25 +16,29 @@ module.exports = {
             "key": "accountId",
             "label": "Account ID",
             "secret": false,
-            "required": true
+            "required": true,
+            "placeholder": "Your account ID"
         },
         {
             "key": "accessKey",
             "label": "Access Key",
             "secret": false,
-            "required": true
+            "required": true,
+            "placeholder": "Access key ID (starts with AKIA…)"
         },
         {
             "key": "secretKey",
             "label": "Secret Key",
             "secret": true,
-            "required": true
+            "required": true,
+            "placeholder": "Paste the secret key — hidden after saving"
         },
         {
             "key": "bucket",
             "label": "Bucket",
             "secret": false,
-            "required": true
+            "required": true,
+            "placeholder": "e.g. store-media"
         }
     ],
     "endpoints": []

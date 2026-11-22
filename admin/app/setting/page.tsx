@@ -22,6 +22,7 @@ import { settingsService } from "@/services/settingsService";
 import type { SettingsDocument, SettingsSection, SettingsUser } from "@/services/settingsService";
 import { useAdminAuth } from "@/services/authContext";
 import { applyAppearance, type AppearanceSettings } from "@/services/appearance";
+import { applyLanguage, useLanguage } from "@/services/i18n";
 import { toast } from "@/components/ui/Toast";
 import { SettingsPanel } from "../../components/layout/SettingsPanels";
 
@@ -51,6 +52,7 @@ const settingMenus: { name: SettingMenu; icon: LucideIcon }[] = [
 
 export default function SettingsPage() {
   const { isAuthenticated, user, hasPermission } = useAdminAuth();
+  const { t } = useLanguage();
 
   const canViewSettings =
     typeof hasPermission !== "function" || hasPermission("Settings", "view");
@@ -67,10 +69,10 @@ export default function SettingsPage() {
   };
 
   // The Users & Roles section is account management — roles without
-  // Users view don't see the menu entry at all. The store's service
-  // credentials live inside API / Integrations as a built-in block —
-  // that block hides itself for non-Super-Admins (and its API answers
-  // 403 for everyone else), so no menu rule is needed here.
+  // Users view don't see the menu entry at all. Every service —
+  // including the store's own storage and session auth — is a normal
+  // entry in the integrations builder, gated by the Settings
+  // permissions, so no menu rule is needed here.
   const visibleMenus = settingMenus.filter((menu) => {
     if (menu.name === "Users & Roles") return canViewUsers;
     return true;
@@ -130,6 +132,12 @@ export default function SettingsPage() {
       // Appearance takes effect immediately, not just in the database.
       if (section === "appearance") {
         applyAppearance(updated.appearance as AppearanceSettings);
+      }
+      // Language too: saving General re-renders the whole shell in
+      // the chosen language without waiting for a reload.
+      if (section === "general") {
+        const language = (updated.general as { language?: string } | undefined)?.language;
+        if (language) applyLanguage(language);
       }
       toast.success("Settings saved.");
     } catch (saveError) {
@@ -201,8 +209,8 @@ export default function SettingsPage() {
       <main className="min-h-full bg-[var(--background)] p-3">
         <header className="mb-3 flex w-full items-center justify-between">
           <TopBar
-            title="Settings"
-            subtitle="Manage your store settings and preferences"
+            title={t("Settings")}
+            subtitle={t("Manage your store settings and preferences")}
             user={topBarUser}
             messages={[]}
             notifications={[]}
@@ -232,8 +240,8 @@ export default function SettingsPage() {
             here entirely, which is why Settings looked different. */}
         <header className="flex w-full items-center justify-between">
           <TopBar
-            title="Settings"
-            subtitle="Manage your store settings and preferences"
+            title={t("Settings")}
+            subtitle={t("Manage your store settings and preferences")}
             user={topBarUser}
             messages={[]}
             notifications={[]}
@@ -294,8 +302,8 @@ export default function SettingsPage() {
     <main className="min-h-full bg-[var(--background)] p-3">
       <header className="mb-3 flex w-full items-center justify-between">
         <TopBar
-          title="Settings"
-          subtitle="Manage your store settings and preferences"
+          title={t("Settings")}
+          subtitle={t("Manage your store settings and preferences")}
           user={topBarUser}
           messages={[]}
           notifications={[]}
@@ -317,7 +325,7 @@ export default function SettingsPage() {
                 className={`min-w-[clamp(130px,18%,100%)] flex-1 justify-start text-left ${active ? "text-[var(--primary)]!" : ""}`}
               >
                 <Icon size={17} className={active ? "text-[var(--primary)]" : "text-[var(--text-muted)]"} />
-                <span className="truncate">{name}</span>
+                <span className="truncate">{t(name)}</span>
               </Button>
             );
           })}
@@ -333,6 +341,9 @@ export default function SettingsPage() {
             onDeleteUser={(id) => void deleteUser(id)}
             onUpdateUser={(id, values) => void updateUser(id, values)}
             onCreateUser={createUser}
+            onIntegrationsSync={(integrations) =>
+              setSettings((current) => ({ ...current, integrations }))
+            }
           />
         </section>
       </div>

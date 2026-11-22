@@ -16,32 +16,37 @@ module.exports = {
             "key": "providerName",
             "label": "Provider Name",
             "secret": false,
-            "required": true
+            "required": true,
+            "placeholder": "e.g. Hostinger / cPanel mail"
         },
         {
             "key": "host",
             "label": "SMTP Host",
             "secret": false,
-            "required": true
+            "required": true,
+            "placeholder": "e.g. smtp.example.com"
         },
         {
             "key": "port",
             "label": "Port",
             "secret": false,
             "required": true,
-            "type": "number"
+            "type": "number",
+            "placeholder": "587"
         },
         {
             "key": "username",
             "label": "Username",
             "secret": false,
-            "required": true
+            "required": true,
+            "placeholder": "e.g. mail@yourdomain.com"
         },
         {
             "key": "password",
             "label": "Password",
             "secret": true,
-            "required": true
+            "required": true,
+            "placeholder": "Paste the password — hidden after saving"
         },
         {
             "key": "encryption",
@@ -60,13 +65,15 @@ module.exports = {
             "key": "fromEmail",
             "label": "From Email",
             "secret": false,
-            "required": true
+            "required": true,
+            "placeholder": "name@example.com"
         },
         {
             "key": "fromName",
             "label": "From Name",
             "secret": false,
-            "required": true
+            "required": true,
+            "placeholder": "e.g. My Store"
         }
     ],
     "endpoints": []

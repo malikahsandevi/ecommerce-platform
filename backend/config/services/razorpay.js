@@ -18,13 +18,15 @@ module.exports = {
             "key": "keyId",
             "label": "Key ID",
             "secret": false,
-            "required": true
+            "required": true,
+            "placeholder": "e.g. rzp_live_…"
         },
         {
             "key": "keySecret",
             "label": "Key Secret",
             "secret": true,
-            "required": true
+            "required": true,
+            "placeholder": "Paste the key secret — hidden after saving"
         }
     ],
     "endpoints": [

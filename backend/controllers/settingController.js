@@ -6,21 +6,26 @@ const {
     isConfigured,
     findEntry,
 } = require('../config/services');
-const { executeEntryCall } = require('../utils/integrationRunner');
+const { executeEntryCall, runConfigTest } = require('../utils/integrationRunner');
 const { SECRET_MASK, refreshCredentials } = require('../utils/credentials');
+const mongoose = require('mongoose');
 
+// NOTE: the old bespoke 'paymentMethods' and 'shipping' sections are
+// deliberately NOT writable here any more — Ahsan replaced those tabs
+// with the services system (Payment / Shipping category entries in
+// `integrations`, managed from the new Payment Methods / Shipping
+// tabs). The fields stay in the Setting schema/document (their stored
+// values are preserved, simply no longer editable or read by any
+// flow — nothing ever consumed them).
 const settingSections = new Set([
     'general',
     'storeInfo',
-    'paymentMethods',
-    'shipping',
     'notifications',
     'integrations',
-    'builtInServices',
     'appearance'
 ]);
 
-const arraySections = new Set(['paymentMethods', 'integrations']);
+const arraySections = new Set(['integrations']);
 
 // The integration schema requires `usageType` from this enum (the
 // service catalogue's categories, config/services/index.js). Older
@@ -190,6 +195,11 @@ const normalizeIntegration = (item, existingBySlug) => {
             return {
                 key,
                 secret,
+                // The pair's own ON/OFF toggle: an explicit value in
+                // the payload wins, then the stored state, default ON.
+                isActive: pair.isActive !== undefined
+                    ? Boolean(pair.isActive)
+                    : (existingCustom.get(key)?.isActive !== false),
                 value: secret
                     ? keepSecret(pair.value, existingCustom.get(key)?.value)
                     : String(pair.value ?? ''),
@@ -259,13 +269,6 @@ const normalizeSection = (section, value, currentValue) => {
     }
 
     const normalized = { ...(currentValue?.toObject?.() || currentValue || {}), ...value };
-    if (section === 'builtInServices') {
-        // Only the two known toggles, only booleans — nothing else in
-        // this section may be written through the settings API. A
-        // toggle that is not sent keeps its stored state.
-        if (value.cloudinary) normalized.cloudinary = { isActive: value.cloudinary.isActive !== false };
-        if (value.storeSessionJwt) normalized.storeSessionJwt = { isActive: value.storeSessionJwt.isActive !== false };
-    }
     if (section === 'general' && value.monthlyTarget !== undefined) {
         normalized.monthlyTarget = parseCurrencyNumber(value.monthlyTarget, 'monthlyTarget');
     }
@@ -274,17 +277,6 @@ const normalizeSection = (section, value, currentValue) => {
             ...(currentValue?.address?.toObject?.() || currentValue?.address || {}),
             ...value.address
         };
-    }
-    if (section === 'shipping') {
-        if (value.freeShippingThreshold !== undefined) {
-            normalized.freeShippingThreshold = parseCurrencyNumber(value.freeShippingThreshold, 'freeShippingThreshold');
-        }
-        if (Array.isArray(value.zones)) {
-            normalized.zones = value.zones.map((zone) => ({
-                ...zone,
-                rate: parseCurrencyNumber(zone.rate, 'Shipping zone rate')
-            }));
-        }
     }
     return normalized;
 };
@@ -309,9 +301,10 @@ const updateSettings = async (req, res) => {
         }
 
         const savedSettings = await settings.save();
-        // A built-in toggle may have moved — refresh the credentials
-        // resolver's snapshot on this instance right away.
-        if (req.body.builtInServices) await refreshCredentials(true);
+        // The Cloudinary / JWT entries live in integrations now — an
+        // integrations save may have moved them, so refresh the
+        // credentials resolver's snapshot on this instance right away.
+        if (req.body.integrations) await refreshCredentials(true);
         res.json(maskSettingsDocument(savedSettings));
     } catch (error) {
         res.status(400).json({ message: error.message });
@@ -337,6 +330,12 @@ const executeIntegration = async (req, res) => {
                 message: `Integration '${serviceSlug}' is not fully configured — every credential field of ${definition.name} must be saved first.`,
             });
         }
+        // A preset with no callable endpoint gets a configuration
+        // test instead of an HTTP call (see runConfigTest).
+        if (entry.subService && entry.subService !== 'custom' && !(definition.endpoints || []).length) {
+            const data = await runConfigTest({ entry, definition, values: entry.values });
+            return res.json({ success: true, data });
+        }
         const data = await executeEntryCall({ entry, definition, endpointName, payload, queryParams });
         res.json({ success: true, data });
     } catch (error) {
@@ -353,6 +352,9 @@ const executeIntegration = async (req, res) => {
 // served it.
 const getSettingById = async (req, res) => {
     try {
+        if (!mongoose.isValidObjectId(req.params.id)) {
+            return res.status(404).json({ message: 'Setting not found' });
+        }
         const doc = await Setting.findById(req.params.id);
         if (!doc) return res.status(404).json({ message: 'Setting not found' });
         res.json(maskSettingsDocument(doc));
@@ -363,6 +365,9 @@ const getSettingById = async (req, res) => {
 
 const updateSettingById = async (req, res) => {
     try {
+        if (!mongoose.isValidObjectId(req.params.id)) {
+            return res.status(404).json({ message: 'Setting not found' });
+        }
         const doc = await Setting.findById(req.params.id);
         if (!doc) return res.status(404).json({ message: 'Setting not found' });
         const sections = Object.entries(req.body || {}).filter(([section]) => settingSections.has(section));
@@ -370,11 +375,71 @@ const updateSettingById = async (req, res) => {
             doc.set(section, normalizeSection(section, value, doc.get(section)));
         }
         const saved = await doc.save();
-        if (req.body?.builtInServices) await refreshCredentials(true);
+        if (req.body?.integrations) await refreshCredentials(true);
         res.json(maskSettingsDocument(saved));
     } catch (error) {
         res.status(400).json({ message: error.message });
     }
 };
 
-module.exports = { getSettings, updateSettings, executeIntegration, getServicesCatalogue, maskSettingsDocument, getSettingById, updateSettingById };
+// ── Per-entry integration writes ─────────────────────────────────────
+// Every service entry in the panel has its OWN Save button: this
+// endpoint upserts exactly ONE entry (matched by its slug) and leaves
+// every other entry untouched. The entry goes through the same
+// normalizer as a whole-array save (preset values forced from the
+// definition, secrets kept on mask/blank), so a per-entry save can
+// never diverge from what the array save would have stored.
+const saveIntegrationEntry = async (req, res) => {
+    try {
+        const serviceSlug = String(req.params.serviceSlug || '');
+        const item = req.body || {};
+        if (!serviceSlug || String(item.serviceSlug || '') !== serviceSlug) {
+            return res.status(400).json({ message: 'The entry slug must match the URL slug.' });
+        }
+        let settings = await Setting.findOne().sort({ createdAt: 1 });
+        if (!settings) settings = new Setting();
+        const current = settings.get('integrations') || [];
+        const existingBySlug = new Map(
+            current.map((entry) => {
+                const obj = entry?.toObject ? entry.toObject() : entry;
+                return [obj.serviceSlug, obj];
+            }),
+        );
+        const normalized = normalizeIntegration(item, existingBySlug);
+        const index = current.findIndex((entry) => entry.serviceSlug === serviceSlug);
+        const next = [...current];
+        if (index >= 0) next[index] = normalized;
+        else next.push(normalized);
+        settings.set('integrations', next);
+        const saved = await settings.save();
+        await refreshCredentials(true);
+        const masked = maskSettingsDocument(saved);
+        const integration = (masked.integrations || []).find((entry) => entry.serviceSlug === serviceSlug) || null;
+        res.json({ integration, integrations: masked.integrations || [] });
+    } catch (error) {
+        res.status(400).json({ message: error.message });
+    }
+};
+
+// The per-entry counterpart for the card's remove button: deletes
+// exactly one entry by slug, nothing else.
+const deleteIntegrationEntry = async (req, res) => {
+    try {
+        const serviceSlug = String(req.params.serviceSlug || '');
+        let settings = await Setting.findOne().sort({ createdAt: 1 });
+        if (!settings) return res.status(404).json({ message: 'Integration not found' });
+        const current = settings.get('integrations') || [];
+        if (!current.some((entry) => entry.serviceSlug === serviceSlug)) {
+            return res.status(404).json({ message: 'Integration not found' });
+        }
+        settings.set('integrations', current.filter((entry) => entry.serviceSlug !== serviceSlug));
+        const saved = await settings.save();
+        await refreshCredentials(true);
+        const masked = maskSettingsDocument(saved);
+        res.json({ integrations: masked.integrations || [] });
+    } catch (error) {
+        res.status(400).json({ message: error.message });
+    }
+};
+
+module.exports = { getSettings, updateSettings, executeIntegration, getServicesCatalogue, maskSettingsDocument, getSettingById, updateSettingById, saveIntegrationEntry, deleteIntegrationEntry };

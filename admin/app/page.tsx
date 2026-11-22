@@ -24,6 +24,7 @@ import TopBar from "@/components/ui/TopBar";
 import { getDashboardAllData } from "@/services/dashboardService";
 import { formatMoney, useStoreCurrency } from "@/services/currency";
 import { useAdminAuth } from "@/services/authContext";
+import { useLanguage } from "@/services/i18n";
 
 // Orange shades, darkest first — the reference design's donut palette.
 const CATEGORY_COLORS = ["#ea580c", "#f97316", "#fb923c", "#fdba74", "#fed7aa", "#ffedd5"];
@@ -70,6 +71,7 @@ const fmtJoinedDate = (iso: string) =>
 
 export default function Page() {
   const { user, isAuthenticated, hasPermission } = useAdminAuth();
+  const { t } = useLanguage();
   // Re-map every figure when the store currency changes.
   const currencyCode = useStoreCurrency();
   const [stats, setStats] = useState<DashboardStats | undefined>(undefined);
@@ -274,8 +276,8 @@ export default function Page() {
     return (
       <div className="flex-1 min-w-0 p-3 bg-[var(--background)] text-[var(--text)] transition-colors duration-200 flex flex-col gap-3">
         <TopBar
-          title="Dashboard"
-          subtitle="Manage inventory and store items"
+          title={t("Dashboard")}
+          subtitle={t("Manage inventory and store items")}
           user={{
             name: user?.name || "Admin",
             role: user?.role || "Admin",
@@ -302,8 +304,8 @@ export default function Page() {
   return (
     <div className="flex-1 min-w-0 p-3 bg-[var(--background)] text-[var(--text)] transition-colors duration-200 flex flex-col gap-3">
       <TopBar
-        title="Dashboard"
-        subtitle="Manage inventory and store items"
+        title={t("Dashboard")}
+        subtitle={t("Manage inventory and store items")}
         user={{
           name: user?.name || "Admin",
           role: user?.role || "Admin",
@@ -359,21 +361,21 @@ export default function Page() {
             <div className="md:col-span-2 lg:col-span-3 min-w-0">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 h-full">
                 <DashboardStatCard
-                  title="Total Revenue"
+                  title={t("Total Revenue")}
                   value={statsLoading ? "" : fmtWholeMoney(stats.totalRevenue)}
                   icon={CircleDollarSign}
                   wowPct={comparisons?.revenue?.pct}
                   loading={statsLoading}
                 />
                 <DashboardStatCard
-                  title="Total Orders"
+                  title={t("Total Orders")}
                   value={statsLoading ? "" : stats.totalOrders.toLocaleString()}
                   icon={ShoppingBag}
                   wowPct={comparisons?.orders?.pct}
                   loading={statsLoading}
                 />
                 <DashboardStatCard
-                  title="Total Customers"
+                  title={t("Total Customers")}
                   value={statsLoading ? "" : stats.totalCustomers.toLocaleString()}
                   icon={Users}
                   wowPct={comparisons?.customers?.pct}

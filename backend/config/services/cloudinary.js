@@ -18,19 +18,22 @@ module.exports = {
             "key": "cloudName",
             "label": "Cloud Name",
             "secret": false,
-            "required": true
+            "required": true,
+            "placeholder": "e.g. my-cloud-name"
         },
         {
             "key": "apiKey",
             "label": "API Key",
             "secret": false,
-            "required": true
+            "required": true,
+            "placeholder": "e.g. 123456789012345"
         },
         {
             "key": "apiSecret",
             "label": "API Secret",
             "secret": true,
-            "required": true
+            "required": true,
+            "placeholder": "Paste the API secret — hidden after saving"
         }
     ],
     "endpoints": [

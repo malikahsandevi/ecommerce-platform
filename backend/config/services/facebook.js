@@ -16,13 +16,15 @@ module.exports = {
             "key": "appId",
             "label": "App ID",
             "secret": false,
-            "required": true
+            "required": true,
+            "placeholder": "Your app ID"
         },
         {
             "key": "appSecret",
             "label": "App Secret",
             "secret": true,
-            "required": true
+            "required": true,
+            "placeholder": "Paste the app secret — hidden after saving"
         }
     ],
     "endpoints": []

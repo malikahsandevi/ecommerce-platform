@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { PanelLeftClose, PanelLeftOpen, Store } from "lucide-react";
 import SidebarItem from "@/components/ui/SidebarItem";
 import { useAdminAuth } from "@/services/authContext";
+import { useLanguage } from "@/services/i18n";
 // Page names/icons/links live in ONE shared config — the DetailPanel
 // empty state looks up the same icons via getPageIcon().
 import { TOP_NAV_ITEMS, BOTTOM_NAV_ITEMS } from "@/config/navItems";
@@ -60,6 +61,7 @@ function SidebarBody({
   onAvatarError: () => void;
   onToggle: () => void;
 }) {
+  const { t } = useLanguage();
   return (
     <div className="h-full flex flex-col shadow-xl px-3 py-2.5 bg-(--primary-light) rounded-2xl">
       {/* Brand Bar */}
@@ -86,7 +88,7 @@ function SidebarBody({
         <nav className="flex flex-col gap-0.5 overflow-y-auto no-scrollbar">
           {!collapsed && (
             <span className="sb-label px-3 pb-0.5 text-[10px] font-bold uppercase tracking-widest text-(--text-soft)/80">
-              Main Menu
+              {t("Main Menu")}
             </span>
           )}
           {topItems.map((item) => (
@@ -104,7 +106,7 @@ function SidebarBody({
         <div className="flex flex-col gap-0.5 mt-2">
           {!collapsed && (
             <span className="sb-label px-3 pb-0.5 text-[10px] font-bold uppercase tracking-widest text-(--text-soft)/80">
-              General
+              {t("General")}
             </span>
           )}
           {bottomItems.map((item) => (
@@ -164,7 +166,7 @@ function SidebarBody({
             ) : (
               <PanelLeftClose size={20} />
             )}
-            {!collapsed && <span className="sb-label">Collapse</span>}
+            {!collapsed && <span className="sb-label">{t("Collapse")}</span>}
           </button>
         </div>
       </div>

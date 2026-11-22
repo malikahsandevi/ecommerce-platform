@@ -3,6 +3,7 @@ import Link from "next/link";
 import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 import { FolderTree } from "lucide-react";
 import { formatMoney, useStoreCurrency } from "@/services/currency";
+import { useLanguage } from "@/services/i18n";
 
 export interface CategoryItem {
   name: string;
@@ -52,11 +53,12 @@ export const TopCategories: React.FC<TopCategoriesProps> = ({ categoriesData, to
   const totalValue = items.reduce((acc, item) => acc + item.value, 0);
   const formattedTotalSales = formatMoney(totalSales || 0);
 
+  const { t } = useLanguage();
   return (
     <div className="p-5 w-full h-full bg-(--background) rounded-2xl shadow-sm flex flex-col border border-(--border)">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-base font-bold text-(--text)">Top Categories</h3>
+        <h3 className="text-base font-bold text-(--text)">{t("Top Categories")}</h3>
         <Link
           href="/categories"
           className="text-xs font-semibold text-(--primary) hover:text-(--primary-dark) transition-colors"

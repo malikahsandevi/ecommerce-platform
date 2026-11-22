@@ -110,6 +110,10 @@ const settingSchema = new mongoose.Schema(
             key: { type: String, default: "" },
             value: { type: String, default: "" },
             secret: { type: Boolean, default: false },
+            // A pair toggled OFF stays saved on the entry but is NOT
+            // part of its effective config — the gate's entryValues
+            // skips it, so the runner never sees or sends it.
+            isActive: { type: Boolean, default: true },
           },
         ],
         authType: {
@@ -151,15 +155,6 @@ const settingSchema = new mongoose.Schema(
         isConnected: { type: Boolean, default: true },
       },
     ],
-
-    // 6b. Built-in services' activation toggles. The built-ins
-    // (Cloudinary media storage, the store-session JWT signer) keep
-    // their VALUES in the Credential store; only their on/off state
-    // lives here, beside the integrations they belong to in the panel.
-    builtInServices: {
-      cloudinary: { isActive: { type: Boolean, default: true } },
-      storeSessionJwt: { isActive: { type: Boolean, default: true } },
-    },
 
     // 7. Appearance
     appearance: {

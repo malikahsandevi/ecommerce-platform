@@ -1,6 +1,7 @@
 import React from "react";
 import Link from "next/link";
 import { Ellipsis, UserRound } from "lucide-react";
+import { useLanguage } from "@/services/i18n";
 
 export interface NewCustomer {
   id: string;
@@ -51,10 +52,11 @@ export const NewCustomersCard: React.FC<NewCustomersCardProps> = ({ customers })
     );
   }
 
+  const { t } = useLanguage();
   return (
     <div className="p-5 w-full h-full bg-(--background) rounded-2xl shadow-sm border border-(--border) flex flex-col">
       <div className="flex items-center justify-between mb-1">
-        <h3 className="text-base font-bold text-(--text)">New Customers</h3>
+        <h3 className="text-base font-bold text-(--text)">{t("New Customers")}</h3>
         <Ellipsis className="w-5 h-5 text-(--text-muted)" />
       </div>
       <p className="text-[11px] text-(--text-muted) mb-4">

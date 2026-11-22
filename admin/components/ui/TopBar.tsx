@@ -18,6 +18,7 @@ import SearchBar, { SearchableEntityRecord } from "@/components/ui/SearchBar";
 import GlobalSearch from "@/components/ui/GlobalSearch";
 import ThemeToggle from "@/components/models/ThemeToggle";
 import { useAdminAuth } from "@/services/authContext";
+import { useLanguage } from "@/services/i18n";
 import {
   useNotifications,
   relativeTime,
@@ -74,7 +75,7 @@ export const TopBar = <T extends SearchableEntityRecord>({
   title,
   subtitle,
   user,
-  searchPlaceholder = "Search...",
+  searchPlaceholder,
   globalSearch = false,
   searchData = [],
   searchFields = [],
@@ -84,7 +85,11 @@ export const TopBar = <T extends SearchableEntityRecord>({
   const [activePopup, setActivePopup] = useState<"msg" | "notif" | "profile" | null>(null);
   const [failedAvatar, setFailedAvatar] = useState<string | null>(null);
   const { logout } = useAdminAuth();
+  const { t } = useLanguage();
   const router = useRouter();
+  // The default search placeholder follows the UI language; a caller
+  // passing its own placeholder keeps it.
+  const effectiveSearchPlaceholder = searchPlaceholder ?? t("Search...");
 
   // Live bell + inbox feeds (real store data via /api/notifications).
   // The legacy `notifications`/`messages` props are no longer used —
@@ -216,7 +221,7 @@ export const TopBar = <T extends SearchableEntityRecord>({
               searchSourceData={searchData}
               searchableFieldsKeys={searchFields}
               onSearchResultsUpdate={onSearchResults}
-              searchPlaceholder={searchPlaceholder}
+              searchPlaceholder={effectiveSearchPlaceholder}
             />
           )
         )}
@@ -241,7 +246,7 @@ export const TopBar = <T extends SearchableEntityRecord>({
           <div>
             <button
               type="button"
-              aria-label="Messages"
+              aria-label={t("Messages")}
               onClick={() => openPanel("msg")}
               className={`relative p-0.5 md:p-2 rounded-xl transition-colors ${
                 activePopup === "msg"
@@ -260,7 +265,7 @@ export const TopBar = <T extends SearchableEntityRecord>({
             {activePopup === "msg" && (
               <div className="absolute right-4 top-full mt-1 w-80 max-w-[calc(100vw-1.5rem)] bg-(--background) rounded-2xl shadow-xl border border-(--border) z-50 p-4">
                 <div className="flex items-center justify-between pb-3 border-b border-(--border)">
-                  <h4 className="text-sm font-bold text-(--text)">Messages</h4>
+                  <h4 className="text-sm font-bold text-(--text)">{t("Messages")}</h4>
                   {freshIds.size > 0 && (
                     <span className="text-[10px] bg-(--primary) text-(--primary-text) px-2 py-0.5 rounded-full font-bold">
                       {freshIds.size} New
@@ -310,7 +315,7 @@ export const TopBar = <T extends SearchableEntityRecord>({
           <div>
             <button
               type="button"
-              aria-label="Notifications"
+              aria-label={t("Notifications")}
               onClick={() => openPanel("notif")}
               className={`relative p-0.5 md:p-2 rounded-xl transition-colors ${
                 activePopup === "notif"
@@ -329,7 +334,7 @@ export const TopBar = <T extends SearchableEntityRecord>({
             {activePopup === "notif" && (
               <div className="absolute right-4 top-full mt-1 w-80 max-w-[calc(100vw-1.5rem)] bg-(--background) rounded-2xl shadow-xl border border-(--border) z-50 p-4">
                 <div className="flex items-center justify-between pb-3 border-b border-(--border)">
-                  <h4 className="text-sm font-bold text-(--text)">Notifications</h4>
+                  <h4 className="text-sm font-bold text-(--text)">{t("Notifications")}</h4>
                   {freshIds.size > 0 && (
                     <span className="text-[10px] bg-red-500/10 text-red-500 px-2 py-0.5 rounded-full font-bold">
                       {freshIds.size} New

@@ -16,6 +16,7 @@ import {
   formatMoneyCompact,
   useStoreCurrency,
 } from "@/services/currency";
+import { useLanguage } from "@/services/i18n";
 
 export interface RevenuePoint {
   month: string;
@@ -114,11 +115,12 @@ export const RevenueAnalytics: React.FC<RevenueAnalyticsProps> = ({
           orders: point.orders,
         }));
 
+  const { t } = useLanguage();
   return (
     <div className="p-4 w-full h-full bg-(--background) rounded-2xl shadow-sm border border-(--border) flex flex-col">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-base font-bold text-(--text)">Revenue Analytics</h3>
+        <h3 className="text-base font-bold text-(--text)">{t("Revenue Analytics")}</h3>
         {/* The shared Select (same component as the list-page filters):
             orange pill trigger, light menu, selected row highlighted —
             the old native <select> opened the browser's blue menu.

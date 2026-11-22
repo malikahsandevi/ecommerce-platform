@@ -35,12 +35,12 @@ import {
   SettingsToggle,
 } from "./SettingsControls";
 import type {
-  BuiltInServicesData,
-  CredentialsUpdate,
   SettingsDocument,
   SettingsSection,
   SettingsUser,
 } from "@/services/settingsService";
+import { confirmDialog } from "@/components/ui/ConfirmDialog";
+import { LANGUAGE_OPTIONS, applyLanguage, useLanguage } from "@/services/i18n";
 
 type ObjectData = Record<string, unknown>;
 
@@ -63,15 +63,6 @@ type SectionPanelProps<T> = {
   onSave: (value: T) => void;
 };
 
-type PaymentMethod = { name: string; description: string; enabled: boolean };
-type ShippingZone = {
-  name: string;
-  regions: string[];
-  rate: number;
-  isActive: boolean;
-};
-type Webhook = { event: string; url: string; isActive: boolean };
-
 // Dynamic Zero-Selection Integration Types
 type AuthType = "API_KEY" | "BEARER_TOKEN" | "BASIC" | "CUSTOM_HEADER" | "NONE";
 type HttpMethod = "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
@@ -86,24 +77,6 @@ interface DynamicEndpoint {
     dataField?: string;
     errorField?: string;
   };
-}
-
-interface DynamicIntegration {
-  usageType: string;
-  serviceSlug: string;
-  title: string;
-  baseUrl: string;
-  authType: AuthType;
-  authCredentials: {
-    apiKey?: string;
-    headerKey?: string;
-    username?: string;
-    password?: string;
-  };
-  globalHeaders?: Record<string, string>;
-  endpoints: DynamicEndpoint[];
-  webhooks?: Webhook[];
-  isConnected: boolean;
 }
 
 export type NewUserValues = {
@@ -124,12 +97,14 @@ export function SettingsPanel({
   onDeleteUser,
   onUpdateUser,
   onCreateUser,
+  onIntegrationsSync,
 }: {
   activeMenu: string;
   settings: SettingsDocument;
   users: SettingsUser[];
   saving: boolean;
   onSave: (section: SettingsSection, value: unknown) => void;
+  onIntegrationsSync: (integrations: Array<Record<string, unknown>>) => void;
   onDeleteUser: (id: string) => void;
   onUpdateUser: (id: string, values: { role?: string; isActive?: boolean }) => void;
   onCreateUser: (values: NewUserValues) => Promise<void>;
@@ -153,18 +128,22 @@ export function SettingsPanel({
       );
     case "Payment Methods":
       return (
-        <PaymentPanel
-          data={settings.paymentMethods}
-          saving={saving}
-          onSave={(value) => onSave("paymentMethods", value)}
+        <ServiceBuilderPanel
+          data={settings.integrations}
+          categoryIds={["PAYMENT"]}
+          title="Payment Methods"
+          description="Payment gateways for the store. Pick a gateway and its own credential fields appear — every gateway is saved and tested on its own card, and runs only when it is configured AND its Active toggle is on."
+          onSync={onIntegrationsSync}
         />
       );
     case "Shipping":
       return (
-        <ShippingPanel
-          data={settings.shipping}
-          saving={saving}
-          onSave={(value) => onSave("shipping", value)}
+        <ServiceBuilderPanel
+          data={settings.integrations}
+          categoryIds={["SHIPPING"]}
+          title="Shipping"
+          description="Shipping and tracking providers for the store. Pick a provider and its own credential fields appear — every provider is saved and tested on its own card, and runs only when it is configured AND its Active toggle is on."
+          onSync={onIntegrationsSync}
         />
       );
     case "Notifications":
@@ -188,11 +167,12 @@ export function SettingsPanel({
       return <SecurityPanel />;
     case "API / Integrations":
       return (
-        <IntegrationsPanel
+        <ServiceBuilderPanel
           data={settings.integrations}
-          builtInServices={settings.builtInServices}
-          saving={saving}
-          onSave={(value) => onSave("integrations", value)}
+          categoryIds={["STORAGE", "EMAIL", "SMS_NOTIFICATION", "AUTH", "ANALYTICS", "MAPS", "CUSTOM"]}
+          title="API / Integrations"
+          description="The store's platform services — storage, email, SMS, auth, analytics, maps and custom connectors. Payment gateways live in Payment Methods and shipping providers in Shipping. A service runs only when it is configured AND its Active toggle is on."
+          onSync={onIntegrationsSync}
         />
       );
     case "Appearance":
@@ -258,6 +238,7 @@ function MediaUrlField({
 }
 
 function GeneralPanel({ data, saving, onSave }: SectionPanelProps<ObjectData>) {
+  const { t } = useLanguage();
   const [form, setForm] = useState(() => ({
     storeName: String(data?.storeName ?? ""),
     storeTagline: String(data?.storeTagline ?? ""),
@@ -284,7 +265,7 @@ function GeneralPanel({ data, saving, onSave }: SectionPanelProps<ObjectData>) {
   }, [pickerTarget]);
 
   return (
-    <SettingsCard title="General Settings" description="Basic information about your store">
+    <SettingsCard title={t("General Settings")} description="Basic information about your store">
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <SettingsInput
           label="Store Name"
@@ -318,7 +299,7 @@ function GeneralPanel({ data, saving, onSave }: SectionPanelProps<ObjectData>) {
         <SettingsSelect
           label="Language"
           value={form.language}
-          options={["English", "Urdu"]}
+          options={LANGUAGE_OPTIONS}
           onChange={(language) => setForm({ ...form, language })}
         />
         <div>
@@ -375,6 +356,9 @@ function GeneralPanel({ data, saving, onSave }: SectionPanelProps<ObjectData>) {
           // Apply the currency right away so every money figure in the
           // panel follows the setting without waiting for a reload.
           applyStoreCurrency(form.currency);
+          // Same for the language: the shell re-renders in the chosen
+          // language (and direction) the moment General is saved.
+          applyLanguage(form.language);
         }}
         saving={saving}
       />
@@ -477,191 +461,6 @@ function StorePanel({ data, saving, onSave }: SectionPanelProps<ObjectData>) {
         </div>
       </div>
       <SettingsSaveButton onSave={() => onSave(form)} saving={saving} />
-    </SettingsCard>
-  );
-}
-
-function PaymentPanel({ data, saving, onSave }: SectionPanelProps<Array<Record<string, unknown>>>) {
-  const [validationError, setValidationError] = useState("");
-  const [methods, setMethods] = useState<PaymentMethod[]>(() =>
-    (data ?? []).map((method) => ({
-      name: String(method.name ?? ""),
-      description: String(method.description ?? ""),
-      enabled: Boolean(method.enabled),
-    })),
-  );
-  const updateMethod = (index: number, patch: Partial<PaymentMethod>) =>
-    setMethods(methods.map((method, itemIndex) => (itemIndex === index ? { ...method, ...patch } : method)));
-
-  return (
-    <SettingsCard title="Payment Methods" description="Manage saved payment methods">
-      <div className="space-y-3">
-        {methods.map((method, index) => (
-          // The key must stay stable while the row is edited: keying by
-          // the method's NAME made React throw the row away and rebuild
-          // it on the first keystroke in that field, so the input lost
-          // focus after a single letter. Index keys are safe here — the
-          // inputs are fully controlled from this array.
-          <div
-            key={index}
-            className="grid grid-cols-1 items-end gap-3 rounded-lg border border-[var(--border)] p-4 sm:grid-cols-[1fr_1fr_auto_auto]"
-          >
-            <SettingsInput
-              label="Method"
-              value={method.name}
-              onChange={(event) => updateMethod(index, { name: event.target.value })}
-            />
-            <SettingsInput
-              label="Description"
-              value={method.description}
-              onChange={(event) => updateMethod(index, { description: event.target.value })}
-            />
-            <SettingsToggle
-              label={`Enable ${method.name || "payment method"}`}
-              enabled={method.enabled}
-              onChange={(enabled) => updateMethod(index, { enabled })}
-            />
-            <Button
-              variant="danger"
-              icon={Trash2}
-              aria-label="Remove payment method"
-              onClick={() => setMethods(methods.filter((_, itemIndex) => itemIndex !== index))}
-            />
-          </div>
-        ))}
-        {methods.length === 0 && <p className="text-sm text-[var(--text-muted)]">No payment methods configured.</p>}
-        <Button
-          variant="outline"
-          icon={Plus}
-          onClick={() => setMethods([...methods, { name: "", description: "", enabled: false }])}
-        >
-          Add payment method
-        </Button>
-      </div>
-      {validationError && (
-        <p className="mt-4 rounded-lg border border-red-300 bg-red-500/10 p-3 text-xs text-red-600" role="alert">
-          {validationError}
-        </p>
-      )}
-      <SettingsSaveButton
-        onSave={() => {
-          const blank = methods.findIndex((method) => !method.name.trim());
-          if (blank >= 0) {
-            setValidationError(`Payment method ${blank + 1} needs a name before saving.`);
-            return;
-          }
-          setValidationError("");
-          onSave(methods);
-        }}
-        saving={saving}
-      />
-    </SettingsCard>
-  );
-}
-
-function ShippingPanel({ data, saving, onSave }: SectionPanelProps<ObjectData>) {
-  const zonesData = Array.isArray(data?.zones) ? (data.zones as ObjectData[]) : [];
-  const [zones, setZones] = useState<ShippingZone[]>(() =>
-    zonesData.map((zone) => ({
-      name: String(zone.name ?? ""),
-      regions: Array.isArray(zone.regions) ? zone.regions.map(String) : [],
-      rate: Number(zone.rate ?? 0),
-      isActive: zone.isActive !== false,
-    })),
-  );
-  const [freeShippingThreshold, setFreeShippingThreshold] = useState(String(data?.freeShippingThreshold ?? ""));
-  const [defaultShippingMethod, setDefaultShippingMethod] = useState(String(data?.defaultShippingMethod ?? ""));
-  const [validationError, setValidationError] = useState("");
-  const updateZone = (index: number, patch: Partial<ShippingZone>) =>
-    setZones(zones.map((zone, itemIndex) => (itemIndex === index ? { ...zone, ...patch } : zone)));
-
-  return (
-    <SettingsCard title="Shipping" description="Manage stored shipping zones and rates">
-      <div className="space-y-3">
-        {zones.map((zone, index) => (
-          // Stable key only — see PaymentPanel: a key containing the
-          // zone's name remounts the row (and drops input focus) on the
-          // first character typed into the name field.
-          <div key={index} className="grid grid-cols-1 gap-3 rounded-lg border border-[var(--border)] p-4 md:grid-cols-4">
-            <SettingsInput
-              label="Zone"
-              value={zone.name}
-              onChange={(event) => updateZone(index, { name: event.target.value })}
-            />
-            <SettingsInput
-              label="Regions (comma separated)"
-              value={zone.regions.join(", ")}
-              onChange={(event) =>
-                updateZone(index, {
-                  regions: event.target.value.split(",").map((r) => r.trim()).filter(Boolean),
-                })
-              }
-            />
-            <SettingsInput
-              label="Rate"
-              type="number"
-              min="0"
-              step="0.01"
-              value={zone.rate}
-              onChange={(event) => updateZone(index, { rate: Number(event.target.value) })}
-            />
-            <div className="flex items-end justify-between gap-3 pb-2">
-              <SettingsToggle
-                label={`Enable ${zone.name || "shipping zone"}`}
-                enabled={zone.isActive}
-                onChange={(isActive) => updateZone(index, { isActive })}
-              />
-              <Button
-                variant="danger"
-                icon={Trash2}
-                aria-label="Remove shipping zone"
-                onClick={() => setZones(zones.filter((_, itemIndex) => itemIndex !== index))}
-              />
-            </div>
-          </div>
-        ))}
-        {zones.length === 0 && <p className="text-sm text-[var(--text-muted)]">No shipping zones configured.</p>}
-        <Button
-          variant="outline"
-          icon={Plus}
-          onClick={() => setZones([...zones, { name: "", regions: [], rate: 0, isActive: true }])}
-        >
-          Add shipping zone
-        </Button>
-      </div>
-      <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2">
-        <SettingsInput
-          label="Free Shipping Threshold"
-          type="number"
-          min="0"
-          step="0.01"
-          value={freeShippingThreshold}
-          onChange={(event) => setFreeShippingThreshold(event.target.value)}
-        />
-        <SettingsSelect
-          label="Default Shipping Method"
-          value={defaultShippingMethod}
-          options={["Standard Shipping", "Express Shipping"]}
-          onChange={setDefaultShippingMethod}
-        />
-      </div>
-      {validationError && (
-        <p className="mt-4 rounded-lg border border-red-300 bg-red-500/10 p-3 text-xs text-red-600" role="alert">
-          {validationError}
-        </p>
-      )}
-      <SettingsSaveButton
-        onSave={() => {
-          const blank = zones.findIndex((zone) => !zone.name.trim());
-          if (blank >= 0) {
-            setValidationError(`Shipping zone ${blank + 1} needs a name before saving.`);
-            return;
-          }
-          setValidationError("");
-          onSave({ zones, freeShippingThreshold, defaultShippingMethod });
-        }}
-        saving={saving}
-      />
     </SettingsCard>
   );
 }
@@ -1450,271 +1249,12 @@ const slugifyTitle = (title: string): string =>
 
 const SECRET_HINT = "•••••••••• — leave blank to keep the current secret";
 
-/**
- * The two built-in services as cards at the top of API / Integrations
- * (there is deliberately no separate Credentials section). Their VALUES
- * live in the backend's Credential store and are edited through the
- * Super-Admin-only credentials endpoints; their Active toggles live in
- * the settings document's builtInServices section. Super Admin only —
- * the panel renders these cards only for a Super Admin and the APIs
- * answer 403 for everyone else.
- */
-function BuiltInServiceCards({
-  builtInServices,
-}: {
-  builtInServices?: BuiltInServicesData;
-}) {
-  const [loading, setLoading] = useState(true);
-  const [loadFailed, setLoadFailed] = useState(false);
-  const [cloudName, setCloudName] = useState("");
-  const [apiKey, setApiKey] = useState("");
-  const [apiSecret, setApiSecret] = useState("");
-  const [jwtSecret, setJwtSecret] = useState("");
-  const [apiSecretConfigured, setApiSecretConfigured] = useState(false);
-  const [jwtSecretConfigured, setJwtSecretConfigured] = useState(false);
-  const [cloudinaryActive, setCloudinaryActive] = useState(
-    builtInServices?.cloudinary?.isActive !== false,
-  );
-  const [jwtActive, setJwtActive] = useState(
-    builtInServices?.storeSessionJwt?.isActive !== false,
-  );
-  const [savingCloud, setSavingCloud] = useState(false);
-  const [savingJwt, setSavingJwt] = useState(false);
-  const [pingState, setPingState] = useState<{ running: boolean; ok?: boolean; text?: string }>({ running: false });
-
-  useEffect(() => {
-    let cancelled = false;
-    settingsService
-      .getCredentials()
-      .then((data) => {
-        if (cancelled) return;
-        setCloudName(data.cloudinary.cloudName || "");
-        setApiKey(data.cloudinary.apiKey || "");
-        setApiSecretConfigured(Boolean(data.cloudinary.apiSecretConfigured));
-        setJwtSecretConfigured(Boolean(data.jwt.secretConfigured));
-      })
-      .catch((loadError) => {
-        if (!cancelled) {
-          setLoadFailed(true);
-          toast.error(extractApiError(loadError));
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const saveToggles = async (cloud: boolean, jwt: boolean) => {
-    await settingsService.updateSection("builtInServices", {
-      cloudinary: { isActive: cloud },
-      storeSessionJwt: { isActive: jwt },
-    });
-  };
-
-  const saveCloudinary = async () => {
-    setSavingCloud(true);
-    try {
-      const payload: CredentialsUpdate = {
-        cloudinary: { cloudName: cloudName.trim(), apiKey: apiKey.trim() },
-        jwt: {},
-      };
-      if (apiSecret.trim()) payload.cloudinary.apiSecret = apiSecret.trim();
-      const data = await settingsService.updateCredentials(payload);
-      await saveToggles(cloudinaryActive, jwtActive);
-      setCloudName(data.cloudinary.cloudName || "");
-      setApiKey(data.cloudinary.apiKey || "");
-      setApiSecretConfigured(Boolean(data.cloudinary.apiSecretConfigured));
-      setApiSecret("");
-      toast.success("Cloudinary saved — in effect now, no redeploy needed.");
-    } catch (saveError) {
-      toast.error(extractApiError(saveError));
-    } finally {
-      setSavingCloud(false);
-    }
-  };
-
-  const saveJwt = async () => {
-    setSavingJwt(true);
-    try {
-      const payload: CredentialsUpdate = {
-        cloudinary: { cloudName: cloudName.trim(), apiKey: apiKey.trim() },
-        jwt: {},
-      };
-      if (jwtSecret.trim()) payload.jwt.secret = jwtSecret.trim();
-      const data = await settingsService.updateCredentials(payload);
-      await saveToggles(cloudinaryActive, jwtActive);
-      setJwtSecretConfigured(Boolean(data.jwt.secretConfigured));
-      setJwtSecret("");
-      toast.success("Session (JWT) settings saved — in effect now.");
-    } catch (saveError) {
-      toast.error(extractApiError(saveError));
-    } finally {
-      setSavingJwt(false);
-    }
-  };
-
-  const testCloudinary = async () => {
-    setPingState({ running: true });
-    try {
-      const result = await settingsService.executeIntegration("cloudinary", "ping");
-      setPingState({ running: false, ok: true, text: JSON.stringify(result.data ?? result).slice(0, 400) });
-    } catch (testError) {
-      setPingState({ running: false, ok: false, text: extractApiError(testError).slice(0, 400) });
-    }
-  };
-
-  const cardShell = (
-    title: string,
-    badge: string,
-    active: boolean,
-    onToggle: (value: boolean) => void,
-    children: ReactNode,
-  ) => (
-    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)]/30 p-5 space-y-4">
-      <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
-        <div className="flex items-center gap-2">
-          <ShieldCheck className="h-4 w-4 text-[var(--primary)]" />
-          <span className="font-semibold text-sm text-[var(--text)]">{title}</span>
-          <span className="ml-2 rounded-md bg-[var(--primary-light)]/20 px-2 py-0.5 text-xs text-[var(--primary)] border border-[var(--primary)]/30 font-medium">
-            BUILT-IN
-          </span>
-          <span className="rounded-md bg-[var(--surface)] px-2 py-0.5 text-xs text-[var(--text-muted)] border border-[var(--border)] font-medium">
-            {badge}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-[var(--text-muted)]">Active</span>
-          <SettingsToggle label={`${title} active`} enabled={active} onChange={onToggle} />
-        </div>
-      </div>
-      {children}
-    </div>
-  );
-
-  if (loading || loadFailed) {
-    return (
-      <>
-        {cardShell("Cloudinary", "Storage", cloudinaryActive, setCloudinaryActive, (
-          <p className="text-sm text-[var(--text-muted)]">
-            {loadFailed
-              ? "Store services could not be loaded. Only a Super Admin can view these keys — if you are one, try reloading the page."
-              : "Loading store services…"}
-          </p>
-        ))}
-      </>
-    );
-  }
-
-  return (
-    <>
-      {cardShell("Cloudinary", "Storage", cloudinaryActive, setCloudinaryActive, (
-        <>
-          <p className="text-xs text-[var(--text-muted)]">
-            Media storage for the whole store — uploads, image delivery and the storage usage
-            readout run on these keys. Stored in the database, applied the moment you save.
-            Switching it off makes media operations unavailable until it is switched back on.
-          </p>
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-            <SettingsInput
-              label="Cloud Name"
-              value={cloudName}
-              onChange={(event) => setCloudName(event.target.value)}
-              placeholder="your-cloud-name"
-              autoComplete="off"
-            />
-            <SettingsInput
-              label="API Key"
-              value={apiKey}
-              onChange={(event) => setApiKey(event.target.value)}
-              placeholder="123456789012345"
-              autoComplete="off"
-            />
-            <SettingsInput
-              label="API Secret"
-              type="password"
-              value={apiSecret}
-              onChange={(event) => setApiSecret(event.target.value)}
-              placeholder={apiSecretConfigured ? SECRET_HINT : "Not set yet"}
-              autoComplete="new-password"
-            />
-          </div>
-          <p className="text-xs text-[var(--text-muted)]">
-            {apiSecretConfigured
-              ? "A secret is stored. It is never shown — type a new one only if you want to replace it."
-              : "No API secret is stored yet — enter one and save."}
-          </p>
-          {pingState.text && (
-            <div
-              role="status"
-              className={`rounded-md border p-3 text-xs ${
-                pingState.ok
-                  ? "border-green-500/40 bg-green-500/10 text-green-700"
-                  : "border-red-300 bg-red-500/10 text-red-600"
-              }`}
-            >
-              <span className="font-semibold">
-                {pingState.ok ? "Connection works — provider response: " : "Connection failed: "}
-              </span>
-              <span className="break-all font-mono">{pingState.text}</span>
-            </div>
-          )}
-          <div className="flex justify-end gap-2 border-t border-[var(--border)] pt-4">
-            <Button
-              variant="outline"
-              onClick={() => void testCloudinary()}
-              disabled={pingState.running}
-              icon={pingState.running ? LoaderCircle : Play}
-            >
-              {pingState.running ? "Testing…" : "Test Saved Connection"}
-            </Button>
-            <Button onClick={() => void saveCloudinary()} disabled={savingCloud} icon={savingCloud ? LoaderCircle : Save}>
-              {savingCloud ? "Saving..." : "Save Cloudinary"}
-            </Button>
-          </div>
-        </>
-      ))}
-
-      {cardShell("Store Session (JWT)", "Auth", jwtActive, setJwtActive, (
-        <>
-          <p className="text-xs text-[var(--text-muted)]">
-            This secret signs the admin panel&apos;s own sign-in sessions. Switching it off stops
-            NEW sign-ins (existing sessions keep working until they expire, so you can always
-            switch it back on here). Replacing the secret signs out every session immediately.
-          </p>
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-            <SettingsInput
-              label="JWT Secret"
-              type="password"
-              value={jwtSecret}
-              onChange={(event) => setJwtSecret(event.target.value)}
-              placeholder={jwtSecretConfigured ? SECRET_HINT : "Not set yet"}
-              autoComplete="new-password"
-            />
-          </div>
-          <p className="text-xs text-[var(--text-muted)]">
-            {jwtSecretConfigured
-              ? "A secret is stored. It is never shown — type a new one only if you want to replace it."
-              : "No JWT secret is stored yet — enter one and save."}
-          </p>
-          <div className="flex justify-end border-t border-[var(--border)] pt-4">
-            <Button onClick={() => void saveJwt()} disabled={savingJwt} icon={savingJwt ? LoaderCircle : Save}>
-              {savingJwt ? "Saving..." : "Save Session (JWT)"}
-            </Button>
-          </div>
-        </>
-      ))}
-    </>
-  );
-}
-
 interface CustomPairState {
   key: string;
   value: string;
   secret: boolean;
   configured: boolean;
+  isActive: boolean;
 }
 
 interface ServiceEntryState {
@@ -1735,6 +1275,14 @@ interface ServiceEntryState {
   customFields: CustomPairState[];
   endpoints: DynamicEndpoint[];
   isConnected: boolean;
+  /** True once the entry exists server-side (loaded or saved) — the
+   *  remove button only calls the API for persisted entries. */
+  persisted: boolean;
+  /** The slug the entry is stored under. A persisted entry's slug is
+   *  its identity: it never changes (title edits do NOT regenerate
+   *  it), so a per-entry save always updates THAT entry and can never
+   *  fork a duplicate under a fresh slug. */
+  persistedSlug: string;
 }
 
 const entryCategory = (entry: ServiceEntryState): string => {
@@ -1784,12 +1332,15 @@ const entryFromApi = (item: Record<string, unknown>): ServiceEntryState => {
           value: String(pair.value ?? "") === SECRET_MASK ? "" : String(pair.value ?? ""),
           secret: Boolean(pair.secret),
           configured: String(pair.value ?? "") === SECRET_MASK,
+          isActive: pair.isActive !== false,
         }))
       : [],
     endpoints: Array.isArray(item.endpoints)
       ? (item.endpoints as DynamicEndpoint[])
       : [{ name: "default", path: "/", method: "POST" }],
     isConnected: item.isConnected !== false,
+    persisted: true,
+    persistedSlug: String(item.serviceSlug ?? ""),
   };
 };
 
@@ -1816,7 +1367,7 @@ const entryToApi = (entry: ServiceEntryState): Record<string, unknown> => {
     fields,
     customFields: isPreset
       ? []
-      : entry.customFields.map((pair) => ({ key: pair.key, value: pair.value, secret: pair.secret })),
+      : entry.customFields.map((pair) => ({ key: pair.key, value: pair.value, secret: pair.secret, isActive: pair.isActive })),
     endpoints: isPreset
       ? (def?.endpoints ?? []).map((endpoint) => ({ ...endpoint }))
       : entry.endpoints,
@@ -1837,24 +1388,43 @@ const entryConfigured = (entry: ServiceEntryState): boolean => {
   return entry.baseUrl.trim() !== "";
 };
 
-function IntegrationsPanel({
+/**
+ * The service builder — ONE component behind three tabs, all reading
+ * and writing the same integrations store through the same gate:
+ * API / Integrations (every category except Payment + Shipping),
+ * Payment Methods (Payment only) and Shipping (Shipping only).
+ *
+ * Every entry is managed on its OWN card: its own Save button (a
+ * per-entry API write that touches only that entry), its own Test
+ * button (saves the entry, then runs it through the backend runner),
+ * its own Active toggle and its own remove. ALL feedback — validation
+ * problems, save results, test results — goes through the Toast
+ * system; this panel renders NO inline alert/banner bars.
+ */
+function ServiceBuilderPanel({
   data,
-  builtInServices,
-  saving,
-  onSave,
-}: SectionPanelProps<Array<Record<string, unknown>>> & {
-  builtInServices?: BuiltInServicesData;
+  categoryIds,
+  title,
+  description,
+  onSync,
+}: {
+  data?: Array<Record<string, unknown>>;
+  categoryIds: string[];
+  title: string;
+  description: string;
+  onSync: (integrations: Array<Record<string, unknown>>) => void;
 }) {
+  const { t } = useLanguage();
   const [entries, setEntries] = useState<ServiceEntryState[]>(() => (data ?? []).map(entryFromApi));
-  const [validationError, setValidationError] = useState("");
-  const { user } = useAdminAuth();
-  const isSuperAdmin = user?.role === "Super Admin";
-  const [testStates, setTestStates] = useState<
-    Record<string, { running: boolean; ok?: boolean; text?: string }>
-  >({});
+  const [busy, setBusy] = useState<Record<number, "save" | "test" | "delete">>({});
+
+  const allowedCategories = SERVICE_CATALOGUE.filter((category) => categoryIds.includes(category.id));
+  const visible = entries
+    .map((entry, index) => ({ entry, index }))
+    .filter(({ entry }) => categoryIds.includes(entryCategory(entry)));
 
   const updateEntry = (index: number, patch: Partial<ServiceEntryState>) =>
-    setEntries(entries.map((item, itemIndex) => (itemIndex === index ? { ...item, ...patch } : item)));
+    setEntries((current) => current.map((item, itemIndex) => (itemIndex === index ? { ...item, ...patch } : item)));
 
   const updateField = (index: number, key: string, value: string) =>
     updateEntry(index, { fields: { ...entries[index].fields, [key]: value } });
@@ -1914,7 +1484,7 @@ function IntegrationsPanel({
 
   const addPair = (index: number) =>
     updateEntry(index, {
-      customFields: [...entries[index].customFields, { key: "", value: "", secret: false, configured: false }],
+      customFields: [...entries[index].customFields, { key: "", value: "", secret: false, configured: false, isActive: true }],
     });
 
   const updatePair = (index: number, pairIndex: number, patch: Partial<CustomPairState>) => {
@@ -1928,97 +1498,175 @@ function IntegrationsPanel({
       customFields: entries[index].customFields.filter((_, idx) => idx !== pairIndex),
     });
 
-  const validate = (): string => {
-    const slugs = new Set<string>();
-    for (const [index, item] of entries.entries()) {
-      const label = item.title || `Service ${index + 1}`;
-      if (!item.title.trim()) return `Service ${index + 1}: a service title is required.`;
-      if (!item.serviceSlug.trim()) return `${label}: a unique service slug is required.`;
-      if (slugs.has(item.serviceSlug.trim())) return `${label}: the slug "${item.serviceSlug}" is already used by another service — slugs must be unique.`;
-      slugs.add(item.serviceSlug.trim());
-      const def = subServiceById(item.subService);
-      const isPreset = Boolean(def && def.id !== "custom");
-      if (!isPreset) {
-        if (!item.baseUrl.trim()) return `${label}: a base API URL is required for custom services.`;
-        for (const endpoint of item.endpoints) {
-          if (!endpoint.name.trim()) return `${label}: every endpoint needs an action name.`;
-          if (!endpoint.path.trim()) return `${label}: every endpoint needs a path.`;
-        }
-        for (const pair of item.customFields) {
-          if (!pair.key.trim() && pair.value.trim()) return `${label}: every key-value pair needs a key.`;
-        }
+  /** One entry's problems, worded for a toast (never an inline bar). */
+  const validateEntry = (item: ServiceEntryState): string => {
+    const label = item.title || "This service";
+    if (!item.title.trim()) return "A service title is required before saving.";
+    if (!item.serviceSlug.trim()) return `${label}: a unique service slug is required.`;
+    if (entries.some((other) => other !== item && other.serviceSlug.trim() === item.serviceSlug.trim())) {
+      return `${label}: the slug "${item.serviceSlug}" is already used by another service — slugs must be unique.`;
+    }
+    const def = subServiceById(item.subService);
+    const isPreset = Boolean(def && def.id !== "custom");
+    if (!isPreset) {
+      if (!item.baseUrl.trim()) return `${label}: a base API URL is required for custom services.`;
+      for (const endpoint of item.endpoints) {
+        if (!endpoint.name.trim()) return `${label}: every endpoint needs an action name.`;
+        if (!endpoint.path.trim()) return `${label}: every endpoint needs a path.`;
+      }
+      for (const pair of item.customFields) {
+        if (!pair.key.trim() && pair.value.trim()) return `${label}: every key-value pair needs a key.`;
       }
     }
     return "";
   };
 
-  const handleSave = () => {
-    const problem = validate();
-    setValidationError(problem);
-    if (!problem) onSave(entries.map(entryToApi));
-  };
-
-  // Test-run one endpoint through the backend runner (POST
-  // /settings/execute). The runner executes the SAVED configuration,
-  // so the form is persisted first — what you see is exactly what
-  // runs, with the credentials saved on the card.
-  const runTest = async (index: number, endpointName: string) => {
+  const saveEntry = async (index: number): Promise<boolean> => {
     const item = entries[index];
-    const key = `${index}:${endpointName}`;
-    const problem = validate();
-    setValidationError(problem);
-    if (problem) return;
-    setTestStates((states) => ({ ...states, [key]: { running: true } }));
+    const problem = validateEntry(item);
+    if (problem) {
+      toast.error(problem);
+      return false;
+    }
+    setBusy((current) => ({ ...current, [index]: "save" }));
     try {
-      const payload = entries.map(entryToApi);
-      await settingsService.updateSection("integrations", payload);
-      const result = await settingsService.executeIntegration(item.serviceSlug, endpointName);
-      setTestStates((states) => ({
-        ...states,
-        [key]: { running: false, ok: true, text: JSON.stringify(result.data ?? result).slice(0, 800) },
-      }));
-    } catch (testError) {
-      setTestStates((states) => ({
-        ...states,
-        [key]: { running: false, ok: false, text: extractApiError(testError).slice(0, 800) },
-      }));
+      const result = await settingsService.saveIntegration(
+        entryToApi(item),
+        item.persisted ? item.persistedSlug : undefined,
+      );
+      if (result.integration) {
+        const saved = entryFromApi(result.integration);
+        setEntries((current) => current.map((entry, idx) => (idx === index ? saved : entry)));
+      } else {
+        updateEntry(index, { persisted: true });
+      }
+      onSync(result.integrations);
+      toast.success(`${item.title} saved.`);
+      return true;
+    } catch (saveError) {
+      toast.error(extractApiError(saveError));
+      return false;
+    } finally {
+      setBusy((current) => {
+        const next = { ...current };
+        delete next[index];
+        return next;
+      });
     }
   };
 
-  const testResultBox = (index: number, endpointName: string) => {
-    const test = testStates[`${index}:${endpointName}`];
-    if (!test || test.running || !test.text) return null;
-    return (
-      <div
-        role="status"
-        className={`rounded-md border p-3 text-xs ${
-          test.ok
-            ? "border-green-500/40 bg-green-500/10 text-green-700"
-            : "border-red-300 bg-red-500/10 text-red-600"
-        }`}
-      >
-        <span className="font-semibold">
-          {test.ok ? "Call succeeded — provider response: " : "Call failed: "}
-        </span>
-        <span className="break-all font-mono">{test.text}</span>
-      </div>
-    );
+  // Test runs the SAVED configuration through the backend runner —
+  // the entry is saved first (its own per-entry save), so what is
+  // tested is exactly what is stored. The outcome is a toast.
+  const testEntry = async (index: number) => {
+    const item = entries[index];
+    const def = subServiceById(item.subService);
+    const isPreset = Boolean(def && def.id !== "custom");
+    const endpointName = isPreset ? (def?.endpoints[0]?.name ?? "config") : item.endpoints[0]?.name;
+    if (!endpointName) {
+      toast.error(`${item.title || "This service"}: add an endpoint before testing.`);
+      return;
+    }
+    setBusy((current) => ({ ...current, [index]: "test" }));
+    try {
+      const saved = await saveEntry(index);
+      if (!saved) return;
+      const result = await settingsService.executeIntegration(item.serviceSlug, endpointName);
+      const summary = JSON.stringify(result.data ?? result).slice(0, 220);
+      toast.success(`${item.title}: connection works — ${summary}`);
+    } catch (testError) {
+      toast.error(extractApiError(testError).slice(0, 300));
+    } finally {
+      setBusy((current) => {
+        const next = { ...current };
+        delete next[index];
+        return next;
+      });
+    }
+  };
+
+  const removeEntry = async (index: number) => {
+    const item = entries[index];
+    if (!item.persisted) {
+      setEntries((current) => current.filter((_, idx) => idx !== index));
+      return;
+    }
+    const confirmed = await confirmDialog({
+      title: `Remove ${item.title || "this service"}?`,
+      message: "Its saved configuration will be deleted. This cannot be undone.",
+      confirmLabel: "Remove",
+      variant: "danger",
+    });
+    if (!confirmed) return;
+    setBusy((current) => ({ ...current, [index]: "delete" }));
+    try {
+      const result = await settingsService.deleteIntegration(item.serviceSlug);
+      setEntries((current) => current.filter((_, idx) => idx !== index));
+      onSync(result.integrations);
+      toast.success(`${item.title} removed.`);
+    } catch (removeError) {
+      toast.error(extractApiError(removeError));
+    } finally {
+      setBusy((current) => {
+        const next = { ...current };
+        delete next[index];
+        return next;
+      });
+    }
+  };
+
+  const addEntry = () => {
+    const base: ServiceEntryState = {
+      usageType: "CUSTOM",
+      subService: "custom",
+      serviceSlug: "",
+      title: "",
+      baseUrl: "",
+      authType: "NONE",
+      authApiKey: "",
+      authApiKeyConfigured: false,
+      authHeaderKey: "Authorization",
+      authUsername: "",
+      authPassword: "",
+      authPasswordConfigured: false,
+      fields: {},
+      configuredSecrets: {},
+      customFields: [],
+      endpoints: [{ name: "default", path: "/", method: "POST" }],
+      isConnected: true,
+      persisted: false,
+      persistedSlug: "",
+    };
+    if (!categoryIds.includes("CUSTOM") && allowedCategories.length > 0) {
+      const firstCategory = allowedCategories[0];
+      const firstSub = firstCategory.subServices[0];
+      const fields: Record<string, string> = {};
+      if (firstSub) {
+        for (const field of firstSub.fields) {
+          if (field.default) fields[field.key] = field.default;
+        }
+      }
+      setEntries([...entries, {
+        ...base,
+        usageType: firstCategory.id,
+        subService: firstSub?.id ?? "custom",
+        fields,
+      }]);
+      return;
+    }
+    setEntries([...entries, base]);
   };
 
   return (
-    <SettingsCard
-      title="API / Integrations"
-      description="The one place the store's services are managed. Pick a service and a sub-service — each provider's own credential fields appear — or define a Custom service with its own key-value pairs. A service runs only when it is configured AND its Active toggle is on."
-    >
+    <SettingsCard title={t(title)} description={description}>
       <div className="space-y-6">
-        {isSuperAdmin && <BuiltInServiceCards builtInServices={builtInServices} />}
-
-        {entries.map((item, index) => {
+        {visible.map(({ entry: item, index }) => {
           const def = subServiceById(item.subService);
           const isPreset = Boolean(def && def.id !== "custom");
           const category = entryCategory(item);
           const categoryDef = categoryById(category);
           const configured = entryConfigured(item);
+          const entryBusy = busy[index];
           return (
             <div key={index} className="rounded-xl border border-[var(--border)] bg-[var(--surface)]/30 p-5 space-y-4">
               <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
@@ -2037,11 +1685,11 @@ function IntegrationsPanel({
                         : "bg-[var(--surface)] text-[var(--text-muted)] border-[var(--border)]"
                     }`}
                   >
-                    {configured ? "Configured" : "Not configured"}
+                    {configured ? t("Configured") : t("Not configured")}
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="text-xs text-[var(--text-muted)]">Active</span>
+                  <span className="text-xs text-[var(--text-muted)]">{t("Active")}</span>
                   <SettingsToggle
                     label="Active"
                     enabled={item.isConnected}
@@ -2053,7 +1701,8 @@ function IntegrationsPanel({
                     icon={Trash2}
                     title="Remove service"
                     aria-label="Remove service"
-                    onClick={() => setEntries(entries.filter((_, idx) => idx !== index))}
+                    disabled={entryBusy === "delete"}
+                    onClick={() => void removeEntry(index)}
                   />
                 </div>
               </div>
@@ -2062,7 +1711,7 @@ function IntegrationsPanel({
               <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
                 <SettingsInput
                   label="Service Title"
-                  placeholder="e.g. Stripe Main / Twilio SMS"
+                  placeholder="e.g. My Cloudinary Storage"
                   value={item.title}
                   onChange={(e) => {
                     const title = e.target.value;
@@ -2071,20 +1720,26 @@ function IntegrationsPanel({
                       item.serviceSlug !== slugifyTitle(item.title);
                     updateEntry(index, {
                       title,
-                      ...(slugEdited ? {} : { serviceSlug: slugifyTitle(title) }),
+                      // The slug auto-derives from the title only
+                      // while the entry is NEW. Once saved, the slug
+                      // is the entry's identity and never regenerates
+                      // — a rename updates the same entry.
+                      ...(slugEdited || item.persisted ? {} : { serviceSlug: slugifyTitle(title) }),
                     });
                   }}
                 />
                 <SettingsSelect
                   label="Service"
                   value={category}
-                  options={SERVICE_CATALOGUE.map((c) => ({ label: c.label, value: c.id }))}
+                  options={allowedCategories.map((c) => ({ label: c.label, value: c.id }))}
                   onChange={(value) => changeService(index, value)}
                 />
                 <SettingsInput
                   label="Service Slug (Unique)"
-                  placeholder="e.g. stripe-main"
+                  placeholder="e.g. my-service"
                   value={item.serviceSlug}
+                  disabled={item.persisted}
+                  title={item.persisted ? "The slug is this service's identity — it is set when the service is first saved and does not change." : undefined}
                   onChange={(e) => updateEntry(index, { serviceSlug: e.target.value })}
                 />
                 <SettingsSelect
@@ -2119,7 +1774,9 @@ function IntegrationsPanel({
                           type={field.secret ? "password" : field.type === "number" ? "number" : "text"}
                           value={item.fields[field.key] ?? ""}
                           placeholder={
-                            field.secret && item.configuredSecrets[field.key] ? SECRET_HINT : undefined
+                            field.secret && item.configuredSecrets[field.key]
+                              ? SECRET_HINT
+                              : field.placeholder
                           }
                           autoComplete={field.secret ? "new-password" : "off"}
                           onChange={(e) => updateField(index, field.key, e.target.value)}
@@ -2127,34 +1784,6 @@ function IntegrationsPanel({
                       ),
                     )}
                   </div>
-                  {def.endpoints.length > 0 && (
-                    <div className="space-y-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-xs font-semibold text-[var(--text-soft)] flex items-center gap-1">
-                          <Code2 className="h-3.5 w-3.5" /> Test with the saved credentials
-                        </span>
-                        {def.endpoints.map((endpoint) => {
-                          const test = testStates[`${index}:${endpoint.name}`];
-                          return (
-                            <Button
-                              key={endpoint.name}
-                              variant="outline"
-                              size="sm"
-                              icon={test?.running ? LoaderCircle : Play}
-                              disabled={test?.running}
-                              title={`Save and call ${def.name}'s ${endpoint.name} endpoint`}
-                              onClick={() => void runTest(index, endpoint.name)}
-                            >
-                              {test?.running ? "Testing…" : `Test ${endpoint.name}`}
-                            </Button>
-                          );
-                        })}
-                      </div>
-                      {def.endpoints.map((endpoint) => (
-                        <div key={endpoint.name}>{testResultBox(index, endpoint.name)}</div>
-                      ))}
-                    </div>
-                  )}
                 </>
               ) : (
                 <>
@@ -2188,7 +1817,7 @@ function IntegrationsPanel({
                           label="API Key"
                           type="password"
                           value={item.authApiKey}
-                          placeholder={item.authApiKeyConfigured ? SECRET_HINT : undefined}
+                          placeholder={item.authApiKeyConfigured ? SECRET_HINT : "Paste the API key — hidden after saving"}
                           onChange={(e) => updateEntry(index, { authApiKey: e.target.value })}
                         />
                       </>
@@ -2198,7 +1827,7 @@ function IntegrationsPanel({
                         label="Bearer Token"
                         type="password"
                         value={item.authApiKey}
-                        placeholder={item.authApiKeyConfigured ? SECRET_HINT : undefined}
+                        placeholder={item.authApiKeyConfigured ? SECRET_HINT : "Paste the token — hidden after saving"}
                         onChange={(e) => updateEntry(index, { authApiKey: e.target.value })}
                       />
                     )}
@@ -2206,6 +1835,7 @@ function IntegrationsPanel({
                       <>
                         <SettingsInput
                           label="Username"
+                          placeholder="e.g. mail@yourdomain.com"
                           value={item.authUsername}
                           onChange={(e) => updateEntry(index, { authUsername: e.target.value })}
                         />
@@ -2213,7 +1843,7 @@ function IntegrationsPanel({
                           label="Password"
                           type="password"
                           value={item.authPassword}
-                          placeholder={item.authPasswordConfigured ? SECRET_HINT : undefined}
+                          placeholder={item.authPasswordConfigured ? SECRET_HINT : "Paste the password — hidden after saving"}
                           onChange={(e) => updateEntry(index, { authPassword: e.target.value })}
                         />
                       </>
@@ -2230,14 +1860,17 @@ function IntegrationsPanel({
                           label="Header Value"
                           type="password"
                           value={item.authApiKey}
-                          placeholder={item.authApiKeyConfigured ? SECRET_HINT : undefined}
+                          placeholder={item.authApiKeyConfigured ? SECRET_HINT : "Paste the header value — hidden after saving"}
                           onChange={(e) => updateEntry(index, { authApiKey: e.target.value })}
                         />
                       </>
                     )}
                   </div>
 
-                  {/* Key-value pairs — the Custom service's own fields */}
+                  {/* Key-value pairs — the Custom service's own fields.
+                      Each pair has a Secret TOGGLE (its value is then
+                      masked on read) and its own ON/OFF toggle: an
+                      OFF pair stays saved but is never used. */}
                   <div className="pt-2">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-xs font-semibold text-[var(--text-soft)] flex items-center gap-1">
@@ -2249,16 +1882,16 @@ function IntegrationsPanel({
                     </div>
                     {item.customFields.length === 0 && (
                       <p className="text-xs text-[var(--text-muted)]">
-                        No key-value pairs yet — add the fields this service needs. Mark a pair
-                        Secret to keep its value masked and never shown again.
+                        No key-value pairs yet — add the fields this service needs. Toggle a pair
+                        Secret to keep its value masked, and OFF to keep it saved but unused.
                       </p>
                     )}
                     <div className="space-y-2">
                       {item.customFields.map((pair, pairIdx) => (
-                        <div key={pairIdx} className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto_auto] gap-2 items-end bg-[var(--background)] p-3 rounded-md border border-[var(--border)]">
+                        <div key={pairIdx} className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto_auto_auto] gap-2 items-end bg-[var(--background)] p-3 rounded-md border border-[var(--border)]">
                           <SettingsInput
                             label="Key"
-                            placeholder="e.g. region"
+                            placeholder="Key (e.g. region)"
                             value={pair.key}
                             onChange={(e) => updatePair(index, pairIdx, { key: e.target.value })}
                           />
@@ -2266,17 +1899,25 @@ function IntegrationsPanel({
                             label="Value"
                             type={pair.secret ? "password" : "text"}
                             value={pair.value}
-                            placeholder={pair.secret && pair.configured ? SECRET_HINT : undefined}
+                            placeholder={pair.secret && pair.configured ? SECRET_HINT : "Value (e.g. eu)"}
                             onChange={(e) => updatePair(index, pairIdx, { value: e.target.value })}
                           />
-                          <label className="flex items-center gap-2 pb-2 text-xs text-[var(--text-soft)]">
-                            <input
-                              type="checkbox"
-                              checked={pair.secret}
-                              onChange={(e) => updatePair(index, pairIdx, { secret: e.target.checked })}
+                          <div className="flex flex-col items-center gap-1 pb-1">
+                            <span className="text-[10px] font-medium text-[var(--text-muted)]">Secret</span>
+                            <SettingsToggle
+                              label={`Pair ${pair.key || pairIdx} secret`}
+                              enabled={pair.secret}
+                              onChange={(secret) => updatePair(index, pairIdx, { secret })}
                             />
-                            Secret
-                          </label>
+                          </div>
+                          <div className="flex flex-col items-center gap-1 pb-1">
+                            <span className="text-[10px] font-medium text-[var(--text-muted)]">On</span>
+                            <SettingsToggle
+                              label={`Pair ${pair.key || pairIdx} active`}
+                              enabled={pair.isActive}
+                              onChange={(isActive) => updatePair(index, pairIdx, { isActive })}
+                            />
+                          </div>
                           <div className="flex justify-end pb-1">
                             <Button variant="danger" size="sm" icon={Trash2} onClick={() => removePair(index, pairIdx)} />
                           </div>
@@ -2297,98 +1938,68 @@ function IntegrationsPanel({
                     </div>
                     <div className="space-y-2">
                       {item.endpoints.map((ep, epIdx) => (
-                        <div key={epIdx} className="space-y-2">
-                          <div className="grid grid-cols-1 md:grid-cols-4 gap-2 items-end bg-[var(--background)] p-3 rounded-md border border-[var(--border)]">
-                            <SettingsInput
-                              label="Action Name"
-                              placeholder="e.g. upload / send_sms"
-                              value={ep.name}
-                              onChange={(e) => updateEndpoint(index, epIdx, { name: e.target.value })}
-                            />
-                            <SettingsInput
-                              label="Path"
-                              placeholder="/v1/send"
-                              value={ep.path}
-                              onChange={(e) => updateEndpoint(index, epIdx, { path: e.target.value })}
-                            />
-                            <SettingsSelect
-                              label="HTTP Method"
-                              value={ep.method}
-                              options={["GET", "POST", "PUT", "DELETE", "PATCH"]}
-                              onChange={(method) => updateEndpoint(index, epIdx, { method: method as HttpMethod })}
-                            />
-                            <div className="flex justify-end gap-2 pb-1">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                icon={testStates[`${index}:${ep.name}`]?.running ? LoaderCircle : Play}
-                                disabled={testStates[`${index}:${ep.name}`]?.running}
-                                title="Save and call this endpoint with the saved credentials"
-                                onClick={() => void runTest(index, ep.name)}
-                              >
-                                {testStates[`${index}:${ep.name}`]?.running ? "Testing…" : "Test"}
-                              </Button>
-                              <Button variant="danger" size="sm" icon={Trash2} onClick={() => removeEndpoint(index, epIdx)} />
-                            </div>
+                        <div key={epIdx} className="grid grid-cols-1 md:grid-cols-4 gap-2 items-end bg-[var(--background)] p-3 rounded-md border border-[var(--border)]">
+                          <SettingsInput
+                            label="Action Name"
+                            placeholder="e.g. upload / send_sms"
+                            value={ep.name}
+                            onChange={(e) => updateEndpoint(index, epIdx, { name: e.target.value })}
+                          />
+                          <SettingsInput
+                            label="Path"
+                            placeholder="/v1/send"
+                            value={ep.path}
+                            onChange={(e) => updateEndpoint(index, epIdx, { path: e.target.value })}
+                          />
+                          <SettingsSelect
+                            label="HTTP Method"
+                            value={ep.method}
+                            options={["GET", "POST", "PUT", "DELETE", "PATCH"]}
+                            onChange={(method) => updateEndpoint(index, epIdx, { method: method as HttpMethod })}
+                          />
+                          <div className="flex justify-end gap-2 pb-1">
+                            <Button variant="danger" size="sm" icon={Trash2} onClick={() => removeEndpoint(index, epIdx)} />
                           </div>
-                          {testResultBox(index, ep.name)}
                         </div>
                       ))}
                     </div>
                   </div>
                 </>
               )}
+
+              {/* Per-entry actions: THIS entry's own Test + Save. */}
+              <div className="flex justify-end gap-2 border-t border-[var(--border)] pt-4">
+                <Button
+                  variant="outline"
+                  onClick={() => void testEntry(index)}
+                  disabled={entryBusy !== undefined}
+                  icon={entryBusy === "test" ? LoaderCircle : Play}
+                >
+                  {entryBusy === "test" ? "Testing…" : t("Test")}
+                </Button>
+                <Button
+                  onClick={() => void saveEntry(index)}
+                  disabled={entryBusy !== undefined}
+                  icon={entryBusy === "save" ? LoaderCircle : Save}
+                >
+                  {entryBusy === "save" ? "Saving..." : t("Save")}
+                </Button>
+              </div>
             </div>
           );
         })}
 
-        {entries.length === 0 && (
+        {visible.length === 0 && (
           <p className="text-sm text-[var(--text-muted)]">No services configured yet — add the first one below.</p>
         )}
 
-        <Button
-          variant="outline"
-          icon={Plus}
-          onClick={() =>
-            setEntries([
-              ...entries,
-              {
-                usageType: "CUSTOM",
-                subService: "custom",
-                serviceSlug: "",
-                title: "",
-                baseUrl: "",
-                authType: "NONE",
-                authApiKey: "",
-                authApiKeyConfigured: false,
-                authHeaderKey: "Authorization",
-                authUsername: "",
-                authPassword: "",
-                authPasswordConfigured: false,
-                fields: {},
-                configuredSecrets: {},
-                customFields: [],
-                endpoints: [{ name: "default", path: "/", method: "POST" }],
-                isConnected: true,
-              },
-            ])
-          }
-        >
-          Add New Service
+        <Button variant="outline" icon={Plus} onClick={addEntry}>
+          {t("Add New Service")}
         </Button>
       </div>
-
-      {validationError && (
-        <p className="mt-4 rounded-lg border border-red-300 bg-red-500/10 p-3 text-xs text-red-600" role="alert">
-          {validationError}
-        </p>
-      )}
-
-      <SettingsSaveButton onSave={handleSave} saving={saving} />
     </SettingsCard>
   );
 }
-
 
 function AppearancePanel({ data, saving, onSave }: SectionPanelProps<ObjectData>) {
   const [form, setForm] = useState({

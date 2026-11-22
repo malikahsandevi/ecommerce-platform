@@ -1,56 +1,23 @@
 import { apiClient } from "./api";
 
-// Mirrors the backend's section allowlist exactly — an earlier version
-// also declared an "apiSettings" section the API rejects as unknown.
+// Mirrors the backend's section allowlist exactly. The old bespoke
+// "paymentMethods" / "shipping" sections are gone — payment gateways
+// and shipping providers are services now, managed as integrations
+// entries from the Payment Methods / Shipping tabs.
 export type SettingsSection =
   | "general"
   | "storeInfo"
-  | "paymentMethods"
-  | "shipping"
   | "notifications"
   | "integrations"
-  | "builtInServices"
   | "appearance";
-
-export interface BuiltInServicesData {
-  cloudinary?: { isActive?: boolean };
-  storeSessionJwt?: { isActive?: boolean };
-}
 
 export interface SettingsDocument {
   _id?: string;
   general?: Record<string, unknown>;
   storeInfo?: Record<string, unknown>;
-  paymentMethods?: Array<Record<string, unknown>>;
-  shipping?: Record<string, unknown>;
   notifications?: Record<string, unknown>;
   integrations?: Array<Record<string, unknown>>;
-  builtInServices?: BuiltInServicesData;
   appearance?: Record<string, unknown>;
-}
-
-/** Service credentials (GET /settings/credentials, Super Admin only).
- *  Secrets arrive MASKED — `apiSecret` / `secret` hold a placeholder
- *  when a value is stored, never the real value; the `*Configured`
- *  flags say whether one exists. */
-export interface CredentialsData {
-  cloudinary: {
-    cloudName: string;
-    apiKey: string;
-    apiSecret: string;
-    apiSecretConfigured: boolean;
-  };
-  jwt: {
-    secret: string;
-    secretConfigured: boolean;
-  };
-}
-
-/** Save payload for the credentials. A secret left out (blank in the
- *  form) keeps the stored value; a provided secret replaces it. */
-export interface CredentialsUpdate {
-  cloudinary: { cloudName: string; apiKey: string; apiSecret?: string };
-  jwt: { secret?: string };
 }
 
 export interface SettingsUser {
@@ -86,6 +53,33 @@ export const settingsService = {
 
   async updateSection(section: SettingsSection, values: unknown): Promise<SettingsDocument> {
     const { data } = await apiClient.put<SettingsDocument>("/settings", { [section]: values });
+    return data;
+  },
+
+  /** Per-entry save for ONE service entry (PUT
+   *  /settings/integrations/:slug) — every entry in the service
+   *  builder has its OWN Save button, and saving it writes exactly
+   *  that entry server-side; the rest of the array is untouched.
+   *  Returns the saved entry (secrets masked) and the full masked
+   *  integrations array. */
+  async saveIntegration(
+    entry: Record<string, unknown>,
+    slugOverride?: string,
+  ): Promise<{ integration: Record<string, unknown> | null; integrations: Array<Record<string, unknown>> }> {
+    // The URL slug is the entry's STORED identity (a persisted entry
+    // keeps its slug even if its title was renamed).
+    const slug = encodeURIComponent(String(slugOverride ?? entry.serviceSlug ?? ""));
+    const { data } = await apiClient.put(`/settings/integrations/${slug}`, entry);
+    return data;
+  },
+
+  /** Per-entry remove (DELETE /settings/integrations/:slug). */
+  async deleteIntegration(
+    serviceSlug: string,
+  ): Promise<{ integrations: Array<Record<string, unknown>> }> {
+    const { data } = await apiClient.delete(
+      `/settings/integrations/${encodeURIComponent(serviceSlug)}`,
+    );
     return data;
   },
 
@@ -131,25 +125,12 @@ export const settingsService = {
     return data;
   },
 
-  /** Service credentials, masked (Super Admin only — the API answers
-   *  403 for anyone else, and never returns a full secret). */
-  async getCredentials(): Promise<CredentialsData> {
-    const { data } = await apiClient.get<CredentialsData>("/settings/credentials");
-    return data;
-  },
-
-  /** Saves credentials to the backend store. Takes effect without a
-   *  redeploy. Returns the masked view of what is now stored. */
-  async updateCredentials(values: CredentialsUpdate): Promise<CredentialsData> {
-    const { data } = await apiClient.put<CredentialsData>("/settings/credentials", values);
-    return data;
-  },
-
   /** Runs one saved integration endpoint through the backend runner
    *  (POST /settings/execute). The runner executes the SAVED
-   *  configuration — the panel saves the form first, so what is tested
-   *  is exactly what is stored. Resolves with the provider's response
-   *  data; a provider failure rejects with the API's error message. */
+   *  configuration — the panel saves the entry first, so what is
+   *  tested is exactly what is stored. Resolves with the provider's
+   *  response data; a provider failure rejects with the API's error
+   *  message. */
   async executeIntegration(
     serviceSlug: string,
     endpointName: string,

@@ -27,8 +27,26 @@ export default async function RootLayout({
   const themeCookie = (await cookies()).get("theme")?.value;
   const ssrTheme = themeCookie === "dark" || themeCookie === "light" ? themeCookie : undefined;
 
+  // The saved UI language, mirrored into a cookie by applyLanguage(),
+  // so the first paint already carries the right lang attribute. The
+  // layout direction is NEVER switched — text translates in place.
+  const LANGUAGE_CODES: Record<string, string> = {
+    English: "en",
+    Urdu: "ur",
+    Arabic: "ar",
+    Hindi: "hi",
+    Bengali: "bn",
+    Spanish: "es",
+    French: "fr",
+    German: "de",
+    Turkish: "tr",
+    "Chinese (Simplified)": "zh",
+  };
+  const languageCookie = (await cookies()).get("language")?.value;
+  const ssrLang = (languageCookie && LANGUAGE_CODES[languageCookie]) || "en";
+
   return (
-    <html lang="en" data-theme={ssrTheme} suppressHydrationWarning>
+    <html lang={ssrLang} data-theme={ssrTheme} suppressHydrationWarning>
       <head>
         {/* Runs before first paint so the saved theme AND the saved
             sidebar state are applied without a flash. The theme stored
@@ -46,6 +64,12 @@ export default async function RootLayout({
                   : (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
                 document.documentElement.setAttribute("data-theme", resolved);
                 document.cookie = "theme=" + resolved + "; path=/; max-age=31536000; SameSite=Lax";
+                const LANG_CODES = { English: "en", Urdu: "ur", Arabic: "ar", Hindi: "hi", Bengali: "bn", Spanish: "es", French: "fr", German: "de", Turkish: "tr", "Chinese (Simplified)": "zh" };
+                const savedLang = localStorage.getItem("admin-language");
+                if (savedLang && LANG_CODES[savedLang]) {
+                  document.documentElement.setAttribute("lang", LANG_CODES[savedLang]);
+                  document.cookie = "language=" + encodeURIComponent(savedLang) + "; path=/; max-age=31536000; SameSite=Lax";
+                }
                 const sidebar = localStorage.getItem("admin-sidebar");
                 if (sidebar === "collapsed" || (sidebar === null && window.innerWidth < 1024)) {
                   document.documentElement.setAttribute("data-sidebar", "collapsed");

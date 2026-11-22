@@ -16,7 +16,8 @@ module.exports = {
             "key": "measurementId",
             "label": "Measurement ID",
             "secret": false,
-            "required": true
+            "required": true,
+            "placeholder": "e.g. G-XXXXXXXXXX"
         }
     ],
     "endpoints": []

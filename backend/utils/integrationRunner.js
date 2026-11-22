@@ -138,8 +138,31 @@ const executeEntryCall = async ({ entry, definition, endpointName, payload = {},
         throw new RunnerError(404, `Endpoint '${endpointName}' not found.`);
     }
 
+    // Internal services (the Store Session JWT signer) have no HTTP
+    // API to call — their test is a local probe: sign a throwaway
+    // token with the saved secret and verify it straight back. That
+    // proves the saved secret genuinely works for signing.
+    if (isPreset && definition.auth?.style === 'internal') {
+        const secret = (entry.values || {}).jwtSecret || '';
+        if (!secret) {
+            throw new RunnerError(400, `Service '${entry.title || entry.serviceSlug}' has no saved secret to test.`);
+        }
+        const jwt = require('jsonwebtoken');
+        const probe = jwt.sign({ probe: 'store-session' }, secret, { expiresIn: '1m' });
+        jwt.verify(probe, secret);
+        return {
+            status: 'ok',
+            check: 'sign+verify',
+            message: 'A probe token was signed with the saved JWT secret and verified successfully.',
+        };
+    }
+
     const values = entry.values || {};
-    const baseUrl = isPreset ? resolveBaseUrl(definition, values) : String(entry.baseUrl || '');
+    // Preset bases resolve from the definition; a custom entry's
+    // typed base may carry {key} placeholders filled from its ACTIVE
+    // key-value pairs (entry.values already excludes toggled-off
+    // pairs — see the gate's entryValues).
+    const baseUrl = isPreset ? resolveBaseUrl(definition, values) : fillPlaceholders(String(entry.baseUrl || ''), values);
     if (!baseUrl) {
         throw new RunnerError(400, `Service '${entry.title || entry.serviceSlug}' has no callable API base URL.`);
     }
@@ -205,4 +228,45 @@ const executeEntryCall = async ({ entry, definition, endpointName, payload = {},
     }
 };
 
-module.exports = { executeEntryCall, RunnerError, assertPublicUrl, resolveBaseUrl, fillPlaceholders };
+/**
+ * Configuration test for preset sub-services that expose no callable
+ * API endpoint (hosted-form gateways, OAuth providers, the S3 family
+ * before the storage consumer uses them, …). There is no provider
+ * call to make, so the test validates what CAN be proven locally:
+ * the entry is fully configured (the caller checks that first) and,
+ * where an offline functional probe exists, the saved values really
+ * drive the service's library — a SigV4 presigned URL for S3/R2, an
+ * SMTP transport build for the mail services.
+ */
+const runConfigTest = async ({ definition, entry, values }) => {
+    const checks = ['Every required field is saved'];
+    if (definition.id === 'aws-s3' || definition.id === 'cloudflare-r2') {
+        const { buildS3Client } = require('./storageS3');
+        const { GetObjectCommand } = require('@aws-sdk/client-s3');
+        const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+        const client = buildS3Client(definition.id, values);
+        const url = await getSignedUrl(
+            client,
+            new GetObjectCommand({ Bucket: values.bucket, Key: 'connection-test.txt' }),
+            { expiresIn: 60 },
+        );
+        if (!url.includes('X-Amz-Signature=')) {
+            throw new RunnerError(400, 'Presigned URL generation failed for the saved values.');
+        }
+        checks.push('S3 client built from the saved values and a SigV4 presigned URL was generated');
+    }
+    if (definition.id === 'smtp' || definition.id === 'hosting-mail') {
+        const { buildSmtpTransport } = require('./mailer');
+        buildSmtpTransport(values);
+        checks.push('SMTP transport builds from the saved host / port / encryption values');
+    }
+    return {
+        status: 'ok',
+        mode: 'configuration-test',
+        service: definition.name,
+        checks,
+        message: `${definition.name} has no callable API endpoint — its saved configuration was validated locally instead.`,
+    };
+};
+
+module.exports = { executeEntryCall, runConfigTest, RunnerError, assertPublicUrl, resolveBaseUrl, fillPlaceholders };

@@ -17,19 +17,22 @@ module.exports = {
             "key": "publishableKey",
             "label": "Publishable Key",
             "secret": false,
-            "required": true
+            "required": true,
+            "placeholder": "e.g. pk_live_…"
         },
         {
             "key": "secretKey",
             "label": "Secret Key",
             "secret": true,
-            "required": true
+            "required": true,
+            "placeholder": "Paste the secret key — hidden after saving"
         },
         {
             "key": "webhookSecret",
             "label": "Webhook Secret",
             "secret": true,
-            "required": true
+            "required": true,
+            "placeholder": "e.g. whsec_… — hidden after saving"
         }
     ],
     "endpoints": [

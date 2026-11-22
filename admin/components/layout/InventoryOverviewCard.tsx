@@ -1,5 +1,6 @@
 import React from "react";
 import { PackageSearch } from "lucide-react";
+import { useLanguage } from "@/services/i18n";
 
 export interface InventoryData {
   total: number;
@@ -50,10 +51,11 @@ export const InventoryOverviewCard: React.FC<InventoryOverviewCardProps> = ({ da
   const share = (value: number) =>
     data.total > 0 ? Math.round((value / data.total) * 100) : 0;
 
+  const { t } = useLanguage();
   return (
     <div className="p-5 w-full h-full bg-(--background) rounded-2xl shadow-sm border border-(--border) flex flex-col">
       <div className="flex items-center justify-between">
-        <h3 className="text-base font-bold text-(--text)">Inventory Overview</h3>
+        <h3 className="text-base font-bold text-(--text)">{t("Inventory Overview")}</h3>
         <span className="text-[11px] font-medium text-(--text-muted)">
           Live catalog counts
         </span>

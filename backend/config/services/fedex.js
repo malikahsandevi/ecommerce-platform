@@ -19,19 +19,22 @@ module.exports = {
             "key": "clientId",
             "label": "Client ID",
             "secret": false,
-            "required": true
+            "required": true,
+            "placeholder": "Client ID from the provider dashboard"
         },
         {
             "key": "clientSecret",
             "label": "Client Secret",
             "secret": true,
-            "required": true
+            "required": true,
+            "placeholder": "Paste the client secret — hidden after saving"
         },
         {
             "key": "accountNumber",
             "label": "Account Number",
             "secret": false,
-            "required": true
+            "required": true,
+            "placeholder": "e.g. 123456789"
         }
     ],
     "endpoints": []

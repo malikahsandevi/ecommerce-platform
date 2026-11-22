@@ -3,6 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
+import { useLanguage } from "@/services/i18n";
 
 interface SidebarItemProps {
   name: string;
@@ -19,10 +20,12 @@ const SidebarItem: React.FC<SidebarItemProps> = ({
   active = false,
   collapsed = false,
 }) => {
+  const { t } = useLanguage();
+  const label = t(name);
   return (
     <Link
       href={link}
-      title={collapsed ? name : undefined}
+      title={collapsed ? label : undefined}
       aria-current={active ? "page" : undefined}
       className={`sb-center relative flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition-all duration-150 ${
         collapsed ? "justify-center px-0" : ""
@@ -36,7 +39,7 @@ const SidebarItem: React.FC<SidebarItemProps> = ({
         <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-1 rounded-r-full bg-(--primary)" />
       )}
       <Icon size={20} className={active ? "text-(--primary)" : ""} />
-      {!collapsed && <span className="sb-label truncate">{name}</span>}
+      {!collapsed && <span className="sb-label truncate">{label}</span>}
     </Link>
   );
 };

@@ -18,19 +18,22 @@ module.exports = {
             "key": "accountSid",
             "label": "Account SID",
             "secret": false,
-            "required": true
+            "required": true,
+            "placeholder": "e.g. AC… (34 characters)"
         },
         {
             "key": "authToken",
             "label": "Auth Token",
             "secret": true,
-            "required": true
+            "required": true,
+            "placeholder": "Paste the auth token — hidden after saving"
         },
         {
             "key": "fromNumber",
             "label": "From Number",
             "secret": false,
-            "required": true
+            "required": true,
+            "placeholder": "e.g. +14155552671"
         }
     ],
     "endpoints": [

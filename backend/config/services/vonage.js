@@ -20,19 +20,22 @@ module.exports = {
             "key": "apiKey",
             "label": "API Key",
             "secret": false,
-            "required": true
+            "required": true,
+            "placeholder": "e.g. 123456789012345"
         },
         {
             "key": "apiSecret",
             "label": "API Secret",
             "secret": true,
-            "required": true
+            "required": true,
+            "placeholder": "Paste the API secret — hidden after saving"
         },
         {
             "key": "from",
             "label": "From",
             "secret": false,
-            "required": true
+            "required": true,
+            "placeholder": "e.g. MyStore"
         }
     ],
     "endpoints": [

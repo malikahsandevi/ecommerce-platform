@@ -18,13 +18,15 @@ module.exports = {
             "key": "publicKey",
             "label": "Public Key",
             "secret": false,
-            "required": true
+            "required": true,
+            "placeholder": "Your public key"
         },
         {
             "key": "secretKey",
             "label": "Secret Key",
             "secret": true,
-            "required": true
+            "required": true,
+            "placeholder": "Paste the secret key — hidden after saving"
         }
     ],
     "endpoints": [

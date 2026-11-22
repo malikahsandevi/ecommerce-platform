@@ -52,6 +52,10 @@ export interface SelectProps extends Omit<ComponentPropsWithoutRef<"button">, "o
    *  narrower than their option labels ("Pending Review" must never
    *  render as "Pending R…"). */
   menuWide?: boolean;
+  /** Extra classes for the trigger BUTTON (the wrapper takes
+   *  `className`) — e.g. an exact height/padding so the trigger can
+   *  match a neighbouring text input pixel-for-pixel. */
+  triggerClassName?: string;
   /** Placeholder for the search input (searchable only). */
   searchPlaceholder?: string;
   /** Shown inside the open dropdown when there are no options at all. */
@@ -72,6 +76,7 @@ const Select: React.FC<SelectProps> = ({
   size = "md",
   fullWidth = false,
   triggerFullWidth = false,
+  triggerClassName = "",
   direction = "bottom",
   disabled = false,
   searchable = false,
@@ -135,7 +140,7 @@ const Select: React.FC<SelectProps> = ({
           variantStyles[variant] || variantStyles.secondary
         } ${sizeStyles[size] || sizeStyles.md} ${
           fullWidth || triggerFullWidth ? "w-full" : ""
-        } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
+        } ${triggerClassName} ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
         {...props}
       >
         <span className="inline-flex items-center gap-1.5 truncate">
@@ -209,7 +214,7 @@ const Select: React.FC<SelectProps> = ({
                   setIsOpen(false);
                   setQuery("");
                 }}
-                className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between cursor-pointer transition-colors ${
+                className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between cursor-pointer transition-colors ${
                   isSelected
                     ? "bg-(--primary)/15 text-[var(--text)] font-bold shadow-[inset_3px_0_0_var(--primary)]"
                     : "text-[var(--text)] hover:bg-[var(--surface-muted)]"

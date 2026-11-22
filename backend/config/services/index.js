@@ -4,22 +4,26 @@
 // (cloudinary.js, stripe.js, twilio.js, …). Each definition holds
 // STRUCTURE ONLY — field schema, the provider's FIXED API base and its
 // auth style. Credential VALUES are never in these files or in git:
-// they are stored in the database (the Setting document's integrations
-// for admin-added services; the Credential store for the two built-ins)
-// and read at runtime, here.
+// they are stored in the database, in the Setting document's
+// integrations array, and read at runtime, here.
+//
+// EVERY service is a normal integrations entry — Cloudinary and the
+// Store Session (JWT) signer included. They used to be special
+// "built-ins" backed by a separate Credential store; Ahsan ordered
+// them normalised ("wo bhi normal credentials hai"), so their values
+// now live in integrations entries like everyone else's (the one-time
+// migration in utils/credentials.js moved them there verbatim).
 //
 // THE GATE: a sub-service is USED only when BOTH are true —
 //   (a) the admin has saved its configuration (every required field
 //       of its definition is present), AND
-//   (b) its activation toggle is ON (the entry's isConnected flag;
-//       for the built-ins, Setting.builtInServices.<id>.isActive).
+//   (b) its activation toggle is ON (the entry's isConnected flag).
 // Otherwise the definition file simply sits unused. Every runtime
 // consumer — the integration runner (utils/integrationRunner.js), the
 // media/Cloudinary path and JWT signing (utils/credentials.js) —
 // resolves through this module; nothing reads a provider config
 // anywhere else.
 const Setting = require('../../models/Setting');
-const { currentCredentials } = require('../../utils/credentials');
 
 const DEFINITIONS = {
     cloudinary: require('./cloudinary'),
@@ -28,6 +32,15 @@ const DEFINITIONS = {
     stripe: require('./stripe'),
     paypal: require('./paypal'),
     razorpay: require('./razorpay'),
+    square: require('./square'),
+    adyen: require('./adyen'),
+    'checkout-com': require('./checkout-com'),
+    braintree: require('./braintree'),
+    mollie: require('./mollie'),
+    paddle: require('./paddle'),
+    jazzcash: require('./jazzcash'),
+    easypaisa: require('./easypaisa'),
+    payfast: require('./payfast'),
     'hosting-mail': require('./hosting-mail'),
     smtp: require('./smtp'),
     sendgrid: require('./sendgrid'),
@@ -61,7 +74,7 @@ const DEFINITIONS = {
 // Setting schema enum (SMS is stored as SMS_NOTIFICATION).
 const CATEGORIES = [
     { id: 'STORAGE', label: 'Storage', subServices: ['cloudinary', 'aws-s3', 'cloudflare-r2'] },
-    { id: 'PAYMENT', label: 'Payment', subServices: ['stripe', 'paypal', 'razorpay'] },
+    { id: 'PAYMENT', label: 'Payment', subServices: ['stripe', 'paypal', 'razorpay', 'square', 'adyen', 'checkout-com', 'braintree', 'mollie', 'paddle', 'jazzcash', 'easypaisa', 'payfast'] },
     { id: 'EMAIL', label: 'Email', subServices: ['hosting-mail', 'smtp', 'sendgrid', 'resend', 'mailgun'] },
     { id: 'SMS_NOTIFICATION', label: 'SMS', subServices: ['twilio', 'vonage'] },
     { id: 'AUTH', label: 'Auth', subServices: ['google', 'facebook', 'github', 'store-session-jwt'] },
@@ -82,7 +95,6 @@ const catalogueView = () => ({
             return {
                 id: def.id,
                 name: def.name,
-                builtIn: Boolean(def.builtIn),
                 hasFixedBase: Boolean(def.baseUrl),
                 fields: def.fields,
                 endpoints: def.endpoints,
@@ -106,73 +118,36 @@ const entryValues = (entry) => {
     }
     if (Array.isArray(entry.customFields)) {
         for (const pair of entry.customFields) {
-            if (pair?.key) values[pair.key] = pair.value ?? '';
+            // A pair toggled OFF in the panel stays saved but is not
+            // used — it never becomes part of the effective values.
+            if (pair?.key && pair.isActive !== false) values[pair.key] = pair.value ?? '';
         }
     }
     return values;
 };
 
-/**
- * The two built-in services as synthetic entries. Their VALUES come
- * from the Credential store (utils/credentials.js) — the same store
- * that has run media + sessions since the credentials moved out of
- * env — and their activation toggles from Setting.builtInServices.
- */
-const builtInEntries = (settings) => {
-    const values = currentCredentials();
-    const toggles = settings?.builtInServices || {};
-    return [
-        {
-            builtIn: true,
-            serviceSlug: 'cloudinary',
-            subService: 'cloudinary',
-            usageType: 'STORAGE',
-            title: 'Cloudinary',
-            isConnected: toggles.cloudinary?.isActive !== false,
-            values: {
-                cloudName: values.cloudinaryCloudName,
-                apiKey: values.cloudinaryApiKey,
-                apiSecret: values.cloudinaryApiSecret,
-            },
-        },
-        {
-            builtIn: true,
-            serviceSlug: 'store-session-jwt',
-            subService: 'store-session-jwt',
-            usageType: 'AUTH',
-            title: 'Store Session (JWT)',
-            isConnected: toggles.storeSessionJwt?.isActive !== false,
-            values: { jwtSecret: values.jwtSecret },
-        },
-    ];
-};
-
-/** All service entries: built-ins first, then the saved integrations. */
-const allEntries = (settings) => [
-    ...builtInEntries(settings),
-    ...(settings?.integrations || []).map((entry) => ({
-        builtIn: false,
-        serviceSlug: entry.serviceSlug,
-        subService: entry.subService || '',
-        usageType: entry.usageType,
-        title: entry.title,
-        isConnected: entry.isConnected !== false,
-        baseUrl: entry.baseUrl,
-        authType: entry.authType,
-        authCredentials: entry.authCredentials,
-        globalHeaders: entry.globalHeaders,
-        endpoints: entry.endpoints || [],
-        raw: entry,
-        values: entryValues(entry),
-    })),
-];
+/** All service entries: exactly the saved integrations, in order. */
+const allEntries = (settings) => (settings?.integrations || []).map((entry) => ({
+    serviceSlug: entry.serviceSlug,
+    subService: entry.subService || '',
+    usageType: entry.usageType,
+    title: entry.title,
+    isConnected: entry.isConnected !== false,
+    baseUrl: entry.baseUrl,
+    authType: entry.authType,
+    authCredentials: entry.authCredentials,
+    globalHeaders: entry.globalHeaders,
+    endpoints: entry.endpoints || [],
+    raw: entry,
+    values: entryValues(entry),
+}));
 
 /**
  * THE GATE. Resolves the ACTIVE provider of a category: the first
- * entry (built-ins first, then saved order) that is both configured
- * and toggled ON. Returns { definition, entry, values } or null —
- * null means "no usable provider for this category", and callers
- * must treat the service as unavailable.
+ * entry (in saved order) that is both configured and toggled ON.
+ * Returns { definition, entry, values } or null — null means "no
+ * usable provider for this category", and callers must treat the
+ * service as unavailable.
  */
 const resolveActiveProvider = (entries, category) => {
     switch (category) {
@@ -206,7 +181,7 @@ const getActiveService = async (category) => {
     return resolveActiveProvider(allEntries(settings), category);
 };
 
-/** Finds one entry by slug (built-ins included), regardless of state. */
+/** Finds one entry by slug, regardless of state. */
 const findEntry = async (serviceSlug) => {
     const settings = await Setting.findOne().sort({ createdAt: 1 }).lean();
     const entries = allEntries(settings);
@@ -232,7 +207,6 @@ module.exports = {
     catalogueView,
     isConfigured,
     entryValues,
-    builtInEntries,
     allEntries,
     resolveActiveProvider,
     getActiveService,

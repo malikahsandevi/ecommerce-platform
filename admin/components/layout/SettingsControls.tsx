@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, type InputHTMLAttributes, type ReactNode } from "react";
+import { useLanguage } from "@/services/i18n";
 import { LoaderCircle, Save } from "lucide-react";
 import Button from "@/components/ui/Button";
 import Select from "@/components/ui/Select";
@@ -100,6 +101,11 @@ export function SettingsSelect({
         placeholder={placeholder}
         variant="outline"
         fullWidth
+        // Settings selects sit beside SettingsInput fields and must
+        // match them EXACTLY: h-10 height, px-3 padding, text-sm —
+        // the input's own geometry (Ahsan flagged the dropdown
+        // rendering bigger than the neighbouring input).
+        triggerClassName="h-10 px-3"
         searchable={searchable}
         searchPlaceholder={searchPlaceholder}
       />
@@ -147,10 +153,11 @@ export function SettingsSaveButton({
   onSave: () => void;
   saving?: boolean;
 }) {
+  const { t } = useLanguage();
   return (
     <div className="mt-6 flex justify-end border-t border-[var(--border)] pt-5">
       <Button onClick={onSave} disabled={saving} icon={saving ? LoaderCircle : Save}>
-        {saving ? "Saving..." : "Save Changes"}
+        {saving ? t("Saving...") : t("Save Changes")}
       </Button>
     </div>
   );

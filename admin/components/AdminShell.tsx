@@ -9,6 +9,7 @@ import { ToastHost } from "@/components/ui/Toast";
 import { AuthProvider, useAdminAuth } from "@/services/authContext";
 import { fetchAndApplyAppearance, reassertDeviceTheme } from "@/services/appearance";
 import { fetchAndApplyStoreCurrency } from "@/services/currency";
+import { LanguageProvider, fetchAndApplyLanguage } from "@/services/i18n";
 
 // Renders the shell and gates the panel behind a session. Kept separate from
 // the root layout (a server component) because useAdminAuth must run *inside*
@@ -37,6 +38,12 @@ function AdminShellInner({ children }: { children: React.ReactNode }) {
   // in the panel — load and apply it once signed in, like Appearance.
   useEffect(() => {
     if (isAuthenticated) void fetchAndApplyStoreCurrency();
+  }, [isAuthenticated]);
+
+  // The UI language (Settings → General) — same pattern: load and
+  // apply it once signed in so the shell renders in it on every page.
+  useEffect(() => {
+    if (isAuthenticated) void fetchAndApplyLanguage();
   }, [isAuthenticated]);
 
   // Avoid flashing the login popup while the session probe is still running.
@@ -88,7 +95,9 @@ function AdminShellInner({ children }: { children: React.ReactNode }) {
 export default function AdminShell({ children }: { children: React.ReactNode }) {
   return (
     <AuthProvider>
-      <AdminShellInner>{children}</AdminShellInner>
+      <LanguageProvider>
+        <AdminShellInner>{children}</AdminShellInner>
+      </LanguageProvider>
     </AuthProvider>
   );
 }

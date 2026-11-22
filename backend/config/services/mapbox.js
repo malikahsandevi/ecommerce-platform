@@ -18,7 +18,8 @@ module.exports = {
             "key": "accessToken",
             "label": "Access Token",
             "secret": true,
-            "required": true
+            "required": true,
+            "placeholder": "Paste the access token — hidden after saving"
         }
     ],
     "endpoints": []

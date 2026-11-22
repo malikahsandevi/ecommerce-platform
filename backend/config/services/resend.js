@@ -17,13 +17,15 @@ module.exports = {
             "key": "apiKey",
             "label": "API Key",
             "secret": true,
-            "required": true
+            "required": true,
+            "placeholder": "Paste the API key — hidden after saving"
         },
         {
             "key": "fromEmail",
             "label": "From Email",
             "secret": false,
-            "required": true
+            "required": true,
+            "placeholder": "name@example.com"
         }
     ],
     "endpoints": [

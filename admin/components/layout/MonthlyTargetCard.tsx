@@ -8,6 +8,7 @@ import {
 } from "recharts";
 import { Ellipsis } from "lucide-react";
 import { formatMoney, useStoreCurrency } from "@/services/currency";
+import { useLanguage } from "@/services/i18n";
 
 export interface MonthlyTargetData {
   target: number;
@@ -67,10 +68,11 @@ export const MonthlyTargetCard: React.FC<MonthlyTargetCardProps> = ({ data }) =>
           ? { title: "Good Going", body: `${fmtMoney(remaining)} to go — keep pushing to reach the target.` }
           : { title: "Getting Started", body: `${fmtMoney(remaining)} to go this month — new orders will move the gauge.` };
 
+  const { t } = useLanguage();
   return (
     <div className="p-5 w-full h-full bg-(--background) rounded-2xl shadow-sm border border-(--border) flex flex-col">
       <div className="flex items-center justify-between">
-        <h3 className="text-base font-bold text-(--text)">Monthly Target</h3>
+        <h3 className="text-base font-bold text-(--text)">{t("Monthly Target")}</h3>
         <Ellipsis className="w-5 h-5 text-(--text-muted)" />
       </div>
 
