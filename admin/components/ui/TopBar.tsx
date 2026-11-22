@@ -1,11 +1,28 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { MessageSquare, Bell, CheckCheck, ChevronDown, LogOut } from "lucide-react";
+import { useRouter } from "next/navigation";
+import {
+  MessageSquare,
+  Bell,
+  ChevronDown,
+  LogOut,
+  PackageX,
+  TriangleAlert,
+  ShoppingCart,
+  Star,
+  UserPlus,
+  BellRing,
+} from "lucide-react";
 import SearchBar, { SearchableEntityRecord } from "@/components/ui/SearchBar";
 import GlobalSearch from "@/components/ui/GlobalSearch";
 import ThemeToggle from "@/components/models/ThemeToggle";
 import { useAdminAuth } from "@/services/authContext";
+import {
+  useNotifications,
+  relativeTime,
+  type FeedItem,
+} from "@/services/notifications";
 
 // Dynamic Interfaces
 export interface UserProfile {
@@ -57,8 +74,6 @@ export const TopBar = <T extends SearchableEntityRecord>({
   title,
   subtitle,
   user,
-  notifications = [],
-  messages = [],
   searchPlaceholder = "Search...",
   globalSearch = false,
   searchData = [],
@@ -69,6 +84,47 @@ export const TopBar = <T extends SearchableEntityRecord>({
   const [activePopup, setActivePopup] = useState<"msg" | "notif" | "profile" | null>(null);
   const [failedAvatar, setFailedAvatar] = useState<string | null>(null);
   const { logout } = useAdminAuth();
+  const router = useRouter();
+
+  // Live bell + inbox feeds (real store data via /api/notifications).
+  // The legacy `notifications`/`messages` props are no longer used —
+  // the feeds come from the hook so every page stays current.
+  const feed = useNotifications();
+  // Ids that were unread when a panel was opened — the badge clears on
+  // open (items are marked read), but the panel still dots the fresh
+  // ones so the user can see what was new.
+  const [freshIds, setFreshIds] = useState<Set<string>>(new Set());
+
+  const openPanel = (panel: "msg" | "notif") => {
+    if (activePopup === panel) {
+      setActivePopup(null);
+      return;
+    }
+    if (panel === "notif") {
+      setFreshIds(new Set(feed.unreadBell.map((n) => n.id)));
+      feed.markBellRead();
+    } else {
+      setFreshIds(new Set(feed.unreadInbox.map((m) => m.id)));
+      feed.markInboxRead();
+    }
+    setActivePopup(panel);
+  };
+
+  const openFeedItem = (item: FeedItem) => {
+    if (item.recordId) {
+      try {
+        sessionStorage.setItem(
+          "openRecord",
+          JSON.stringify({ path: item.path, id: item.recordId }),
+        );
+      } catch {
+        /* storage blocked — navigation still happens */
+      }
+      window.dispatchEvent(new Event("admin:open-record"));
+    }
+    setActivePopup(null);
+    router.push(item.path);
+  };
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -96,8 +152,8 @@ export const TopBar = <T extends SearchableEntityRecord>({
     return () => window.removeEventListener("admin:breadcrumbs-pref", sync);
   }, []);
 
-  const unreadMsgCount = messages.filter((m) => m.isUnread).length;
-  const unreadNotifCount = notifications.filter((n) => n.isUnread).length;
+  const unreadMsgCount = feed.unreadInboxReviewCount;
+  const unreadNotifCount = feed.unreadBellCount;
   const avatarSrc = user.avatar?.trim();
   const showAvatarImage = Boolean(avatarSrc && failedAvatar !== avatarSrc);
 
@@ -156,13 +212,12 @@ export const TopBar = <T extends SearchableEntityRecord>({
 
         {/* Action Icons With Popups */}
         <div className="flex items-center gap-1 relative">
-          {/* Message Button & Popup */}
+          {/* Message Button & Popup — customer-originated inbox */}
           <div className="relative">
             <button
               type="button"
-              onClick={() =>
-                setActivePopup(activePopup === "msg" ? null : "msg")
-              }
+              aria-label="Messages"
+              onClick={() => openPanel("msg")}
               className={`relative p-0.5 md:p-2 rounded-xl transition-colors ${
                 activePopup === "msg"
                   ? "bg-(--primary-soft) text-(--primary)"
@@ -171,7 +226,9 @@ export const TopBar = <T extends SearchableEntityRecord>({
             >
               <MessageSquare className="w-5 h-5" />
               {unreadMsgCount > 0 && (
-                <span className="absolute top-1 right-1 w-2 h-2 bg-(--primary) rounded-full ring-2 ring-(--background)" />
+                <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 bg-(--primary) text-(--primary-text) rounded-full ring-2 ring-(--background) text-[9px] font-bold flex items-center justify-center">
+                  {unreadMsgCount}
+                </span>
               )}
             </button>
 
@@ -179,33 +236,44 @@ export const TopBar = <T extends SearchableEntityRecord>({
               <div className="absolute right-0 mt-2 w-80 bg-(--background) rounded-2xl shadow-xl border border-(--border) z-50 p-4">
                 <div className="flex items-center justify-between pb-3 border-b border-(--border)">
                   <h4 className="text-sm font-bold text-(--text)">Messages</h4>
-                  <span className="text-[10px] bg-(--primary) text-(--primary-text) px-2 py-0.5 rounded-full font-bold">
-                    {unreadMsgCount} New
-                  </span>
+                  {freshIds.size > 0 && (
+                    <span className="text-[10px] bg-(--primary) text-(--primary-text) px-2 py-0.5 rounded-full font-bold">
+                      {freshIds.size} New
+                    </span>
+                  )}
                 </div>
-                {messages.length === 0 ? (
+                {feed.inbox.length === 0 ? (
                   <p className="py-6 text-center text-xs text-(--text-muted)">
-                    No messages yet.
+                    No messages
                   </p>
                 ) : (
-                  <div className="divide-y divide-(--border) max-h-60 overflow-y-auto">
-                    {messages.map((msg) => (
-                      <div
-                        key={msg.id}
-                        className="py-3 px-1 flex flex-col gap-1 hover:bg-(--primary-soft) rounded-lg transition-colors cursor-pointer"
+                  <div className="divide-y divide-(--border) max-h-80 overflow-y-auto">
+                    {feed.inbox.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => openFeedItem(item)}
+                        className="w-full text-left py-3 px-1 flex items-start gap-2 hover:bg-(--primary-soft) rounded-lg transition-colors cursor-pointer"
                       >
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-(--text)">
-                            {msg.sender}
+                        <span className="mt-0.5 shrink-0">
+                          {item.type === "review_pending" ? (
+                            <Star className="w-4 h-4 text-(--primary)" />
+                          ) : (
+                            <UserPlus className="w-4 h-4 text-(--primary)" />
+                          )}
+                        </span>
+                        <span className="flex flex-col gap-0.5 flex-1 min-w-0">
+                          <span className="text-xs font-semibold text-(--text) leading-snug">
+                            {item.title}
                           </span>
                           <span className="text-[10px] text-(--text-muted)">
-                            {msg.time}
+                            {relativeTime(item.time)}
                           </span>
-                        </div>
-                        <p className="text-xs text-(--text-muted) line-clamp-1">
-                          {msg.text}
-                        </p>
-                      </div>
+                        </span>
+                        {freshIds.has(item.id) && (
+                          <span className="mt-1.5 w-2 h-2 shrink-0 rounded-full bg-(--primary)" />
+                        )}
+                      </button>
                     ))}
                   </div>
                 )}
@@ -213,13 +281,12 @@ export const TopBar = <T extends SearchableEntityRecord>({
             )}
           </div>
 
-          {/* Notification Button & Popup */}
+          {/* Notification Button & Popup — store/system events */}
           <div className="relative">
             <button
               type="button"
-              onClick={() =>
-                setActivePopup(activePopup === "notif" ? null : "notif")
-              }
+              aria-label="Notifications"
+              onClick={() => openPanel("notif")}
               className={`relative p-0.5 md:p-2 rounded-xl transition-colors ${
                 activePopup === "notif"
                   ? "bg-(--primary-soft) text-(--primary)"
@@ -228,7 +295,9 @@ export const TopBar = <T extends SearchableEntityRecord>({
             >
               <Bell className="w-5 h-5" />
               {unreadNotifCount > 0 && (
-                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full ring-2 ring-(--background)" />
+                <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 bg-red-500 text-white rounded-full ring-2 ring-(--background) text-[9px] font-bold flex items-center justify-center">
+                  {unreadNotifCount}
+                </span>
               )}
             </button>
 
@@ -236,33 +305,50 @@ export const TopBar = <T extends SearchableEntityRecord>({
               <div className="absolute right-0 mt-2 w-80 bg-(--background) rounded-2xl shadow-xl border border-(--border) z-50 p-4">
                 <div className="flex items-center justify-between pb-3 border-b border-(--border)">
                   <h4 className="text-sm font-bold text-(--text)">Notifications</h4>
-                  <span className="text-[10px] bg-red-500/10 text-red-500 px-2 py-0.5 rounded-full font-bold">
-                    {unreadNotifCount} Unread
-                  </span>
+                  {freshIds.size > 0 && (
+                    <span className="text-[10px] bg-red-500/10 text-red-500 px-2 py-0.5 rounded-full font-bold">
+                      {freshIds.size} New
+                    </span>
+                  )}
                 </div>
-                {notifications.length === 0 ? (
+                {feed.notifications.length === 0 ? (
                   <p className="py-6 text-center text-xs text-(--text-muted)">
-                    No notifications yet.
+                    No notifications
                   </p>
                 ) : (
-                  <div className="divide-y divide-(--border) max-h-60 overflow-y-auto">
-                    {notifications.map((notif) => (
-                      <div
-                        key={notif.id}
-                        className="py-3 px-1 flex items-start gap-2 hover:bg-(--primary-soft) rounded-lg transition-colors cursor-pointer"
+                  <div className="divide-y divide-(--border) max-h-80 overflow-y-auto">
+                    {feed.notifications.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => openFeedItem(item)}
+                        className="w-full text-left py-3 px-1 flex items-start gap-2 hover:bg-(--primary-soft) rounded-lg transition-colors cursor-pointer"
                       >
-                        <div className="mt-0.5">
-                          <CheckCheck className="w-4 h-4 text-(--primary)" />
-                        </div>
-                        <div className="flex flex-col gap-0.5 flex-1">
-                          <span className="text-xs font-semibold text-(--text)">
-                            {notif.title}
+                        <span className="mt-0.5 shrink-0">
+                          {item.type === "stock_out" ? (
+                            <PackageX className="w-4 h-4 text-red-500" />
+                          ) : item.type === "stock_low" ? (
+                            <TriangleAlert className="w-4 h-4 text-(--primary)" />
+                          ) : item.type === "order_new" ? (
+                            <ShoppingCart className="w-4 h-4 text-(--primary)" />
+                          ) : item.type === "reviews_pending" ? (
+                            <Star className="w-4 h-4 text-(--primary)" />
+                          ) : (
+                            <BellRing className="w-4 h-4 text-(--primary)" />
+                          )}
+                        </span>
+                        <span className="flex flex-col gap-0.5 flex-1 min-w-0">
+                          <span className="text-xs font-semibold text-(--text) leading-snug">
+                            {item.title}
                           </span>
                           <span className="text-[10px] text-(--text-muted)">
-                            {notif.time}
+                            {relativeTime(item.time)}
                           </span>
-                        </div>
-                      </div>
+                        </span>
+                        {freshIds.has(item.id) && (
+                          <span className="mt-1.5 w-2 h-2 shrink-0 rounded-full bg-red-500" />
+                        )}
+                      </button>
                     ))}
                   </div>
                 )}

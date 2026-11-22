@@ -756,6 +756,44 @@ const PageLayout: React.FC = () => {
     setIsModalOpen(true);
   }, [pathname, canCreate, isMediaPage, buildInitialFormValues]);
 
+  // Notification click-through (TopBar bell / messages): the target
+  // record is handed over via sessionStorage ("openRecord") and simply
+  // SELECTED here (its details panel opens) once the list has loaded.
+  // Re-checked whenever the items change and whenever the handoff
+  // event fires (same-page clicks don't remount the page).
+  useEffect(() => {
+    const tryOpenRecord = () => {
+      let raw: string | null = null;
+      try {
+        raw = sessionStorage.getItem("openRecord");
+      } catch {
+        raw = null;
+      }
+      if (!raw) return;
+      let parsed: { path?: string; id?: string } | null = null;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        parsed = null;
+      }
+      if (!parsed || parsed.path !== pathname || !parsed.id) return;
+      const targetId = parsed.id;
+      const row = items.find(
+        (item) => String(item._id || item.id) === String(targetId),
+      );
+      if (!row) return; // list not loaded yet — a later run catches it
+      try {
+        sessionStorage.removeItem("openRecord");
+      } catch {
+        /* ignore */
+      }
+      setSelectedRawRow(row);
+    };
+    tryOpenRecord();
+    window.addEventListener("admin:open-record", tryOpenRecord);
+    return () => window.removeEventListener("admin:open-record", tryOpenRecord);
+  }, [items, pathname]);
+
   const isBusy = isLoading || isRestoring;
   const isTruncated = Boolean(meta && meta.total > items.length);
 
