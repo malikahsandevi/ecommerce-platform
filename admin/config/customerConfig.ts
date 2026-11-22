@@ -46,9 +46,6 @@ const fullName = (customer: Customer): string =>
 export const customerConfig = {
   routeTitle: "Customers",
 
-  // Account state comes from User.isActive (derived to `status` on fetch).
-  tabs: ["All Customers", "Active", "Inactive"],
-
   // Header Buttons Control
   buttons: [
     {
@@ -178,7 +175,18 @@ export const customerConfig = {
     };
   },
 
+  // Table Filters — account state (User.isActive, derived to `status`
+  // by the list adapter) + role.
   filters: [
+    {
+      id: "status",
+      placeholder: "All Statuses",
+      options: [
+        { label: "All Statuses", value: "all" },
+        { label: "Active", value: "active" },
+        { label: "Inactive", value: "inactive" },
+      ],
+    },
     {
       id: "role",
       placeholder: "All Roles",

@@ -42,9 +42,6 @@ const getCouponStatus = (coupon: Coupon) => {
 export const couponConfig = {
   routeTitle: "Coupons",
 
-  // Tabs status wise filter
-  tabs: ["All Coupons", "Active", "Expired", "Disabled"],
-
   // Action Buttons
   buttons: [
     {
@@ -151,8 +148,18 @@ export const couponConfig = {
     };
   },
 
-  // Table Filters
+  // Table Filters — derived status (active/expired/disabled) + discount type.
   filters: [
+    {
+      id: "status",
+      placeholder: "All Statuses",
+      options: [
+        { label: "All Statuses", value: "all" },
+        { label: "Active", value: "active" },
+        { label: "Expired", value: "expired" },
+        { label: "Disabled", value: "disabled" },
+      ],
+    },
     {
       id: "discountType",
       placeholder: "Discount Type",

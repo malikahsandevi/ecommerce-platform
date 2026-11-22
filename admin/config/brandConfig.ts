@@ -20,8 +20,6 @@ export interface Brand {
 export const brandConfig = {
   routeTitle: "Brands",
 
-  tabs: ["All Brands", "Active", "Inactive"],
-
   buttons: [
     {
       id: "export",
@@ -118,7 +116,18 @@ export const brandConfig = {
     };
   },
 
-  filters: [],
+  // Table Filters — status (derived from isActive by the list adapter).
+  filters: [
+    {
+      id: "status",
+      placeholder: "All Statuses",
+      options: [
+        { label: "All Statuses", value: "all" },
+        { label: "Active", value: "active" },
+        { label: "Inactive", value: "inactive" },
+      ],
+    },
+  ],
 
   statusOptions: [
     { label: "Active", value: "active" },

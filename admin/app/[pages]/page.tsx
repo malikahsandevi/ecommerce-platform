@@ -9,7 +9,7 @@ import TopBar from "@/components/ui/TopBar";
 import StatsGrid from "@/components/models/StatsGrid";
 import MediaStats from "@/components/models/MediaStats";
 import TabsBar, { HeaderActionButton } from "@/components/models/TabsBar";
-import FilterBar from "@/components/models/FilterBar";
+import FilterBar, { FilterConfigItem } from "@/components/models/FilterBar";
 import { CreateTable } from "@/components/models/CreateTable";
 import Pagination from "@/components/models/Pagination";
 import { DetailPanel } from "@/components/models/DetailPanel";
@@ -134,10 +134,21 @@ function ensureVendorField(fields: FormField[], options: EntityOptions): FormFie
   ];
 }
 
-/** Tab labels are human readable ("Pending Review"); statuses are snake_case. */
-function normaliseStatus(value: unknown): string {
-  return String(value ?? "").toLowerCase().replace(/\s+/g, "_");
+/** Media file-type bucket from the record's mime type. */
+function mediaTypeBucket(item: Row): string {
+  const mime = String(item.mimeType || item.type || "").toLowerCase();
+  if (mime.startsWith("image/")) return "image";
+  if (mime.startsWith("video/")) return "video";
+  if (mime.startsWith("audio/")) return "audio";
+  return "other";
 }
+
+const MEDIA_TYPE_META = [
+  { value: "image", label: "Images" },
+  { value: "video", label: "Videos" },
+  { value: "audio", label: "Audio" },
+  { value: "other", label: "Other Files" },
+] as const;
 
 /** URL segment → permission module (role matrix). */
 const MODULE_BY_SEGMENT: Record<string, string> = {
@@ -183,11 +194,6 @@ const PageLayout: React.FC = () => {
   const isCustomersPage =
     pathname.includes("/customers") || Route.toLowerCase() === "customers";
 
-  const tablist = useMemo(
-    () => currentConfig.tabs || [`All ${Route}`],
-    [currentConfig, Route],
-  );
-
   // --- data state ---------------------------------------------------------
   const [items, setItems] = useState<Row[]>([]);
   const [displayItems, setDisplayItems] = useState<Row[]>([]);
@@ -200,7 +206,6 @@ const PageLayout: React.FC = () => {
   const [reloadToken, setReloadToken] = useState(0);
 
   // --- view state ---------------------------------------------------------
-  const [activeTab, setActiveTab] = useState(tablist[0] || `All ${Route}`);
   const [selectedRawRow, setSelectedRawRow] = useState<Row | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(DEFAULT_PAGE_SIZE);
@@ -287,7 +292,6 @@ const PageLayout: React.FC = () => {
 
   // Reset the view whenever the route changes.
   useEffect(() => {
-    setActiveTab(currentConfig.tabs?.[0] || `All ${currentConfig.routeTitle}`);
     setSelectedRawRow(null);
     setCurrentPage(1);
   }, [currentConfig]);
@@ -295,22 +299,30 @@ const PageLayout: React.FC = () => {
   // Any change to what is displayed returns to page 1.
   useEffect(() => {
     setCurrentPage(1);
-  }, [activeTab]);
+  }, [displayItems]);
 
   // --- derived data -------------------------------------------------------
-  const tabFilteredItems = useMemo(() => {
-    if (activeTab === tablist[0]) return items;
-    const wanted = normaliseStatus(activeTab);
-    // "active" and "published" are the same live state in the product
-    // taxonomy (the schema accepts both) — a product in either must show
-    // under the Published tab instead of vanishing from every tab.
-    const STATUS_ALIASES: Record<string, string[]> = {
-      published: ["published", "active"],
-      active: ["active", "published"],
-    };
-    const wantedSet = STATUS_ALIASES[wanted] || [wanted];
-    return items.filter((item) => wantedSet.includes(normaliseStatus(item.status)));
-  }, [items, activeTab, tablist]);
+  // The page's dropdown filters come from its route config. Media also
+  // gets a file-type filter whose options are derived from the loaded
+  // records — only types actually present in the library are offered.
+  const filtersData = useMemo<FilterConfigItem[]>(() => {
+    const base = (currentConfig.filters || []) as unknown as FilterConfigItem[];
+    if (!isMediaPage) return base;
+    const present = new Set(items.map(mediaTypeBucket));
+    const typeOptions = MEDIA_TYPE_META.filter((t) => present.has(t.value)).map(
+      (t) => ({ label: t.label, value: t.value }),
+    );
+    if (typeOptions.length === 0) return base;
+    return [
+      ...base,
+      {
+        id: "mediaType",
+        placeholder: "All Types",
+        options: [{ label: "All Types", value: "all" }, ...typeOptions],
+        matchValue: (item: Row) => mediaTypeBucket(item),
+      },
+    ];
+  }, [currentConfig, isMediaPage, items]);
 
   const totalPages = Math.max(1, Math.ceil(displayItems.length / itemsPerPage));
 
@@ -865,13 +877,13 @@ const PageLayout: React.FC = () => {
 
           <div className="flex flex-1 flex-col min-h-100 lg:min-h-0 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-sm lg:overflow-hidden">
             <div className="shrink-0 border-b border-[var(--border)] bg-[var(--surface)] px-4 sm:px-3 pt-3 pb-1 overflow-x-auto rounded-t-xl">
+              {/* No status tabs: status lives in ONE FilterBar dropdown
+                  below (the tabs duplicated it). This bar now carries
+                  only the header action buttons. */}
               <TabsBar
-                tablist={tablist}
-                activeTab={activeTab}
-                onTabChange={(tab) => {
-                  setActiveTab(tab);
-                  setSelectedRawRow(null);
-                }}
+                tablist={[]}
+                activeTab=""
+                onTabChange={() => {}}
                 btnlist={btnlist}
                 onBtnClick={handleBtnClick}
               />
@@ -879,11 +891,11 @@ const PageLayout: React.FC = () => {
 
             <div className="shrink-0 bg-[var(--surface)] px-3 sm:px-3 pt-3 pb-1">
               <FilterBar
-                sourceData={tabFilteredItems as never}
+                key={pathname}
+                sourceData={items as never}
                 searchableFieldsKeys={currentConfig.searchFields}
                 searchPlaceholder={`Search ${Route.toLowerCase()}...`}
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                filtersData={(currentConfig.filters || []) as any}
+                filtersData={filtersData}
                 onDataChange={setDisplayItems}
               />
             </div>

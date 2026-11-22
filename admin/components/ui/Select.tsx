@@ -46,6 +46,12 @@ export interface SelectProps extends Omit<ComponentPropsWithoutRef<"button">, "o
   /** Show a filter input at the top of the open dropdown (for long
    *  option lists — currencies, time zones). Filters by label/value. */
   searchable?: boolean;
+  /** Open menu sizes to its widest option (anchored to the trigger's
+   *  right edge, at least the trigger's width) instead of being locked
+   *  to the trigger's width — for filter dropdowns whose triggers are
+   *  narrower than their option labels ("Pending Review" must never
+   *  render as "Pending R…"). */
+  menuWide?: boolean;
   /** Placeholder for the search input (searchable only). */
   searchPlaceholder?: string;
   /** Shown inside the open dropdown when there are no options at all. */
@@ -69,6 +75,7 @@ const Select: React.FC<SelectProps> = ({
   direction = "bottom",
   disabled = false,
   searchable = false,
+  menuWide = false,
   searchPlaceholder = "Search...",
   emptyText,
   emptyActionLabel,
@@ -150,7 +157,7 @@ const Select: React.FC<SelectProps> = ({
           dropdown. */}
       {isOpen && (
         <div
-          className={`absolute right-0 left-0 z-50 bg-[var(--surface)] text-[var(--text)] border border-[var(--border)] rounded-xl shadow-[0_16px_40px_-8px_rgba(0,0,0,0.45)] max-h-56 overflow-y-auto py-1 animate-in fade-in zoom-in-95 duration-100 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-[var(--surface-muted)] [&::-webkit-scrollbar-thumb]:bg-[var(--primary)] [&::-webkit-scrollbar-thumb]:rounded-full ${dropdownDirectionClasses}`}
+          className={`absolute z-50 bg-[var(--surface)] text-[var(--text)] border border-[var(--border)] rounded-xl shadow-[0_16px_40px_-8px_rgba(0,0,0,0.45)] max-h-56 overflow-y-auto py-1 animate-in fade-in zoom-in-95 duration-100 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-[var(--surface-muted)] [&::-webkit-scrollbar-thumb]:bg-[var(--primary)] [&::-webkit-scrollbar-thumb]:rounded-full ${menuWide ? "right-0 w-max min-w-full max-w-[calc(100vw-2rem)]" : "right-0 left-0"} ${dropdownDirectionClasses}`}
         >
           {searchable && (
             <div className="sticky top-0 bg-[var(--surface)] px-2 pt-2 pb-1.5">

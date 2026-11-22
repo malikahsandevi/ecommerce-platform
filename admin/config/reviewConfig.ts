@@ -35,9 +35,6 @@ const referenceLabel = (reference: ReviewReference): string => {
 export const reviewConfig = {
   routeTitle: "Reviews",
 
-  // Tabs status wise filter
-  tabs: ["All Reviews", "Approved", "Pending", "Rejected"],
-
   // Action Buttons
   buttons: [
     {
@@ -140,8 +137,18 @@ export const reviewConfig = {
     };
   },
 
-  // Table Filters
+  // Table Filters — moderation status + star rating.
   filters: [
+    {
+      id: "status",
+      placeholder: "All Statuses",
+      options: [
+        { label: "All Statuses", value: "all" },
+        { label: "Approved", value: "approved" },
+        { label: "Pending Approval", value: "pending" },
+        { label: "Rejected", value: "rejected" },
+      ],
+    },
     {
       id: "rating",
       placeholder: "Filter Rating",

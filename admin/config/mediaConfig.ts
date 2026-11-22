@@ -47,8 +47,6 @@ const statusOf = (media: MediaItem): string =>
 export const mediaConfig = {
   routeTitle: "Media",
 
-  tabs: ["All Media", "Published", "Draft", "Archived"],
-
   buttons: [
     {
       id: "export",
@@ -131,7 +129,20 @@ export const mediaConfig = {
     altText: media?.altText || "",
   }),
 
-  filters: [],
+  // Table Filters — lifecycle status. (The list page appends a
+  // file-type filter whose options derive from the loaded records.)
+  filters: [
+    {
+      id: "status",
+      placeholder: "All Statuses",
+      options: [
+        { label: "All Statuses", value: "all" },
+        { label: "Published", value: "published" },
+        { label: "Draft", value: "draft" },
+        { label: "Archived", value: "archived" },
+      ],
+    },
+  ],
 
   categoryOptions: [],
   brandOptions: [],

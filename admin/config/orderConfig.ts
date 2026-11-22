@@ -90,17 +90,6 @@ const PAYMENT_METHOD_OPTIONS = [
 export const orderConfig = {
   routeTitle: "Orders",
 
-  // Tabs mirror the Order.status enum in the API.
-  tabs: [
-    "All Orders",
-    "Pending",
-    "Processing",
-    "Shipped",
-    "Delivered",
-    "Cancelled",
-    "Refunded",
-  ],
-
   // Action Buttons Controls
   buttons: [
     {
@@ -228,8 +217,16 @@ export const orderConfig = {
     };
   },
 
-  // Table Filters
+  // Table Filters — order status (the Order.status enum) + payment status.
   filters: [
+    {
+      id: "status",
+      placeholder: "All Statuses",
+      options: [
+        { label: "All Statuses", value: "all" },
+        ...STATUS_OPTIONS,
+      ],
+    },
     {
       id: "paymentStatus",
       placeholder: "Payment Status",

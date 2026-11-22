@@ -28,9 +28,6 @@ const parentId = (category: Category): string => {
 export const categoryConfig = {
   routeTitle: "Categories",
 
-  // Tabs filter on the derived status (from isActive).
-  tabs: ["All Categories", "Active", "Inactive"],
-
   // Header Action Buttons
   buttons: [
     {
@@ -131,8 +128,18 @@ export const categoryConfig = {
     };
   },
 
-  // Table Filters
-  filters: [],
+  // Table Filters — status (derived from isActive by the list adapter).
+  filters: [
+    {
+      id: "status",
+      placeholder: "All Statuses",
+      options: [
+        { label: "All Statuses", value: "all" },
+        { label: "Active", value: "active" },
+        { label: "Inactive", value: "inactive" },
+      ],
+    },
+  ],
 
   statusOptions: [
     { label: "Active", value: "active" },

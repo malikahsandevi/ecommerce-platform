@@ -99,10 +99,6 @@ const dimensionsText = (product: Product): string => {
 export const productConfig = {
   routeTitle: "Products",
 
-  // Tabs status wise filter — these map 1:1 onto Product.status in the API
-  // ("Pending Review" is normalised to "pending_review" before comparison).
-  tabs: ["All Products", "Published", "Pending Review", "Draft", "Rejected", "Archived"],
-
   // Action Buttons
   buttons: [
     {
@@ -244,7 +240,10 @@ export const productConfig = {
     };
   },
 
-  // Table Filters (matched against the raw API records)
+  // Table Filters (matched against the raw API records). Status is a
+  // plain field match; Stock and Price are bucket filters — the same
+  // thresholds the notification feed uses (out = 0, low = 1–5) and
+  // price bands fitted to the catalog's actual spread ($9.99–$549.99).
   filters: [
     {
       id: "status",
@@ -257,6 +256,42 @@ export const productConfig = {
         { label: "Pending Review", value: "pending_review" },
         { label: "Archived", value: "archived" },
       ],
+    },
+    {
+      id: "stockLevel",
+      placeholder: "All Stock",
+      options: [
+        { label: "All Stock", value: "all" },
+        { label: "In Stock", value: "in_stock" },
+        { label: "Low Stock (1–5)", value: "low_stock" },
+        { label: "Out of Stock", value: "out_of_stock" },
+      ],
+      matchValue: (product: Product) => {
+        const stock = Number(product.stock ?? 0);
+        if (stock <= 0) return "out_of_stock";
+        if (stock <= 5) return "low_stock";
+        return "in_stock";
+      },
+    },
+    {
+      id: "priceRange",
+      placeholder: "All Prices",
+      options: [
+        { label: "All Prices", value: "all" },
+        { label: "Under $25", value: "under_25" },
+        { label: "$25 – $50", value: "25_50" },
+        { label: "$50 – $100", value: "50_100" },
+        { label: "$100 – $250", value: "100_250" },
+        { label: "Over $250", value: "over_250" },
+      ],
+      matchValue: (product: Product) => {
+        const price = Number(product.price ?? 0);
+        if (price < 25) return "under_25";
+        if (price < 50) return "25_50";
+        if (price < 100) return "50_100";
+        if (price < 250) return "100_250";
+        return "over_250";
+      },
     },
   ],
 

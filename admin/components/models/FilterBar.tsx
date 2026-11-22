@@ -19,6 +19,14 @@ export interface FilterConfigItem {
   variant?: SelectVariant;
   size?: SelectSize;
   direction?: DropdownDirection;
+  /**
+   * Optional bucket mapper for range/derived filters (stock level,
+   * price band, media file type): returns the bucket string a record
+   * belongs to, compared against the selected option value. Without
+   * it, the record's own `id` field is compared as a string.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  matchValue?: (item: any) => string;
 }
 
 export interface FilterBarProps<TSearchData extends SearchableEntityRecord> {
@@ -86,18 +94,24 @@ export const FilterBar = <TSearchData extends SearchableEntityRecord>({
   // Main Combined Filter Logic
   useEffect(() => {
     let result = searchedData;
+    const configById = new Map(filtersData.map((f) => [f.id, f]));
 
     // Apply Active Dropdown Filters
     Object.keys(filterValues).forEach((key) => {
       const selectedVal = filterValues[key];
       if (selectedVal && selectedVal !== "all") {
-        result = result.filter((item) => String(item[key]) === selectedVal);
+        const config = configById.get(key);
+        result = result.filter((item) =>
+          config?.matchValue
+            ? config.matchValue(item) === selectedVal
+            : String(item[key]) === selectedVal,
+        );
       }
     });
 
     // Emit Final Filtered Result to Parent
     onDataChange(result);
-  }, [searchedData, filterValues]);
+  }, [searchedData, filterValues, filtersData, onDataChange]);
 
   // Active Checks
   const isDropdownFilterActive = Object.values(filterValues).some(
@@ -128,6 +142,7 @@ export const FilterBar = <TSearchData extends SearchableEntityRecord>({
           <Select
             key={item.id}
             fullWidth={true}
+            menuWide={true}
             className="flex-1 border-[var(--border)] bg-[var(--surface)] text-[var(--text)]"
             value={filterValues[item.id] || "all"}
             options={item.options}
