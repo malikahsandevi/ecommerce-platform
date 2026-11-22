@@ -77,19 +77,31 @@ export const TopCategories: React.FC<TopCategoriesProps> = ({ categoriesData, to
           </p>
         </div>
       ) : (
-        <>
-          {/* Donut Chart — share of sales per category. The wrapper is
-              sized to the donut itself (outerRadius 94 → 188px across),
-              so there is no slack above or below the graphic. */}
-          <div className="relative w-full h-48 flex items-center justify-center">
+        // Content fills the card's FULL height (fix round 2026-11-22):
+        // on the md/lg grid this card spans two rows, and with a
+        // fixed-height donut + natural-height list the bottom half of
+        // the tall card stood empty. Now the donut area and the legend
+        // share the extra height — the chart area flexes (and the
+        // donut itself scales with its container, see the radii) and
+        // the legend rows spread over what remains. At natural
+        // (single-row) heights both areas collapse to their content
+        // size, so sm and below look exactly as before.
+        <div className="flex-1 flex flex-col min-h-0">
+          {/* Donut Chart — share of sales per category. The radii are
+              PERCENTAGES of the container's smaller dimension
+              (Recharts resolves them against min(w,h)/2), so the donut
+              scales with its box and can never touch or clip the card's
+              edges at any width — the old fixed outerRadius 94 did
+              exactly that at lg column widths. */}
+          <div className="relative w-full flex-1 min-h-48 flex items-center justify-center">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
                   data={items}
                   cx="50%"
                   cy="50%"
-                  innerRadius={74}
-                  outerRadius={94}
+                  innerRadius="70%"
+                  outerRadius="92%"
                   paddingAngle={2}
                   cornerRadius={4}
                   dataKey="value"
@@ -112,9 +124,10 @@ export const TopCategories: React.FC<TopCategoriesProps> = ({ categoriesData, to
             </div>
           </div>
 
-          {/* Categories Legend List — rows sit tight (no gaps between
-              them) and the first row sits directly under the donut. */}
-          <div className="space-y-0">
+          {/* Categories Legend List — flexes with the rows spread
+              (justify-between) over its share of the card height; at
+              natural heights it is exactly the rows' own height. */}
+          <div className="flex-1 flex flex-col justify-between gap-1 pt-1">
             {items.map((item, index) => (
               <div key={index} className="flex items-center justify-between text-xs">
                 <div className="flex items-center gap-2.5 min-w-0">
@@ -137,7 +150,7 @@ export const TopCategories: React.FC<TopCategoriesProps> = ({ categoriesData, to
               </div>
             ))}
           </div>
-        </>
+        </div>
       )}
     </div>
   );

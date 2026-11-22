@@ -174,10 +174,15 @@ export const TopBar = <T extends SearchableEntityRecord>({
   );
 
   return (
-    <header className="sticky top-3 max-sm:top-20 z-40 w-full min-h-14 bg-(--background) rounded-2xl shadow-sm border border-(--border) px-4 py-3 flex flex-wrap items-center justify-between gap-x-2 gap-y-2 select-none">
+    // NORMAL static header (Ahsan, 2026-11-22 fix round: "topbar ko
+    // normal karo, fixed hata do") — no sticky/fixed at any size: the
+    // bar scrolls away with the page. It is `relative` only so the
+    // msg/notif/profile popups can anchor to the HEADER itself (see
+    // the popup note below), never to their narrow icon buttons.
+    <header className="relative w-full min-h-14 bg-(--background) rounded-2xl shadow-sm border border-(--border) px-4 py-3 flex flex-wrap items-center gap-x-2 gap-y-2 select-none">
       {/* Dynamic Page Title & Subtitle — shrinkable: the title block
           yields (and truncates) before the controls are pushed out. */}
-      <div className="min-w-0">
+      <div className="min-w-0 order-1">
         {showBreadcrumbs && (
           <nav aria-label="Breadcrumb" className="text-[10px] font-medium text-(--text-muted) leading-tight mb-0.5">
             Home <span aria-hidden="true" className="mx-0.5">/</span>{" "}
@@ -194,14 +199,13 @@ export const TopBar = <T extends SearchableEntityRecord>({
         )}
       </div>
 
-      {/* Right Controls — fluid: the row takes the space the title
-          leaves (the search inside shrinks first), and below md it
-          wraps onto its own full-width row instead of overflowing
-          the page sideways. */}
-      <div
-        className="flex items-center gap-1 min-w-0 flex-1 justify-end max-md:basis-full max-md:order-2"
-        ref={containerRef}
-      >
+      {/* Search — its own flex child so the layout normalises: at md+
+          it sits on the single header row between the title and the
+          icon cluster, flexible width capped at 480px; below md it
+          wraps onto its OWN full-width row under the title row (the
+          icons stay up with the title, grouped — they no longer ride
+          the search row or stretch across it). */}
+      <div className="order-3 basis-full min-w-0 md:order-2 md:basis-auto md:flex-1 md:max-w-[480px]">
         {/* Global search (all sources) or the legacy page-local bar */}
         {globalSearch ? (
           <GlobalSearch />
@@ -216,11 +220,25 @@ export const TopBar = <T extends SearchableEntityRecord>({
             />
           )
         )}
+      </div>
 
+      {/* Icon cluster — message + bell (with popups), profile menu and
+          the theme toggle, always GROUPED at the right (ml-auto), on
+          the title row at every size. None of the wrappers in here is
+          `relative`: the popups anchor to the header (nearest
+          positioned ancestor) so a 320px popup hangs from the header's
+          right edge and can never slide off the viewport's left edge
+          the way it did when it hung from the message button itself
+          (at 440px the button sits ~110px from the right edge, so a
+          right-0 popup on it started off-screen). */}
+      <div
+        className="order-2 md:order-3 ml-auto flex items-center gap-1 min-w-0"
+        ref={containerRef}
+      >
         {/* Action Icons With Popups */}
-        <div className="flex items-center gap-1 relative">
+        <div className="flex items-center gap-1">
           {/* Message Button & Popup — customer-originated inbox */}
-          <div className="relative">
+          <div>
             <button
               type="button"
               aria-label="Messages"
@@ -240,7 +258,7 @@ export const TopBar = <T extends SearchableEntityRecord>({
             </button>
 
             {activePopup === "msg" && (
-              <div className="absolute right-0 mt-2 w-80 max-w-[calc(100vw-1.5rem)] bg-(--background) rounded-2xl shadow-xl border border-(--border) z-50 p-4">
+              <div className="absolute right-4 top-full mt-1 w-80 max-w-[calc(100vw-1.5rem)] bg-(--background) rounded-2xl shadow-xl border border-(--border) z-50 p-4">
                 <div className="flex items-center justify-between pb-3 border-b border-(--border)">
                   <h4 className="text-sm font-bold text-(--text)">Messages</h4>
                   {freshIds.size > 0 && (
@@ -289,7 +307,7 @@ export const TopBar = <T extends SearchableEntityRecord>({
           </div>
 
           {/* Notification Button & Popup — store/system events */}
-          <div className="relative">
+          <div>
             <button
               type="button"
               aria-label="Notifications"
@@ -309,7 +327,7 @@ export const TopBar = <T extends SearchableEntityRecord>({
             </button>
 
             {activePopup === "notif" && (
-              <div className="absolute right-0 mt-2 w-80 max-w-[calc(100vw-1.5rem)] bg-(--background) rounded-2xl shadow-xl border border-(--border) z-50 p-4">
+              <div className="absolute right-4 top-full mt-1 w-80 max-w-[calc(100vw-1.5rem)] bg-(--background) rounded-2xl shadow-xl border border-(--border) z-50 p-4">
                 <div className="flex items-center justify-between pb-3 border-b border-(--border)">
                   <h4 className="text-sm font-bold text-(--text)">Notifications</h4>
                   {freshIds.size > 0 && (
@@ -368,7 +386,7 @@ export const TopBar = <T extends SearchableEntityRecord>({
         <div className="h-6 w-0.5 bg-(--border) mx-1" />
 
         {/* Profile + Menu */}
-        <div className="relative">
+        <div>
           <button
             type="button"
             onClick={() =>
@@ -389,7 +407,7 @@ export const TopBar = <T extends SearchableEntityRecord>({
           </button>
 
           {activePopup === "profile" && (
-            <div className="absolute right-0 mt-2 w-64 bg-(--background) rounded-2xl shadow-xl border border-(--border) z-50 p-2">
+            <div className="absolute right-4 top-full mt-1 w-64 max-w-[calc(100vw-1.5rem)] bg-(--background) rounded-2xl shadow-xl border border-(--border) z-50 p-2">
               <div className="flex items-center gap-3 px-2 py-2.5 border-b border-(--border)">
                 {avatar}
                 <div className="min-w-0">

@@ -160,7 +160,12 @@ export const RevenueAnalytics: React.FC<RevenueAnalyticsProps> = ({
 
       <div className="w-full flex-1 min-h-40">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 10, right: 6, left: 0, bottom: 0 }}>
+          {/* Left margin + axis width + tick margin are sized together
+              so the y-axis money labels always sit fully INSIDE the
+              chart box with air on both sides — with left: 0 the labels
+              started flush at the box edge and read as clipped/cramped
+              at narrower card widths (Ahsan's mark on the $ labels). */}
+          <LineChart data={data} margin={{ top: 10, right: 6, left: 8, bottom: 0 }}>
             <CartesianGrid
               strokeDasharray="4 4"
               stroke="rgba(148,163,184,0.22)"
@@ -172,13 +177,16 @@ export const RevenueAnalytics: React.FC<RevenueAnalyticsProps> = ({
               axisLine={false}
               tickLine={false}
               dy={6}
+              tickMargin={4}
+              interval="preserveStartEnd"
             />
             <YAxis
               yAxisId="revenue"
               tick={{ fontSize: 11, fill: "#9ca3af" }}
               axisLine={false}
               tickLine={false}
-              width={52}
+              width={54}
+              tickMargin={6}
               tickFormatter={(value: number) => formatMoneyCompact(value)}
             />
             {/* Orders ride on a hidden axis so both lines stay readable

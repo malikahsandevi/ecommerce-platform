@@ -100,9 +100,13 @@ export const NewCustomersCard: React.FC<NewCustomersCardProps> = ({ customers })
         </ul>
       )}
 
+      {/* mt-auto: when the grid stretches this card past its natural
+          height, the link stays pinned to the card's bottom instead
+          of leaving a dead band under it (pt-4 keeps the minimum gap
+          to the list). */}
       <Link
         href="/customers"
-        className="mt-4 text-xs font-semibold text-(--primary) hover:text-(--primary-dark) transition-colors"
+        className="mt-auto pt-4 text-xs font-semibold text-(--primary) hover:text-(--primary-dark) transition-colors"
       >
         View all customers →
       </Link>

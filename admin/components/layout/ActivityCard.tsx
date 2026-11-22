@@ -56,11 +56,11 @@ export const ActivityCard: React.FC<{ logs?: ActivityLogItem[] }> = ({ logs }) =
   }
 
   return (
-    <div className="bg-(--background) p-5 rounded-2xl shadow-sm border border-(--border) h-full w-full">
+    <div className="bg-(--background) p-5 rounded-2xl shadow-sm border border-(--border) h-full w-full flex flex-col">
       <h3 className="text-base font-bold text-(--text) mb-4">Recent Activity</h3>
 
       {logs.length === 0 ? (
-        <div className="flex flex-col items-center justify-center gap-1.5 py-8 text-center">
+        <div className="flex-1 flex flex-col items-center justify-center gap-1.5 py-8 text-center">
           <span className="w-11 h-11 rounded-2xl bg-(--primary-soft) text-(--primary) flex items-center justify-center">
             <Activity className="w-5 h-5" />
           </span>
@@ -70,11 +70,16 @@ export const ActivityCard: React.FC<{ logs?: ActivityLogItem[] }> = ({ logs }) =
           </p>
         </div>
       ) : (
-        <ul className="divide-y divide-(--border)">
+        // The list flexes to the card's full height and each entry
+        // becomes an equal band (flex-1, vertically centred): beside
+        // Recent Orders this card is stretched by the grid row, and
+        // with only a few log entries the bottom half used to stand
+        // empty (measured 88–121px of dead space at lg widths).
+        <ul className="flex-1 flex flex-col divide-y divide-(--border)">
           {logs.map((log) => {
             const Icon = TYPE_ICONS[log.type] || Activity;
             return (
-              <li key={log.id} className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
+              <li key={log.id} className="flex-1 flex items-center gap-3 py-3 first:pt-0 last:pb-0">
                 <span className="w-8 h-8 shrink-0 rounded-full bg-(--primary-soft) text-(--primary) flex items-center justify-center">
                   <Icon className="w-4 h-4" />
                 </span>

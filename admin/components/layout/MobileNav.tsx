@@ -18,7 +18,7 @@ function initialsOf(name: string): string {
 
 /**
  * Mobile navigation (below sm ONLY, per Ahsan's responsive spec): the
- * nav lives at the TOP of the screen — a sticky bar with the brand,
+ * nav lives at the TOP of the screen — a normal static bar with the brand,
  * the signed-in admin's chip and a menu button that opens the full
  * nav (every item, permission-filtered exactly like the desktop
  * Sidebar). From sm to lg the left-edge overlay rail in Sidebar.tsx
@@ -48,7 +48,10 @@ const MobileNav: React.FC = () => {
     link === "/" ? pathname === "/" : pathname.startsWith(link);
 
   return (
-    <div className="sm:hidden sticky top-3 z-50 mx-3 mt-3 shrink-0">
+    // Normal static bar (Ahsan, 2026-11-22 fix round: the topbar is
+    // NOT fixed/sticky at any size) — it scrolls away with the page;
+    // z-50 only keeps its open dropdown above the content below.
+    <div className="sm:hidden z-50 mx-3 mt-3 shrink-0">
       {/* Top bar — same panel treatment as the desktop sidebar card. */}
       <div className="relative flex items-center gap-2.5 shadow-xl px-3 py-2.5 bg-(--primary-light) rounded-2xl">
         <span className="w-9 h-9 shrink-0 rounded-xl bg-(--primary) text-white flex items-center justify-center shadow-sm">
