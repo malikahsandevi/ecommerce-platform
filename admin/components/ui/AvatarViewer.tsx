@@ -234,7 +234,7 @@ export const AvatarViewerTrigger: React.FC<AvatarViewerTriggerProps> = ({
                 type="button"
                 onClick={closeViewer}
                 aria-label="Close image viewer"
-                className="animate-in fade-in fixed z-[96] flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-black/55 text-white shadow-lg transition-colors duration-200 hover:bg-black/75"
+                className="animate-in fade-in fixed z-[96] flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-black/55 text-white shadow-lg transition-colors duration-200 hover:bg-[var(--primary)]"
                 style={{
                   left: anim.frame.left + anim.frame.width - 44,
                   top: anim.frame.top + 12,
