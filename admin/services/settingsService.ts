@@ -9,7 +9,13 @@ export type SettingsSection =
   | "shipping"
   | "notifications"
   | "integrations"
+  | "builtInServices"
   | "appearance";
+
+export interface BuiltInServicesData {
+  cloudinary?: { isActive?: boolean };
+  storeSessionJwt?: { isActive?: boolean };
+}
 
 export interface SettingsDocument {
   _id?: string;
@@ -19,6 +25,7 @@ export interface SettingsDocument {
   shipping?: Record<string, unknown>;
   notifications?: Record<string, unknown>;
   integrations?: Array<Record<string, unknown>>;
+  builtInServices?: BuiltInServicesData;
   appearance?: Record<string, unknown>;
 }
 
@@ -135,6 +142,24 @@ export const settingsService = {
    *  redeploy. Returns the masked view of what is now stored. */
   async updateCredentials(values: CredentialsUpdate): Promise<CredentialsData> {
     const { data } = await apiClient.put<CredentialsData>("/settings/credentials", values);
+    return data;
+  },
+
+  /** Runs one saved integration endpoint through the backend runner
+   *  (POST /settings/execute). The runner executes the SAVED
+   *  configuration — the panel saves the form first, so what is tested
+   *  is exactly what is stored. Resolves with the provider's response
+   *  data; a provider failure rejects with the API's error message. */
+  async executeIntegration(
+    serviceSlug: string,
+    endpointName: string,
+    payload: Record<string, unknown> = {},
+    queryParams: Record<string, unknown> = {},
+  ): Promise<{ success: boolean; data: unknown }> {
+    const { data } = await apiClient.post<{ success: boolean; data: unknown }>(
+      "/settings/execute",
+      { serviceSlug, endpointName, payload, queryParams },
+    );
     return data;
   },
 

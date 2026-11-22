@@ -21,6 +21,7 @@
 // the environment (config/cloudinary.js); whenever the effective values
 // change, refreshCredentials re-applies them via cloudinary.config().
 const Credential = require('../models/Credential');
+const Setting = require('../models/Setting');
 const cloudinary = require('../config/cloudinary');
 
 const SECRET_MASK = '••••••••••';
@@ -35,7 +36,10 @@ const envValues = () => ({
 
 // Effective values, initialised from the environment so synchronous
 // readers (utils/cloudinaryUrl.js) work before the first DB read.
-let snapshot = envValues();
+// The two activation flags mirror Setting.builtInServices (the panel's
+// toggles for the built-in services, config/services/index.js's gate):
+// both default ON so a settings read failure can never lock the store.
+let snapshot = { ...envValues(), cloudinaryActive: true, jwtSigningActive: true };
 
 // What the Cloudinary SDK singleton is currently configured with —
 // starts as the environment values (config/cloudinary.js did that at
@@ -106,12 +110,15 @@ const refreshCredentials = async (force = false) => {
     try {
         await ensureSeeded();
         const doc = await Credential.findOne({ key: 'credentials' }).lean();
+        const setting = await Setting.findOne().sort({ createdAt: 1 }).lean();
         const env = envValues();
         snapshot = {
             cloudinaryCloudName: doc?.cloudinaryCloudName || env.cloudinaryCloudName,
             cloudinaryApiKey: doc?.cloudinaryApiKey || env.cloudinaryApiKey,
             cloudinaryApiSecret: doc?.cloudinaryApiSecret || env.cloudinaryApiSecret,
             jwtSecret: doc?.jwtSecret || env.jwtSecret,
+            cloudinaryActive: setting?.builtInServices?.cloudinary?.isActive !== false,
+            jwtSigningActive: setting?.builtInServices?.storeSessionJwt?.isActive !== false,
         };
         applyCloudinary(snapshot);
         cache = { loadedAt: Date.now() };
@@ -125,8 +132,33 @@ const refreshCredentials = async (force = false) => {
 /** Synchronous view of the last resolved values (env-seeded at boot). */
 const currentCredentials = () => snapshot;
 
-/** The JWT signing secret: stored value, environment fallback. */
+/** The JWT secret for VERIFYING tokens: stored value, environment
+ *  fallback. Verification is never gated — existing sessions must keep
+ *  working so an admin who toggles signing off can still reach the
+ *  panel and turn it back on. */
 const getJwtSecret = async () => (await refreshCredentials()).jwtSecret;
+
+/**
+ * The JWT secret for SIGNING new tokens (logins, 2FA temp tokens).
+ * Gated by the Store Session (JWT) activation toggle: when the admin
+ * has switched the built-in Auth service OFF in Settings →
+ * API / Integrations, no new tokens are issued. Throws an error with
+ * code JWT_SIGNING_DISABLED; callers turn it into a clean 403.
+ */
+const getJwtSignSecret = async () => {
+    const values = await refreshCredentials();
+    if (!values.jwtSigningActive) {
+        const error = new Error(
+            'Sign-in is disabled: the Store Session (JWT) service is switched off in Settings → API / Integrations.',
+        );
+        error.code = 'JWT_SIGNING_DISABLED';
+        throw error;
+    }
+    return values.jwtSecret;
+};
+
+/** Whether the built-in Cloudinary service is toggled ON (media gate). */
+const isCloudinaryActive = async () => (await refreshCredentials()).cloudinaryActive !== false;
 
 /** The effective Cloudinary triple (also applied to the SDK singleton). */
 const getCloudinaryCredentials = async () => {
@@ -183,6 +215,8 @@ module.exports = {
     refreshCredentials,
     currentCredentials,
     getJwtSecret,
+    getJwtSignSecret,
+    isCloudinaryActive,
     getCloudinaryCredentials,
     saveCredentials,
     maskedView,

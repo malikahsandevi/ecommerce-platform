@@ -70,6 +70,12 @@ const settingSchema = new mongoose.Schema(
     },
 
     // 6. UPDATED: Universal / Dynamic Integrations (Zero-Selection Architecture)
+    // Entries are catalogue-driven (backend/config/services): `subService`
+    // names a preset definition whose credential fields render dynamically
+    // and whose values live in `fields`; CUSTOM entries carry admin-defined
+    // `customFields` key-value pairs instead. A service is used only when
+    // configured AND its `isConnected` activation toggle is ON — the gate
+    // is config/services/index.js.
     integrations: [
       {
         usageType: {
@@ -80,13 +86,32 @@ const settingSchema = new mongoose.Schema(
             "SMS_NOTIFICATION",
             "EMAIL",
             "AUTH",
+            "SHIPPING",
+            "ANALYTICS",
+            "MAPS",
             "API",
+            "CUSTOM",
           ],
           required: true,
         },
+        // Preset sub-service id from the catalogue (e.g. "stripe",
+        // "twilio", "custom"); "" for legacy generic connectors.
+        subService: { type: String, default: "" },
         serviceSlug: { type: String, required: true, trim: true }, // Unique identifier (e.g. "my-sms-api")
         title: { type: String, required: true }, // Name given by Admin
-        baseUrl: { type: String, required: true, trim: true }, // API Base URL
+        baseUrl: { type: String, default: "", trim: true }, // API Base URL (presets: forced server-side to the definition's fixed base)
+        // Preset credential/config values, keyed by the definition's
+        // field keys. Secret values are masked on every API read.
+        fields: { type: Map, of: String, default: {} },
+        // CUSTOM entries: admin-defined key-value pairs; pairs flagged
+        // secret are masked on read and kept when re-saved as the mask.
+        customFields: [
+          {
+            key: { type: String, default: "" },
+            value: { type: String, default: "" },
+            secret: { type: Boolean, default: false },
+          },
+        ],
         authType: {
           type: String,
           enum: ["API_KEY", "BEARER_TOKEN", "BASIC", "CUSTOM_HEADER", "NONE"],
@@ -126,6 +151,15 @@ const settingSchema = new mongoose.Schema(
         isConnected: { type: Boolean, default: true },
       },
     ],
+
+    // 6b. Built-in services' activation toggles. The built-ins
+    // (Cloudinary media storage, the store-session JWT signer) keep
+    // their VALUES in the Credential store; only their on/off state
+    // lives here, beside the integrations they belong to in the panel.
+    builtInServices: {
+      cloudinary: { isActive: { type: Boolean, default: true } },
+      storeSessionJwt: { isActive: { type: Boolean, default: true } },
+    },
 
     // 7. Appearance
     appearance: {

@@ -1,7 +1,7 @@
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 const { getEffectivePermissions } = require('../utils/permissions');
-const { getJwtSecret } = require('../utils/credentials');
+const { getJwtSecret, getJwtSignSecret } = require('../utils/credentials');
 const { authenticator } = require('otplib');
 const QRCode = require('qrcode');
 
@@ -34,10 +34,14 @@ const generateTotpKey = () => {
 };
 
 // Generate JWT — signed with the secret from the credentials store
-// (Settings → Credentials; environment value is the fallback and the
-// seed, so sessions minted before the move keep verifying).
+// (Settings → API / Integrations; environment value is the fallback and
+// the seed, so sessions minted before the move keep verifying). Signing
+// goes through the gated resolver: when the Store Session (JWT)
+// service is toggled OFF in the panel, getJwtSignSecret throws
+// JWT_SIGNING_DISABLED and no new tokens are issued (verification of
+// existing tokens is never gated — see utils/credentials.js).
 const generateToken = async (id) => {
-    return jwt.sign({ id }, await getJwtSecret(), {
+    return jwt.sign({ id }, await getJwtSignSecret(), {
         expiresIn: '30d',
     });
 };
@@ -47,7 +51,7 @@ const generateToken = async (id) => {
 // only the 2FA verify endpoint accepts, and a real session token is
 // minted only after the TOTP code checks out.
 const generateTwoFactorTempToken = async (id) => {
-    return jwt.sign({ id, purpose: 'two-factor-login' }, await getJwtSecret(), {
+    return jwt.sign({ id, purpose: 'two-factor-login' }, await getJwtSignSecret(), {
         expiresIn: '5m',
     });
 };
@@ -148,6 +152,9 @@ const loginAdmin = async (req, res) => {
 
         res.status(401).json({ message: 'Invalid email or password' });
     } catch (error) {
+        if (error.code === 'JWT_SIGNING_DISABLED') {
+            return res.status(403).json({ message: error.message });
+        }
         res.status(500).json({ message: error.message });
     }
 };
@@ -190,6 +197,9 @@ const verifyTwoFactorLogin = async (req, res) => {
 
         res.json(await sessionPayload(user));
     } catch (error) {
+        if (error.code === 'JWT_SIGNING_DISABLED') {
+            return res.status(403).json({ message: error.message });
+        }
         res.status(500).json({ message: error.message });
     }
 };

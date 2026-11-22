@@ -1,8 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Image from "next/image";
-import { Check, Copy, Eye, EyeOff, Plus, ShieldCheck, Trash2, Code2, Globe } from "lucide-react";
+import { Check, Copy, Eye, EyeOff, KeyRound, LoaderCircle, Play, Plus, Save, ShieldCheck, Trash2, Code2, Globe } from "lucide-react";
+import {
+  SERVICE_CATALOGUE,
+  SECRET_MASK,
+  categoryById,
+  subServiceById,
+} from "@/services/serviceCatalogue";
 import Button from "@/components/ui/Button";
 import { useBackdropClose } from "@/hooks/useBackdropClose";
 import MediaPickerModal from "@/components/models/MediaPickerModal";
@@ -29,6 +35,7 @@ import {
   SettingsToggle,
 } from "./SettingsControls";
 import type {
+  BuiltInServicesData,
   CredentialsUpdate,
   SettingsDocument,
   SettingsSection,
@@ -179,12 +186,11 @@ export function SettingsPanel({
       );
     case "Security":
       return <SecurityPanel />;
-    case "Credentials":
-      return <CredentialsPanel />;
     case "API / Integrations":
       return (
         <IntegrationsPanel
           data={settings.integrations}
+          builtInServices={settings.builtInServices}
           saving={saving}
           onSave={(value) => onSave("integrations", value)}
         />
@@ -1418,21 +1424,22 @@ function SecurityPanel() {
   );
 }
 
-// Dynamic integrations — the form mirrors the backend Setting schema:
-// `usageType` must be one of the schema enum values (an earlier version of
-// this panel sent a free-form `category` the API dropped, so saving an
-// integration always failed validation), and every auth type gets the
-// exact credential fields the integration runner actually sends.
-const USAGE_TYPE_OPTIONS = [
-  "STORAGE",
-  "PAYMENT",
-  "SMS_NOTIFICATION",
-  "EMAIL",
-  "AUTH",
-  "API",
-] as const;
-
-type UsageType = (typeof USAGE_TYPE_OPTIONS)[number];
+// ── API / Integrations — catalogue-driven services ───────────────────
+// The panel is built on the service catalogue (services/serviceCatalogue
+// on the admin, config/services on the backend): pick a Service, then a
+// Sub-Service, and the form renders exactly that provider's credential
+// fields — every provider has its own set. CUSTOM is the escape hatch:
+// an admin-typed base URL, endpoints, and free key-value pairs.
+//
+// A service is USED only when it is both configured (every field saved)
+// and switched ON with its Active toggle — the backend gate
+// (config/services/index.js) enforces that for the runner, the media
+// path and JWT signing; this panel only edits the stored state.
+//
+// SECURITY: the settings API never returns a full secret. Secret fields
+// come back as a fixed mask, so the form starts them EMPTY with a
+// "leave blank to keep" hint — a blank (or untouched) secret on save
+// keeps the stored value, a typed value replaces it.
 
 const slugifyTitle = (title: string): string =>
   title
@@ -1441,33 +1448,39 @@ const slugifyTitle = (title: string): string =>
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
 
-const usageTypeOf = (item: Record<string, unknown>): UsageType => {
-  const raw = String(item.usageType ?? item.category ?? "").toUpperCase();
-  if ((USAGE_TYPE_OPTIONS as readonly string[]).includes(raw)) return raw as UsageType;
-  if (raw === "SMS") return "SMS_NOTIFICATION";
-  if (raw === "ANALYTICS" || raw === "CUSTOM") return "API";
-  return "API";
-};
+const SECRET_HINT = "•••••••••• — leave blank to keep the current secret";
 
 /**
- * Service credentials — Cloudinary keys + the JWT signing secret, stored
- * in the backend's database (not in hosting env vars) and editable here,
- * Super Admin only (the page hides this menu for other roles and the
- * API answers 403). Secrets are never shown: the API returns only a
- * mask + a configured flag, so the secret fields start EMPTY — typing a
- * new value replaces the stored secret, leaving a field blank keeps it.
- * Saving takes effect immediately, no redeploy.
+ * The two built-in services as cards at the top of API / Integrations
+ * (there is deliberately no separate Credentials section). Their VALUES
+ * live in the backend's Credential store and are edited through the
+ * Super-Admin-only credentials endpoints; their Active toggles live in
+ * the settings document's builtInServices section. Super Admin only —
+ * the panel renders these cards only for a Super Admin and the APIs
+ * answer 403 for everyone else.
  */
-function CredentialsPanel() {
+function BuiltInServiceCards({
+  builtInServices,
+}: {
+  builtInServices?: BuiltInServicesData;
+}) {
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
-  const [savingLocal, setSavingLocal] = useState(false);
   const [cloudName, setCloudName] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [apiSecret, setApiSecret] = useState("");
   const [jwtSecret, setJwtSecret] = useState("");
   const [apiSecretConfigured, setApiSecretConfigured] = useState(false);
   const [jwtSecretConfigured, setJwtSecretConfigured] = useState(false);
+  const [cloudinaryActive, setCloudinaryActive] = useState(
+    builtInServices?.cloudinary?.isActive !== false,
+  );
+  const [jwtActive, setJwtActive] = useState(
+    builtInServices?.storeSessionJwt?.isActive !== false,
+  );
+  const [savingCloud, setSavingCloud] = useState(false);
+  const [savingJwt, setSavingJwt] = useState(false);
+  const [pingState, setPingState] = useState<{ running: boolean; ok?: boolean; text?: string }>({ running: false });
 
   useEffect(() => {
     let cancelled = false;
@@ -1494,66 +1507,117 @@ function CredentialsPanel() {
     };
   }, []);
 
-  const save = async () => {
-    setSavingLocal(true);
+  const saveToggles = async (cloud: boolean, jwt: boolean) => {
+    await settingsService.updateSection("builtInServices", {
+      cloudinary: { isActive: cloud },
+      storeSessionJwt: { isActive: jwt },
+    });
+  };
+
+  const saveCloudinary = async () => {
+    setSavingCloud(true);
     try {
       const payload: CredentialsUpdate = {
         cloudinary: { cloudName: cloudName.trim(), apiKey: apiKey.trim() },
         jwt: {},
       };
-      // Blank secret field = keep the stored secret; only a typed value
-      // is sent (and replaces it).
       if (apiSecret.trim()) payload.cloudinary.apiSecret = apiSecret.trim();
-      if (jwtSecret.trim()) payload.jwt.secret = jwtSecret.trim();
       const data = await settingsService.updateCredentials(payload);
+      await saveToggles(cloudinaryActive, jwtActive);
       setCloudName(data.cloudinary.cloudName || "");
       setApiKey(data.cloudinary.apiKey || "");
       setApiSecretConfigured(Boolean(data.cloudinary.apiSecretConfigured));
-      setJwtSecretConfigured(Boolean(data.jwt.secretConfigured));
       setApiSecret("");
-      setJwtSecret("");
-      toast.success("Credentials saved — in effect now, no redeploy needed.");
+      toast.success("Cloudinary saved — in effect now, no redeploy needed.");
     } catch (saveError) {
       toast.error(extractApiError(saveError));
     } finally {
-      setSavingLocal(false);
+      setSavingCloud(false);
     }
   };
 
-  if (loading) {
-    return (
-      <SettingsCard
-        title="Credentials"
-        description="Service keys for this store, stored securely in the database"
-      >
-        <p className="text-sm text-[var(--text-muted)]">Loading credentials…</p>
-      </SettingsCard>
-    );
-  }
+  const saveJwt = async () => {
+    setSavingJwt(true);
+    try {
+      const payload: CredentialsUpdate = {
+        cloudinary: { cloudName: cloudName.trim(), apiKey: apiKey.trim() },
+        jwt: {},
+      };
+      if (jwtSecret.trim()) payload.jwt.secret = jwtSecret.trim();
+      const data = await settingsService.updateCredentials(payload);
+      await saveToggles(cloudinaryActive, jwtActive);
+      setJwtSecretConfigured(Boolean(data.jwt.secretConfigured));
+      setJwtSecret("");
+      toast.success("Session (JWT) settings saved — in effect now.");
+    } catch (saveError) {
+      toast.error(extractApiError(saveError));
+    } finally {
+      setSavingJwt(false);
+    }
+  };
 
-  if (loadFailed) {
+  const testCloudinary = async () => {
+    setPingState({ running: true });
+    try {
+      const result = await settingsService.executeIntegration("cloudinary", "ping");
+      setPingState({ running: false, ok: true, text: JSON.stringify(result.data ?? result).slice(0, 400) });
+    } catch (testError) {
+      setPingState({ running: false, ok: false, text: extractApiError(testError).slice(0, 400) });
+    }
+  };
+
+  const cardShell = (
+    title: string,
+    badge: string,
+    active: boolean,
+    onToggle: (value: boolean) => void,
+    children: ReactNode,
+  ) => (
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)]/30 p-5 space-y-4">
+      <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="h-4 w-4 text-[var(--primary)]" />
+          <span className="font-semibold text-sm text-[var(--text)]">{title}</span>
+          <span className="ml-2 rounded-md bg-[var(--primary-light)]/20 px-2 py-0.5 text-xs text-[var(--primary)] border border-[var(--primary)]/30 font-medium">
+            BUILT-IN
+          </span>
+          <span className="rounded-md bg-[var(--surface)] px-2 py-0.5 text-xs text-[var(--text-muted)] border border-[var(--border)] font-medium">
+            {badge}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-[var(--text-muted)]">Active</span>
+          <SettingsToggle label={`${title} active`} enabled={active} onChange={onToggle} />
+        </div>
+      </div>
+      {children}
+    </div>
+  );
+
+  if (loading || loadFailed) {
     return (
-      <SettingsCard
-        title="Credentials"
-        description="Service keys for this store, stored securely in the database"
-      >
-        <p className="text-sm text-[var(--text-muted)]">
-          Credentials could not be loaded. Only a Super Admin can view this section — if you are
-          one, try reloading the page.
-        </p>
-      </SettingsCard>
+      <>
+        {cardShell("Cloudinary", "Storage", cloudinaryActive, setCloudinaryActive, (
+          <p className="text-sm text-[var(--text-muted)]">
+            {loadFailed
+              ? "Store services could not be loaded. Only a Super Admin can view these keys — if you are one, try reloading the page."
+              : "Loading store services…"}
+          </p>
+        ))}
+      </>
     );
   }
 
   return (
-    <SettingsCard
-      title="Credentials"
-      description="Service keys for this store, stored securely in the database — changes take effect immediately, no redeploy needed"
-    >
-      <div className="space-y-8">
-        <div>
-          <SettingsSectionTitle title="Cloudinary (media storage)" />
-          <div className="mt-4 grid grid-cols-1 gap-5 md:grid-cols-2">
+    <>
+      {cardShell("Cloudinary", "Storage", cloudinaryActive, setCloudinaryActive, (
+        <>
+          <p className="text-xs text-[var(--text-muted)]">
+            Media storage for the whole store — uploads, image delivery and the storage usage
+            readout run on these keys. Stored in the database, applied the moment you save.
+            Switching it off makes media operations unavailable until it is switched back on.
+          </p>
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
             <SettingsInput
               label="Cloud Name"
               value={cloudName}
@@ -1573,117 +1637,316 @@ function CredentialsPanel() {
               type="password"
               value={apiSecret}
               onChange={(event) => setApiSecret(event.target.value)}
-              placeholder={
-                apiSecretConfigured ? "•••••••••• — leave blank to keep the current secret" : "Not set yet"
-              }
+              placeholder={apiSecretConfigured ? SECRET_HINT : "Not set yet"}
               autoComplete="new-password"
             />
           </div>
-          <p className="mt-3 text-xs text-[var(--text-muted)]">
+          <p className="text-xs text-[var(--text-muted)]">
             {apiSecretConfigured
               ? "A secret is stored. It is never shown — type a new one only if you want to replace it."
               : "No API secret is stored yet — enter one and save."}
           </p>
-        </div>
+          {pingState.text && (
+            <div
+              role="status"
+              className={`rounded-md border p-3 text-xs ${
+                pingState.ok
+                  ? "border-green-500/40 bg-green-500/10 text-green-700"
+                  : "border-red-300 bg-red-500/10 text-red-600"
+              }`}
+            >
+              <span className="font-semibold">
+                {pingState.ok ? "Connection works — provider response: " : "Connection failed: "}
+              </span>
+              <span className="break-all font-mono">{pingState.text}</span>
+            </div>
+          )}
+          <div className="flex justify-end gap-2 border-t border-[var(--border)] pt-4">
+            <Button
+              variant="outline"
+              onClick={() => void testCloudinary()}
+              disabled={pingState.running}
+              icon={pingState.running ? LoaderCircle : Play}
+            >
+              {pingState.running ? "Testing…" : "Test Saved Connection"}
+            </Button>
+            <Button onClick={() => void saveCloudinary()} disabled={savingCloud} icon={savingCloud ? LoaderCircle : Save}>
+              {savingCloud ? "Saving..." : "Save Cloudinary"}
+            </Button>
+          </div>
+        </>
+      ))}
 
-        <div>
-          <SettingsSectionTitle title="Session signing (JWT)" />
-          <div className="mt-4 grid grid-cols-1 gap-5 md:grid-cols-2">
+      {cardShell("Store Session (JWT)", "Auth", jwtActive, setJwtActive, (
+        <>
+          <p className="text-xs text-[var(--text-muted)]">
+            This secret signs the admin panel&apos;s own sign-in sessions. Switching it off stops
+            NEW sign-ins (existing sessions keep working until they expire, so you can always
+            switch it back on here). Replacing the secret signs out every session immediately.
+          </p>
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
             <SettingsInput
               label="JWT Secret"
               type="password"
               value={jwtSecret}
               onChange={(event) => setJwtSecret(event.target.value)}
-              placeholder={
-                jwtSecretConfigured ? "•••••••••• — leave blank to keep the current secret" : "Not set yet"
-              }
+              placeholder={jwtSecretConfigured ? SECRET_HINT : "Not set yet"}
               autoComplete="new-password"
             />
           </div>
-          <p className="mt-3 max-w-xl text-xs text-[var(--text-muted)]">
-            This secret signs admin sign-in sessions. Replacing it signs out every admin session
-            (including yours) — everyone will need to sign in again.
+          <p className="text-xs text-[var(--text-muted)]">
+            {jwtSecretConfigured
+              ? "A secret is stored. It is never shown — type a new one only if you want to replace it."
+              : "No JWT secret is stored yet — enter one and save."}
           </p>
-        </div>
-      </div>
-
-      <SettingsSaveButton onSave={() => void save()} saving={savingLocal} />
-    </SettingsCard>
+          <div className="flex justify-end border-t border-[var(--border)] pt-4">
+            <Button onClick={() => void saveJwt()} disabled={savingJwt} icon={savingJwt ? LoaderCircle : Save}>
+              {savingJwt ? "Saving..." : "Save Session (JWT)"}
+            </Button>
+          </div>
+        </>
+      ))}
+    </>
   );
 }
 
-function IntegrationsPanel({ data, saving, onSave }: SectionPanelProps<Array<Record<string, unknown>>>) {
-  const [integrations, setIntegrations] = useState<DynamicIntegration[]>(() =>
-    (data ?? []).map((item) => ({
-      usageType: usageTypeOf(item),
-      serviceSlug: String(item.serviceSlug ?? ""),
-      title: String(item.title ?? ""),
-      baseUrl: String(item.baseUrl ?? ""),
-      authType: (item.authType as AuthType) || "NONE",
-      authCredentials: {
-        apiKey: String((item.authCredentials as Record<string, unknown>)?.apiKey ?? ""),
-        headerKey: String((item.authCredentials as Record<string, unknown>)?.headerKey ?? "Authorization"),
-        username: String((item.authCredentials as Record<string, unknown>)?.username ?? ""),
-        password: String((item.authCredentials as Record<string, unknown>)?.password ?? ""),
-      },
-      globalHeaders: (item.globalHeaders as Record<string, string>) || {},
-      endpoints: Array.isArray(item.endpoints)
-        ? (item.endpoints as DynamicEndpoint[])
-        : [{ name: "default", path: "/", method: "POST" }],
-      webhooks: Array.isArray(item.webhooks) ? (item.webhooks as Webhook[]) : [],
-      isConnected: item.isConnected !== false,
-    })),
-  );
+interface CustomPairState {
+  key: string;
+  value: string;
+  secret: boolean;
+  configured: boolean;
+}
+
+interface ServiceEntryState {
+  usageType: string;
+  subService: string;
+  serviceSlug: string;
+  title: string;
+  baseUrl: string;
+  authType: AuthType;
+  authApiKey: string;
+  authApiKeyConfigured: boolean;
+  authHeaderKey: string;
+  authUsername: string;
+  authPassword: string;
+  authPasswordConfigured: boolean;
+  fields: Record<string, string>;
+  configuredSecrets: Record<string, boolean>;
+  customFields: CustomPairState[];
+  endpoints: DynamicEndpoint[];
+  isConnected: boolean;
+}
+
+const entryCategory = (entry: ServiceEntryState): string => {
+  const def = subServiceById(entry.subService);
+  if (def) {
+    for (const category of SERVICE_CATALOGUE) {
+      if (category.subServices.some((sub) => sub.id === def.id)) return category.id;
+    }
+  }
+  if (SERVICE_CATALOGUE.some((category) => category.id === entry.usageType)) return entry.usageType;
+  return "CUSTOM";
+};
+
+const entryFromApi = (item: Record<string, unknown>): ServiceEntryState => {
+  const auth = (item.authCredentials as Record<string, unknown>) || {};
+  const rawFields = (item.fields as Record<string, unknown>) || {};
+  const fields: Record<string, string> = {};
+  const configuredSecrets: Record<string, boolean> = {};
+  for (const [key, value] of Object.entries(rawFields)) {
+    if (value === SECRET_MASK) {
+      fields[key] = "";
+      configuredSecrets[key] = true;
+    } else {
+      fields[key] = String(value ?? "");
+    }
+  }
+  const apiKeyRaw = String(auth.apiKey ?? "");
+  const passwordRaw = String(auth.password ?? "");
+  return {
+    usageType: String(item.usageType ?? "API"),
+    subService: String(item.subService ?? ""),
+    serviceSlug: String(item.serviceSlug ?? ""),
+    title: String(item.title ?? ""),
+    baseUrl: String(item.baseUrl ?? ""),
+    authType: (item.authType as AuthType) || "NONE",
+    authApiKey: apiKeyRaw === SECRET_MASK ? "" : apiKeyRaw,
+    authApiKeyConfigured: apiKeyRaw === SECRET_MASK,
+    authHeaderKey: String(auth.headerKey ?? "Authorization"),
+    authUsername: String(auth.username ?? ""),
+    authPassword: passwordRaw === SECRET_MASK ? "" : passwordRaw,
+    authPasswordConfigured: passwordRaw === SECRET_MASK,
+    fields,
+    configuredSecrets,
+    customFields: Array.isArray(item.customFields)
+      ? (item.customFields as Array<Record<string, unknown>>).map((pair) => ({
+          key: String(pair.key ?? ""),
+          value: String(pair.value ?? "") === SECRET_MASK ? "" : String(pair.value ?? ""),
+          secret: Boolean(pair.secret),
+          configured: String(pair.value ?? "") === SECRET_MASK,
+        }))
+      : [],
+    endpoints: Array.isArray(item.endpoints)
+      ? (item.endpoints as DynamicEndpoint[])
+      : [{ name: "default", path: "/", method: "POST" }],
+    isConnected: item.isConnected !== false,
+  };
+};
+
+const entryToApi = (entry: ServiceEntryState): Record<string, unknown> => {
+  const def = subServiceById(entry.subService);
+  const isPreset = Boolean(def && def.id !== "custom");
+  const fields: Record<string, string> = {};
+  if (def && isPreset) {
+    for (const field of def.fields) fields[field.key] = entry.fields[field.key] ?? "";
+  }
+  return {
+    usageType: isPreset ? entryCategory(entry) : entry.subService === "custom" ? "CUSTOM" : entry.usageType,
+    subService: entry.subService,
+    serviceSlug: entry.serviceSlug,
+    title: entry.title,
+    baseUrl: isPreset ? "" : entry.baseUrl,
+    authType: isPreset ? "NONE" : entry.authType,
+    authCredentials: {
+      apiKey: entry.authApiKey,
+      headerKey: entry.authHeaderKey,
+      username: entry.authUsername,
+      ["password"]: entry.authPassword,
+    },
+    fields,
+    customFields: isPreset
+      ? []
+      : entry.customFields.map((pair) => ({ key: pair.key, value: pair.value, secret: pair.secret })),
+    endpoints: isPreset
+      ? (def?.endpoints ?? []).map((endpoint) => ({ ...endpoint }))
+      : entry.endpoints,
+    webhooks: [],
+    isConnected: entry.isConnected,
+  };
+};
+
+/** A preset entry counts as configured when every field of its
+ *  definition holds a value — typed now or already stored (masked). */
+const entryConfigured = (entry: ServiceEntryState): boolean => {
+  const def = subServiceById(entry.subService);
+  if (def && def.id !== "custom") {
+    return def.fields
+      .filter((field) => field.required)
+      .every((field) => (entry.fields[field.key] ?? "") !== "" || entry.configuredSecrets[field.key]);
+  }
+  return entry.baseUrl.trim() !== "";
+};
+
+function IntegrationsPanel({
+  data,
+  builtInServices,
+  saving,
+  onSave,
+}: SectionPanelProps<Array<Record<string, unknown>>> & {
+  builtInServices?: BuiltInServicesData;
+}) {
+  const [entries, setEntries] = useState<ServiceEntryState[]>(() => (data ?? []).map(entryFromApi));
   const [validationError, setValidationError] = useState("");
+  const { user } = useAdminAuth();
+  const isSuperAdmin = user?.role === "Super Admin";
+  const [testStates, setTestStates] = useState<
+    Record<string, { running: boolean; ok?: boolean; text?: string }>
+  >({});
 
-  const updateIntegration = (index: number, patch: Partial<DynamicIntegration>) =>
-    setIntegrations(
-      integrations.map((item, itemIndex) => (itemIndex === index ? { ...item, ...patch } : item)),
-    );
+  const updateEntry = (index: number, patch: Partial<ServiceEntryState>) =>
+    setEntries(entries.map((item, itemIndex) => (itemIndex === index ? { ...item, ...patch } : item)));
 
-  const updateCredentials = (index: number, patch: Partial<DynamicIntegration["authCredentials"]>) =>
-    updateIntegration(index, {
-      authCredentials: { ...integrations[index].authCredentials, ...patch },
+  const updateField = (index: number, key: string, value: string) =>
+    updateEntry(index, { fields: { ...entries[index].fields, [key]: value } });
+
+  const changeService = (index: number, categoryId: string) => {
+    const category = categoryById(categoryId);
+    const firstSub = category?.subServices[0];
+    if (!firstSub) return;
+    const fields: Record<string, string> = {};
+    for (const field of firstSub.fields) {
+      if (field.default) fields[field.key] = field.default;
+    }
+    updateEntry(index, {
+      usageType: categoryId,
+      subService: firstSub.id,
+      fields,
+      configuredSecrets: {},
+      endpoints: [{ name: "default", path: "/", method: "POST" }],
+    });
+  };
+
+  const changeSubService = (index: number, subId: string) => {
+    const def = subServiceById(subId);
+    if (!def) return;
+    const fields: Record<string, string> = {};
+    for (const field of def.fields) {
+      if (field.default) fields[field.key] = field.default;
+    }
+    updateEntry(index, { subService: subId, fields, configuredSecrets: {} });
+  };
+
+  const addEndpoint = (index: number) => {
+    const updated = [...entries];
+    updated[index] = {
+      ...updated[index],
+      endpoints: [...updated[index].endpoints, { name: "", path: "/", method: "POST" }],
+    };
+    setEntries(updated);
+  };
+
+  const updateEndpoint = (index: number, endpointIndex: number, patch: Partial<DynamicEndpoint>) => {
+    const updated = [...entries];
+    const endpoints = [...updated[index].endpoints];
+    endpoints[endpointIndex] = { ...endpoints[endpointIndex], ...patch };
+    updated[index] = { ...updated[index], endpoints };
+    setEntries(updated);
+  };
+
+  const removeEndpoint = (index: number, endpointIndex: number) => {
+    const updated = [...entries];
+    updated[index] = {
+      ...updated[index],
+      endpoints: updated[index].endpoints.filter((_, idx) => idx !== endpointIndex),
+    };
+    setEntries(updated);
+  };
+
+  const addPair = (index: number) =>
+    updateEntry(index, {
+      customFields: [...entries[index].customFields, { key: "", value: "", secret: false, configured: false }],
     });
 
-  const addEndpoint = (integrationIndex: number) => {
-    const updated = [...integrations];
-    updated[integrationIndex].endpoints.push({ name: "", path: "/", method: "POST" });
-    setIntegrations(updated);
+  const updatePair = (index: number, pairIndex: number, patch: Partial<CustomPairState>) => {
+    const customFields = [...entries[index].customFields];
+    customFields[pairIndex] = { ...customFields[pairIndex], ...patch };
+    updateEntry(index, { customFields });
   };
 
-  const updateEndpoint = (
-    integrationIndex: number,
-    endpointIndex: number,
-    patch: Partial<DynamicEndpoint>,
-  ) => {
-    const updated = [...integrations];
-    updated[integrationIndex].endpoints[endpointIndex] = {
-      ...updated[integrationIndex].endpoints[endpointIndex],
-      ...patch,
-    };
-    setIntegrations(updated);
-  };
+  const removePair = (index: number, pairIndex: number) =>
+    updateEntry(index, {
+      customFields: entries[index].customFields.filter((_, idx) => idx !== pairIndex),
+    });
 
-  const removeEndpoint = (integrationIndex: number, endpointIndex: number) => {
-    const updated = [...integrations];
-    updated[integrationIndex].endpoints = updated[integrationIndex].endpoints.filter(
-      (_, idx) => idx !== endpointIndex,
-    );
-    setIntegrations(updated);
-  };
-
-  // The API rejects the whole save when a required field is blank, with a
-  // generic message — catch the problems here and name the field instead.
   const validate = (): string => {
-    for (const [index, item] of integrations.entries()) {
-      const label = item.title || `Connector ${index + 1}`;
-      if (!item.title.trim()) return `Connector ${index + 1}: a service title is required.`;
+    const slugs = new Set<string>();
+    for (const [index, item] of entries.entries()) {
+      const label = item.title || `Service ${index + 1}`;
+      if (!item.title.trim()) return `Service ${index + 1}: a service title is required.`;
       if (!item.serviceSlug.trim()) return `${label}: a unique service slug is required.`;
-      if (!item.baseUrl.trim()) return `${label}: a base API URL is required.`;
-      for (const endpoint of item.endpoints) {
-        if (!endpoint.name.trim()) return `${label}: every endpoint needs an action name.`;
-        if (!endpoint.path.trim()) return `${label}: every endpoint needs a path.`;
+      if (slugs.has(item.serviceSlug.trim())) return `${label}: the slug "${item.serviceSlug}" is already used by another service — slugs must be unique.`;
+      slugs.add(item.serviceSlug.trim());
+      const def = subServiceById(item.subService);
+      const isPreset = Boolean(def && def.id !== "custom");
+      if (!isPreset) {
+        if (!item.baseUrl.trim()) return `${label}: a base API URL is required for custom services.`;
+        for (const endpoint of item.endpoints) {
+          if (!endpoint.name.trim()) return `${label}: every endpoint needs an action name.`;
+          if (!endpoint.path.trim()) return `${label}: every endpoint needs a path.`;
+        }
+        for (const pair of item.customFields) {
+          if (!pair.key.trim() && pair.value.trim()) return `${label}: every key-value pair needs a key.`;
+        }
       }
     }
     return "";
@@ -1692,231 +1955,426 @@ function IntegrationsPanel({ data, saving, onSave }: SectionPanelProps<Array<Rec
   const handleSave = () => {
     const problem = validate();
     setValidationError(problem);
-    if (!problem) onSave(integrations as unknown as Array<Record<string, unknown>>);
+    if (!problem) onSave(entries.map(entryToApi));
+  };
+
+  // Test-run one endpoint through the backend runner (POST
+  // /settings/execute). The runner executes the SAVED configuration,
+  // so the form is persisted first — what you see is exactly what
+  // runs, with the credentials saved on the card.
+  const runTest = async (index: number, endpointName: string) => {
+    const item = entries[index];
+    const key = `${index}:${endpointName}`;
+    const problem = validate();
+    setValidationError(problem);
+    if (problem) return;
+    setTestStates((states) => ({ ...states, [key]: { running: true } }));
+    try {
+      const payload = entries.map(entryToApi);
+      await settingsService.updateSection("integrations", payload);
+      const result = await settingsService.executeIntegration(item.serviceSlug, endpointName);
+      setTestStates((states) => ({
+        ...states,
+        [key]: { running: false, ok: true, text: JSON.stringify(result.data ?? result).slice(0, 800) },
+      }));
+    } catch (testError) {
+      setTestStates((states) => ({
+        ...states,
+        [key]: { running: false, ok: false, text: extractApiError(testError).slice(0, 800) },
+      }));
+    }
+  };
+
+  const testResultBox = (index: number, endpointName: string) => {
+    const test = testStates[`${index}:${endpointName}`];
+    if (!test || test.running || !test.text) return null;
+    return (
+      <div
+        role="status"
+        className={`rounded-md border p-3 text-xs ${
+          test.ok
+            ? "border-green-500/40 bg-green-500/10 text-green-700"
+            : "border-red-300 bg-red-500/10 text-red-600"
+        }`}
+      >
+        <span className="font-semibold">
+          {test.ok ? "Call succeeded — provider response: " : "Call failed: "}
+        </span>
+        <span className="break-all font-mono">{test.text}</span>
+      </div>
+    );
   };
 
   return (
     <SettingsCard
       title="API / Integrations"
-      description="Connect any REST service directly using a custom URL, auth credentials, and endpoints."
+      description="The one place the store's services are managed. Pick a service and a sub-service — each provider's own credential fields appear — or define a Custom service with its own key-value pairs. A service runs only when it is configured AND its Active toggle is on."
     >
       <div className="space-y-6">
-        {integrations.map((item, index) => (
-          // Stable key only — see PaymentPanel: this key contained the
-          // service slug, and the title field REWRITES the slug on every
-          // keystroke, so the whole connector card remounted per letter
-          // and its inputs lost focus immediately.
-          <div key={index} className="rounded-xl border border-[var(--border)] bg-[var(--surface)]/30 p-5 space-y-4">
-            <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
-              <div className="flex items-center gap-2">
-                <Globe className="h-4 w-4 text-[var(--primary)]" />
-                <span className="font-semibold text-sm text-[var(--text)]">
-                  {item.title || "New Connector / API"}
-                </span>
-                <span className="ml-2 rounded-md bg-[var(--primary-light)]/20 px-2 py-0.5 text-xs text-[var(--primary)] border border-[var(--primary)]/30 font-medium">
-                  {item.usageType}
-                </span>
-              </div>
-              <div className="flex items-center gap-3">
-                <SettingsToggle
-                  label="Connect Service"
-                  enabled={item.isConnected}
-                  onChange={(isConnected) => updateIntegration(index, { isConnected })}
-                />
-                <Button
-                  variant="danger"
-                  size="sm"
-                  icon={Trash2}
-                  title="Remove integration"
-                  aria-label="Remove integration"
-                  onClick={() => setIntegrations(integrations.filter((_, idx) => idx !== index))}
-                />
-              </div>
-            </div>
+        {isSuperAdmin && <BuiltInServiceCards builtInServices={builtInServices} />}
 
-            {/* Service main fields */}
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-              <SettingsInput
-                label="Service Title"
-                placeholder="e.g. Cloudinary / Twilio"
-                value={item.title}
-                onChange={(e) => {
-                  const title = e.target.value;
-                  // Keep the unique slug in sync with the title until the
-                  // admin edits the slug field directly — requiring a
-                  // hand-typed slug made new connectors unsaveable.
-                  const slugEdited =
-                    item.serviceSlug.trim() !== "" &&
-                    item.serviceSlug !== slugifyTitle(item.title);
-                  updateIntegration(index, {
-                    title,
-                    ...(slugEdited ? {} : { serviceSlug: slugifyTitle(title) }),
-                  });
-                }}
-              />
-              <SettingsSelect
-                label="Usage Type"
-                value={item.usageType}
-                options={[...USAGE_TYPE_OPTIONS]}
-                onChange={(usageType) => updateIntegration(index, { usageType: usageType as UsageType })}
-              />
-              <SettingsInput
-                label="Service Slug (Unique)"
-                placeholder="e.g. cloudinary-media"
-                value={item.serviceSlug}
-                onChange={(e) => updateIntegration(index, { serviceSlug: e.target.value })}
-              />
-              <SettingsInput
-                label="Base API URL"
-                placeholder="https://api.example.com"
-                value={item.baseUrl}
-                onChange={(e) => updateIntegration(index, { baseUrl: e.target.value })}
-              />
-            </div>
-
-            {/* Authentication — the fields follow the auth type, matching
-                exactly what the backend runner sends. */}
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3 bg-[var(--background)] p-3 rounded-lg border border-[var(--border)]">
-              <SettingsSelect
-                label="Auth Type"
-                value={item.authType}
-                options={["NONE", "API_KEY", "BEARER_TOKEN", "BASIC", "CUSTOM_HEADER"]}
-                onChange={(authType) => updateIntegration(index, { authType: authType as AuthType })}
-              />
-
-              {item.authType === "API_KEY" && (
-                <>
-                  <SettingsInput
-                    label="Header Name"
-                    placeholder="X-API-Key"
-                    value={item.authCredentials.headerKey}
-                    onChange={(e) => updateCredentials(index, { headerKey: e.target.value })}
+        {entries.map((item, index) => {
+          const def = subServiceById(item.subService);
+          const isPreset = Boolean(def && def.id !== "custom");
+          const category = entryCategory(item);
+          const categoryDef = categoryById(category);
+          const configured = entryConfigured(item);
+          return (
+            <div key={index} className="rounded-xl border border-[var(--border)] bg-[var(--surface)]/30 p-5 space-y-4">
+              <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
+                <div className="flex items-center gap-2">
+                  <Globe className="h-4 w-4 text-[var(--primary)]" />
+                  <span className="font-semibold text-sm text-[var(--text)]">
+                    {item.title || "New Service"}
+                  </span>
+                  <span className="ml-2 rounded-md bg-[var(--primary-light)]/20 px-2 py-0.5 text-xs text-[var(--primary)] border border-[var(--primary)]/30 font-medium">
+                    {def ? def.name : item.usageType}
+                  </span>
+                  <span
+                    className={`rounded-md px-2 py-0.5 text-xs border font-medium ${
+                      configured
+                        ? "bg-green-500/10 text-green-700 border-green-500/40"
+                        : "bg-[var(--surface)] text-[var(--text-muted)] border-[var(--border)]"
+                    }`}
+                  >
+                    {configured ? "Configured" : "Not configured"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-[var(--text-muted)]">Active</span>
+                  <SettingsToggle
+                    label="Active"
+                    enabled={item.isConnected}
+                    onChange={(isConnected) => updateEntry(index, { isConnected })}
                   />
-                  <SettingsInput
-                    label="API Key"
-                    type="password"
-                    value={item.authCredentials.apiKey}
-                    onChange={(e) => updateCredentials(index, { apiKey: e.target.value })}
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    icon={Trash2}
+                    title="Remove service"
+                    aria-label="Remove service"
+                    onClick={() => setEntries(entries.filter((_, idx) => idx !== index))}
                   />
-                </>
-              )}
+                </div>
+              </div>
 
-              {item.authType === "BEARER_TOKEN" && (
+              {/* Title / Service / Slug / Sub-Service */}
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
                 <SettingsInput
-                  label="Bearer Token"
-                  type="password"
-                  value={item.authCredentials.apiKey}
-                  onChange={(e) => updateCredentials(index, { apiKey: e.target.value })}
+                  label="Service Title"
+                  placeholder="e.g. Stripe Main / Twilio SMS"
+                  value={item.title}
+                  onChange={(e) => {
+                    const title = e.target.value;
+                    const slugEdited =
+                      item.serviceSlug.trim() !== "" &&
+                      item.serviceSlug !== slugifyTitle(item.title);
+                    updateEntry(index, {
+                      title,
+                      ...(slugEdited ? {} : { serviceSlug: slugifyTitle(title) }),
+                    });
+                  }}
                 />
-              )}
-
-              {item.authType === "BASIC" && (
-                <>
-                  <SettingsInput
-                    label="Username"
-                    value={item.authCredentials.username}
-                    onChange={(e) => updateCredentials(index, { username: e.target.value })}
-                  />
-                  <SettingsInput
-                    label="Password"
-                    type="password"
-                    value={item.authCredentials.password}
-                    onChange={(e) => updateCredentials(index, { password: e.target.value })}
-                  />
-                </>
-              )}
-
-              {item.authType === "CUSTOM_HEADER" && (
-                <>
-                  <SettingsInput
-                    label="Header Name"
-                    placeholder="X-Custom-Auth"
-                    value={item.authCredentials.headerKey}
-                    onChange={(e) => updateCredentials(index, { headerKey: e.target.value })}
-                  />
-                  <SettingsInput
-                    label="Header Value"
-                    type="password"
-                    value={item.authCredentials.apiKey}
-                    onChange={(e) => updateCredentials(index, { apiKey: e.target.value })}
-                  />
-                </>
-              )}
-            </div>
-
-            {/* Dynamic endpoints */}
-            <div className="pt-2">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-semibold text-[var(--text-soft)] flex items-center gap-1">
-                  <Code2 className="h-3.5 w-3.5" /> Service Endpoints
-                </span>
-                <Button variant="outline" size="sm" icon={Plus} onClick={() => addEndpoint(index)}>
-                  Add Endpoint
-                </Button>
+                <SettingsSelect
+                  label="Service"
+                  value={category}
+                  options={SERVICE_CATALOGUE.map((c) => ({ label: c.label, value: c.id }))}
+                  onChange={(value) => changeService(index, value)}
+                />
+                <SettingsInput
+                  label="Service Slug (Unique)"
+                  placeholder="e.g. stripe-main"
+                  value={item.serviceSlug}
+                  onChange={(e) => updateEntry(index, { serviceSlug: e.target.value })}
+                />
+                <SettingsSelect
+                  label="Sub-Service"
+                  value={item.subService || "custom"}
+                  options={(categoryDef?.subServices ?? []).map((sub) => ({ label: sub.name, value: sub.id }))}
+                  onChange={(value) => changeSubService(index, value)}
+                />
               </div>
 
-              <div className="space-y-2">
-                {item.endpoints.map((ep, epIdx) => (
-                  <div key={epIdx} className="grid grid-cols-1 md:grid-cols-4 gap-2 items-end bg-[var(--background)] p-3 rounded-md border border-[var(--border)]">
+              {isPreset && def ? (
+                <>
+                  <p className="text-xs text-[var(--text-muted)]">
+                    {def.hasFixedBase
+                      ? `Calls go to ${def.name}'s fixed API address with exactly these saved credentials — there is no URL to type, so this service can only ever talk to ${def.name}.`
+                      : `${def.name} has no HTTP API base of its own — these saved values are what the store uses for it.`}
+                  </p>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-3 bg-[var(--background)] p-3 rounded-lg border border-[var(--border)]">
+                    {def.fields.map((field) =>
+                      field.type === "select" ? (
+                        <SettingsSelect
+                          key={field.key}
+                          label={field.label}
+                          value={item.fields[field.key] ?? field.default ?? ""}
+                          options={field.options ?? []}
+                          onChange={(value) => updateField(index, field.key, value)}
+                        />
+                      ) : (
+                        <SettingsInput
+                          key={field.key}
+                          label={field.label}
+                          type={field.secret ? "password" : field.type === "number" ? "number" : "text"}
+                          value={item.fields[field.key] ?? ""}
+                          placeholder={
+                            field.secret && item.configuredSecrets[field.key] ? SECRET_HINT : undefined
+                          }
+                          autoComplete={field.secret ? "new-password" : "off"}
+                          onChange={(e) => updateField(index, field.key, e.target.value)}
+                        />
+                      ),
+                    )}
+                  </div>
+                  {def.endpoints.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-semibold text-[var(--text-soft)] flex items-center gap-1">
+                          <Code2 className="h-3.5 w-3.5" /> Test with the saved credentials
+                        </span>
+                        {def.endpoints.map((endpoint) => {
+                          const test = testStates[`${index}:${endpoint.name}`];
+                          return (
+                            <Button
+                              key={endpoint.name}
+                              variant="outline"
+                              size="sm"
+                              icon={test?.running ? LoaderCircle : Play}
+                              disabled={test?.running}
+                              title={`Save and call ${def.name}'s ${endpoint.name} endpoint`}
+                              onClick={() => void runTest(index, endpoint.name)}
+                            >
+                              {test?.running ? "Testing…" : `Test ${endpoint.name}`}
+                            </Button>
+                          );
+                        })}
+                      </div>
+                      {def.endpoints.map((endpoint) => (
+                        <div key={endpoint.name}>{testResultBox(index, endpoint.name)}</div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  {/* Custom / generic connector: admin-typed base URL,
+                      generic auth, endpoints and key-value pairs. */}
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <SettingsInput
-                      label="Action Name"
-                      placeholder="e.g. upload / send_sms"
-                      value={ep.name}
-                      onChange={(e) => updateEndpoint(index, epIdx, { name: e.target.value })}
+                      label="Base API URL"
+                      placeholder="https://api.example.com"
+                      value={item.baseUrl}
+                      onChange={(e) => updateEntry(index, { baseUrl: e.target.value })}
                     />
-                    <SettingsInput
-                      label="Path"
-                      placeholder="/v1/send"
-                      value={ep.path}
-                      onChange={(e) => updateEndpoint(index, epIdx, { path: e.target.value })}
-                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-3 bg-[var(--background)] p-3 rounded-lg border border-[var(--border)]">
                     <SettingsSelect
-                      label="HTTP Method"
-                      value={ep.method}
-                      options={["GET", "POST", "PUT", "DELETE", "PATCH"]}
-                      onChange={(method) => updateEndpoint(index, epIdx, { method: method as HttpMethod })}
+                      label="Auth Type"
+                      value={item.authType}
+                      options={["NONE", "API_KEY", "BEARER_TOKEN", "BASIC", "CUSTOM_HEADER"]}
+                      onChange={(authType) => updateEntry(index, { authType: authType as AuthType })}
                     />
-                    <div className="flex justify-end pb-1">
-                      <Button
-                        variant="danger"
-                        size="sm"
-                        icon={Trash2}
-                        onClick={() => removeEndpoint(index, epIdx)}
+                    {item.authType === "API_KEY" && (
+                      <>
+                        <SettingsInput
+                          label="Header Name"
+                          placeholder="X-API-Key"
+                          value={item.authHeaderKey}
+                          onChange={(e) => updateEntry(index, { authHeaderKey: e.target.value })}
+                        />
+                        <SettingsInput
+                          label="API Key"
+                          type="password"
+                          value={item.authApiKey}
+                          placeholder={item.authApiKeyConfigured ? SECRET_HINT : undefined}
+                          onChange={(e) => updateEntry(index, { authApiKey: e.target.value })}
+                        />
+                      </>
+                    )}
+                    {item.authType === "BEARER_TOKEN" && (
+                      <SettingsInput
+                        label="Bearer Token"
+                        type="password"
+                        value={item.authApiKey}
+                        placeholder={item.authApiKeyConfigured ? SECRET_HINT : undefined}
+                        onChange={(e) => updateEntry(index, { authApiKey: e.target.value })}
                       />
+                    )}
+                    {item.authType === "BASIC" && (
+                      <>
+                        <SettingsInput
+                          label="Username"
+                          value={item.authUsername}
+                          onChange={(e) => updateEntry(index, { authUsername: e.target.value })}
+                        />
+                        <SettingsInput
+                          label="Password"
+                          type="password"
+                          value={item.authPassword}
+                          placeholder={item.authPasswordConfigured ? SECRET_HINT : undefined}
+                          onChange={(e) => updateEntry(index, { authPassword: e.target.value })}
+                        />
+                      </>
+                    )}
+                    {item.authType === "CUSTOM_HEADER" && (
+                      <>
+                        <SettingsInput
+                          label="Header Name"
+                          placeholder="X-Custom-Auth"
+                          value={item.authHeaderKey}
+                          onChange={(e) => updateEntry(index, { authHeaderKey: e.target.value })}
+                        />
+                        <SettingsInput
+                          label="Header Value"
+                          type="password"
+                          value={item.authApiKey}
+                          placeholder={item.authApiKeyConfigured ? SECRET_HINT : undefined}
+                          onChange={(e) => updateEntry(index, { authApiKey: e.target.value })}
+                        />
+                      </>
+                    )}
+                  </div>
+
+                  {/* Key-value pairs — the Custom service's own fields */}
+                  <div className="pt-2">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-semibold text-[var(--text-soft)] flex items-center gap-1">
+                        <KeyRound className="h-3.5 w-3.5" /> Key-Value Pairs
+                      </span>
+                      <Button variant="outline" size="sm" icon={Plus} onClick={() => addPair(index)}>
+                        Add Pair
+                      </Button>
+                    </div>
+                    {item.customFields.length === 0 && (
+                      <p className="text-xs text-[var(--text-muted)]">
+                        No key-value pairs yet — add the fields this service needs. Mark a pair
+                        Secret to keep its value masked and never shown again.
+                      </p>
+                    )}
+                    <div className="space-y-2">
+                      {item.customFields.map((pair, pairIdx) => (
+                        <div key={pairIdx} className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto_auto] gap-2 items-end bg-[var(--background)] p-3 rounded-md border border-[var(--border)]">
+                          <SettingsInput
+                            label="Key"
+                            placeholder="e.g. region"
+                            value={pair.key}
+                            onChange={(e) => updatePair(index, pairIdx, { key: e.target.value })}
+                          />
+                          <SettingsInput
+                            label="Value"
+                            type={pair.secret ? "password" : "text"}
+                            value={pair.value}
+                            placeholder={pair.secret && pair.configured ? SECRET_HINT : undefined}
+                            onChange={(e) => updatePair(index, pairIdx, { value: e.target.value })}
+                          />
+                          <label className="flex items-center gap-2 pb-2 text-xs text-[var(--text-soft)]">
+                            <input
+                              type="checkbox"
+                              checked={pair.secret}
+                              onChange={(e) => updatePair(index, pairIdx, { secret: e.target.checked })}
+                            />
+                            Secret
+                          </label>
+                          <div className="flex justify-end pb-1">
+                            <Button variant="danger" size="sm" icon={Trash2} onClick={() => removePair(index, pairIdx)} />
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        ))}
 
-        {integrations.length === 0 && (
-          <p className="text-sm text-[var(--text-muted)]">No integration connectors configured.</p>
+                  {/* Endpoints */}
+                  <div className="pt-2">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-semibold text-[var(--text-soft)] flex items-center gap-1">
+                        <Code2 className="h-3.5 w-3.5" /> Service Endpoints
+                      </span>
+                      <Button variant="outline" size="sm" icon={Plus} onClick={() => addEndpoint(index)}>
+                        Add Endpoint
+                      </Button>
+                    </div>
+                    <div className="space-y-2">
+                      {item.endpoints.map((ep, epIdx) => (
+                        <div key={epIdx} className="space-y-2">
+                          <div className="grid grid-cols-1 md:grid-cols-4 gap-2 items-end bg-[var(--background)] p-3 rounded-md border border-[var(--border)]">
+                            <SettingsInput
+                              label="Action Name"
+                              placeholder="e.g. upload / send_sms"
+                              value={ep.name}
+                              onChange={(e) => updateEndpoint(index, epIdx, { name: e.target.value })}
+                            />
+                            <SettingsInput
+                              label="Path"
+                              placeholder="/v1/send"
+                              value={ep.path}
+                              onChange={(e) => updateEndpoint(index, epIdx, { path: e.target.value })}
+                            />
+                            <SettingsSelect
+                              label="HTTP Method"
+                              value={ep.method}
+                              options={["GET", "POST", "PUT", "DELETE", "PATCH"]}
+                              onChange={(method) => updateEndpoint(index, epIdx, { method: method as HttpMethod })}
+                            />
+                            <div className="flex justify-end gap-2 pb-1">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                icon={testStates[`${index}:${ep.name}`]?.running ? LoaderCircle : Play}
+                                disabled={testStates[`${index}:${ep.name}`]?.running}
+                                title="Save and call this endpoint with the saved credentials"
+                                onClick={() => void runTest(index, ep.name)}
+                              >
+                                {testStates[`${index}:${ep.name}`]?.running ? "Testing…" : "Test"}
+                              </Button>
+                              <Button variant="danger" size="sm" icon={Trash2} onClick={() => removeEndpoint(index, epIdx)} />
+                            </div>
+                          </div>
+                          {testResultBox(index, ep.name)}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })}
+
+        {entries.length === 0 && (
+          <p className="text-sm text-[var(--text-muted)]">No services configured yet — add the first one below.</p>
         )}
 
         <Button
           variant="outline"
           icon={Plus}
           onClick={() =>
-            setIntegrations([
-              ...integrations,
+            setEntries([
+              ...entries,
               {
-                usageType: "API",
+                usageType: "CUSTOM",
+                subService: "custom",
                 serviceSlug: "",
                 title: "",
                 baseUrl: "",
                 authType: "NONE",
-                authCredentials: { apiKey: "", headerKey: "Authorization", username: "", password: "" },
-                globalHeaders: {},
+                authApiKey: "",
+                authApiKeyConfigured: false,
+                authHeaderKey: "Authorization",
+                authUsername: "",
+                authPassword: "",
+                authPasswordConfigured: false,
+                fields: {},
+                configuredSecrets: {},
+                customFields: [],
                 endpoints: [{ name: "default", path: "/", method: "POST" }],
-                webhooks: [],
                 isConnected: true,
               },
             ])
           }
         >
-          Add New Service Connector
+          Add New Service
         </Button>
       </div>
 
@@ -1930,6 +2388,7 @@ function IntegrationsPanel({ data, saving, onSave }: SectionPanelProps<Array<Rec
     </SettingsCard>
   );
 }
+
 
 function AppearancePanel({ data, saving, onSave }: SectionPanelProps<ObjectData>) {
   const [form, setForm] = useState({

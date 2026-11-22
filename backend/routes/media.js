@@ -5,7 +5,7 @@ const genericController = require('../controllers/genericController')(Media);
 const cloudinary = require('../config/cloudinary');
 const { protect } = require('../middleware/auth');
 const { requireStaff } = require('../middleware/admin');
-const { getCloudinaryCredentials } = require('../utils/credentials');
+const { getCloudinaryCredentials, isCloudinaryActive } = require('../utils/credentials');
 const { requirePermission } = require('../middleware/permissions');
 const {
     parseCloudinaryUrl,
@@ -32,6 +32,20 @@ const PURPOSE_FOLDERS = {
 };
 const folderForPurpose = (purpose) =>
     PURPOSE_FOLDERS[purpose] || PURPOSE_FOLDERS.library;
+
+// Activation gate for the built-in Cloudinary service (Settings →
+// API / Integrations): when the admin has toggled Cloudinary OFF, the
+// media path refuses every operation that would call Cloudinary —
+// uploads, upload signatures, registrations and asset mutations. The
+// stored library records themselves are untouched and come back the
+// moment the service is switched on again.
+const CLOUDINARY_OFF_MESSAGE =
+    'Cloudinary is switched off in Settings → API / Integrations — media operations are unavailable until it is switched back on.';
+const refuseIfCloudinaryOff = async (res) => {
+    if (await isCloudinaryActive()) return false;
+    res.status(403).json({ message: CLOUDINARY_OFF_MESSAGE });
+    return true;
+};
 
 // Mime types the Media schema accepts.
 const ALLOWED_MIME_TYPES = [
@@ -75,6 +89,9 @@ router.get('/storage', protect, requirePermission('Media', 'view'), async (req, 
 
         let cloudinaryUsage = null;
         try {
+            // Gate: with Cloudinary toggled OFF the account usage is
+            // not fetched at all — the panel shows library-only numbers.
+            if (!(await isCloudinaryActive())) throw new Error('cloudinary-off');
             const usage = await cloudinary.api.usage();
             cloudinaryUsage = {
                 plan: usage.plan || null,
@@ -103,6 +120,7 @@ router.get('/storage', protect, requirePermission('Media', 'view'), async (req, 
 // is never treated as a document id.
 router.post('/upload', protect, requirePermission('Media', 'create'), express.json({ limit: '15mb' }), async (req, res) => {
     try {
+        if (await refuseIfCloudinaryOff(res)) return;
         const { dataUrl, filename, altText, title, description, status } = req.body || {};
 
         if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:')) {
@@ -173,13 +191,15 @@ router.post('/upload', protect, requirePermission('Media', 'create'), express.js
 // straight to Cloudinary with this one-time signature and only the small
 // registration JSON (below) ever touches the serverless function.
 router.get('/upload-signature', protect, requireStaff, requirePermission('Media', 'create'), async (req, res) => {
+    if (await refuseIfCloudinaryOff(res)) return;
     const timestamp = Math.round(Date.now() / 1000);
     // The caller's purpose picks the destination folder (storage
     // organization); only the fixed purpose keys are honoured.
     const folder = folderForPurpose(req.query.purpose);
-    // Credentials come from the DB store (Settings → Credentials;
-    // environment is only the seed/fallback) — a key rotated in the
-    // panel signs the very next upload, no redeploy needed.
+    // Credentials come from the DB store (Settings →
+    // API / Integrations; environment is only the seed/fallback) — a
+    // key rotated in the panel signs the very next upload, no redeploy
+    // needed.
     const { cloudName, apiKey, apiSecret } = await getCloudinaryCredentials();
     // The delivery type is part of the signed parameters: the browser's
     // direct upload lands as an authenticated-type asset (asset
@@ -205,6 +225,7 @@ router.get('/upload-signature', protect, requireStaff, requirePermission('Media'
 // register a record that lies about the file.
 router.post('/register', protect, requireStaff, requirePermission('Media', 'create'), async (req, res) => {
     try {
+        if (await refuseIfCloudinaryOff(res)) return;
         const { publicId, resourceType, originalName, mimeType, title, altText, description, status } = req.body || {};
 
         if (!publicId || typeof publicId !== 'string') {
@@ -461,6 +482,7 @@ router.get('/:id/usage', async (req, res) => {
 // new URL, and the old Cloudinary asset is destroyed.
 router.put('/:id/file', protect, requirePermission('Media', 'edit'), async (req, res) => {
     try {
+        if (await refuseIfCloudinaryOff(res)) return;
         const media = await Media.findById(req.params.id);
         if (!media) return res.status(404).json({ message: 'Not found' });
 
