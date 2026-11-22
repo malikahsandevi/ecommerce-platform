@@ -257,7 +257,7 @@ export function CreateTable<T extends Record<string, any>>({
       >
         <table
           ref={bodyTableRef}
-          className="sync-table w-full min-w-170 text-left border-collapse"
+          className={`sync-table w-full min-w-170 text-left border-collapse ${hasData ? "" : "h-full"}`}
         >
           <tbody className="divide-y divide-[var(--border)] text-xs text-[var(--text)]">
           {hasData ? (
@@ -428,7 +428,7 @@ export function CreateTable<T extends Record<string, any>>({
             <tr>
               <td
                 colSpan={(columns.length || 1) + (showActions ? 1 : 0)}
-                className="p-10 text-center bg-[var(--background)]"
+                className="p-10 text-center align-middle bg-[var(--background)]"
               >
                 <div className="flex flex-col items-center gap-1.5 text-[var(--text-muted)]">
                   <Inbox className="w-7 h-7 opacity-50" />
