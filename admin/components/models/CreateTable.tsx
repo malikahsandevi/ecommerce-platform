@@ -1,5 +1,5 @@
 // components/ui/CreateTable.tsx
-import React, { useState } from "react";
+import React, { useLayoutEffect, useRef, useState } from "react";
 import { Inbox, Pencil, Trash2 } from "lucide-react";
 import { AvatarViewerTrigger } from "@/components/ui/AvatarViewer";
 
@@ -100,23 +100,103 @@ export function CreateTable<T extends Record<string, any>>({
     }
   };
 
-  return (
-    <div className="overflow-auto flex-1 w-full h-full [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-[var(--surface)] [&::-webkit-scrollbar-thumb]:bg-[var(--primary)] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-button]:hidden relative">
-      <table className="w-full min-w-170 text-left border-collapse">
-        <thead className="bg-[var(--surface)] border-b border-[var(--border)] text-[var(--text-muted)] font-semibold sticky top-0 z-10 text-[11px] uppercase tracking-wide">
-          <tr>
-            {columns.map((colKey, index) => (
-              <th key={String(colKey) + index} className="px-3 py-3">
-                <div className="flex items-center gap-1 select-none">
-                  {columnHeaders?.[colKey] ?? String(colKey)}
-                </div>
-              </th>
-            ))}
-            {showActions && <th className="px-3 py-3 w-20">Actions</th>}
-          </tr>
-        </thead>
+  // --- Scrollbar spans the BODY only -------------------------------------
+  // The header row lives OUTSIDE the scroll container and the pagination
+  // footer lives outside the table entirely, so the vertical scrollbar's
+  // track + thumb cover exactly the rows region — never the header, never
+  // the footer. The header is a twin table whose column widths are synced
+  // from the body table's laid-out columns (and whose right padding takes
+  // the body's scrollbar width), so header and body columns stay aligned
+  // whether or not a scrollbar is present; horizontal scrolling is
+  // mirrored onto the header.
+  const headerWrapRef = useRef<HTMLDivElement>(null);
+  const bodyWrapRef = useRef<HTMLDivElement>(null);
+  const headerTableRef = useRef<HTMLTableElement>(null);
+  const bodyTableRef = useRef<HTMLTableElement>(null);
 
-        <tbody className="divide-y divide-[var(--border)] text-xs text-[var(--text)]">
+  const syncTableChrome = () => {
+    const headerWrap = headerWrapRef.current;
+    const bodyWrap = bodyWrapRef.current;
+    const headerTable = headerTableRef.current;
+    const bodyTable = bodyTableRef.current;
+    if (!headerWrap || !bodyWrap || !headerTable || !bodyTable) return;
+
+    // Reserve exactly the body's vertical-scrollbar width on the header's
+    // right edge so the last header cell ends where the body cells end.
+    const sbw = bodyWrap.offsetWidth - bodyWrap.clientWidth;
+    headerWrap.style.paddingRight = `${sbw}px`;
+
+    const expectedCells = columns.length + (showActions ? 1 : 0);
+    const firstRow = bodyTable.tBodies[0]?.rows[0];
+    if (firstRow && expectedCells > 0 && firstRow.cells.length === expectedCells) {
+      const widths = Array.from(firstRow.cells).map(
+        (cell) => cell.getBoundingClientRect().width,
+      );
+      let colgroup = headerTable.querySelector("colgroup");
+      if (!colgroup) {
+        colgroup = document.createElement("colgroup");
+        headerTable.prepend(colgroup);
+      }
+      while (colgroup.children.length < widths.length) {
+        colgroup.appendChild(document.createElement("col"));
+      }
+      while (colgroup.children.length > widths.length) {
+        colgroup.lastElementChild?.remove();
+      }
+      widths.forEach((w, i) => {
+        (colgroup!.children[i] as HTMLElement).style.width = `${w}px`;
+      });
+      headerTable.style.tableLayout = "fixed";
+      headerTable.style.width = `${bodyTable.getBoundingClientRect().width}px`;
+    }
+    headerWrap.scrollLeft = bodyWrap.scrollLeft;
+  };
+
+  useLayoutEffect(() => {
+    syncTableChrome();
+    const bodyWrap = bodyWrapRef.current;
+    if (!bodyWrap) return;
+    const observer = new ResizeObserver(() => syncTableChrome());
+    observer.observe(bodyWrap);
+    return () => observer.disconnect();
+  });
+
+  return (
+    <div className="flex flex-col flex-1 w-full h-full relative overflow-hidden">
+      <div ref={headerWrapRef} className="overflow-hidden shrink-0">
+        <table
+          ref={headerTableRef}
+          className="w-full min-w-170 text-left border-collapse"
+        >
+          <thead className="bg-[var(--surface)] border-b border-[var(--border)] text-[var(--text-muted)] font-semibold text-[11px] uppercase tracking-wide">
+            <tr>
+              {columns.map((colKey, index) => (
+                <th key={String(colKey) + index} className="px-3 py-3">
+                  <div className="flex items-center gap-1 select-none">
+                    {columnHeaders?.[colKey] ?? String(colKey)}
+                  </div>
+                </th>
+              ))}
+              {showActions && <th className="px-3 py-3 w-20">Actions</th>}
+            </tr>
+          </thead>
+        </table>
+      </div>
+
+      <div
+        ref={bodyWrapRef}
+        onScroll={() => {
+          if (headerWrapRef.current && bodyWrapRef.current) {
+            headerWrapRef.current.scrollLeft = bodyWrapRef.current.scrollLeft;
+          }
+        }}
+        className="overflow-auto flex-1 w-full min-h-0 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-[var(--surface)] [&::-webkit-scrollbar-thumb]:bg-[var(--primary)] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-button]:hidden"
+      >
+        <table
+          ref={bodyTableRef}
+          className="w-full min-w-170 text-left border-collapse"
+        >
+          <tbody className="divide-y divide-[var(--border)] text-xs text-[var(--text)]">
           {hasData ? (
             data.map((item, index) => {
               const isSelected = currentSelectedItem === item;
@@ -299,8 +379,9 @@ export function CreateTable<T extends Record<string, any>>({
               </td>
             </tr>
           )}
-        </tbody>
-      </table>
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
