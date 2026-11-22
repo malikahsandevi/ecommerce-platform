@@ -27,6 +27,58 @@ const TYPE_ICONS: Record<string, LucideIcon> = {
   STATUS_CHANGE: RefreshCcw,
 };
 
+type Translate = (key: string) => string;
+
+const titleCase = (value: string): string =>
+  value
+    .replace(/_/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+
+/**
+ * Activity descriptions are stored by the backend as English sentences
+ * built from a small set of fixed templates (see backend logActivity
+ * callers). Rebuild the sentence from its template in the active
+ * language, keeping the data parts (names, numbers) untouched; an
+ * unrecognised description is shown as stored.
+ */
+function localizedDescription(description: string, t: Translate): string {
+  let m = description.match(/^New (\d+)-star review on (.+)$/);
+  if (m) {
+    return t("New {rating}-star review on {product}")
+      .replace("{rating}", m[1])
+      .replace("{product}", m[2]);
+  }
+  m = description.match(/^Price updated for (.+): (\$[\d.,]+) → (\$[\d.,]+)$/);
+  if (m) {
+    return t("Price updated for {product}: {oldPrice} → {newPrice}")
+      .replace("{product}", m[1])
+      .replace("{oldPrice}", m[2])
+      .replace("{newPrice}", m[3]);
+  }
+  m = description.match(/^(.+) is running low \((\d+) left\)$/);
+  if (m) {
+    return t("{product} is running low ({stock} left)")
+      .replace("{product}", m[1])
+      .replace("{stock}", m[2]);
+  }
+  m = description.match(/^Order (.+) placed by (.+) — (\$[\d.,]+)$/);
+  if (m) {
+    return t("Order {order} placed by {customer} — {total}")
+      .replace("{order}", m[1])
+      .replace("{customer}", m[2])
+      .replace("{total}", m[3]);
+  }
+  m = description.match(/^Order (.+) status changed from (\S+) to (\S+)$/);
+  if (m) {
+    return t("Order {order} status changed from {from} to {to}")
+      .replace("{order}", m[1])
+      .replace("{from}", t(titleCase(m[2])))
+      .replace("{to}", t(titleCase(m[3])));
+  }
+  return description;
+}
+
 function timeLabel(iso?: string): string {
   if (!iso) return "";
   const date = new Date(iso);
@@ -40,6 +92,7 @@ function timeLabel(iso?: string): string {
 }
 
 export const ActivityCard: React.FC<{ logs?: ActivityLogItem[] }> = ({ logs }) => {
+  const { t } = useLanguage();
   if (!logs) {
     return (
       <div className="bg-(--background) p-5 rounded-2xl shadow-sm border border-(--border) h-full w-full animate-pulse">
@@ -56,7 +109,6 @@ export const ActivityCard: React.FC<{ logs?: ActivityLogItem[] }> = ({ logs }) =
     );
   }
 
-  const { t } = useLanguage();
   return (
     <div className="bg-(--background) p-5 rounded-2xl shadow-sm border border-(--border) h-full w-full flex flex-col">
       <h3 className="text-base font-bold text-(--text) mb-4">{t("Recent Activity")}</h3>
@@ -66,9 +118,9 @@ export const ActivityCard: React.FC<{ logs?: ActivityLogItem[] }> = ({ logs }) =
           <span className="w-11 h-11 rounded-2xl bg-(--primary-soft) text-(--primary) flex items-center justify-center">
             <Activity className="w-5 h-5" />
           </span>
-          <p className="text-xs font-semibold text-(--text)">No recent activity</p>
+          <p className="text-xs font-semibold text-(--text)">{t("No recent activity")}</p>
           <p className="text-[11px] text-(--text-muted) max-w-55">
-            Purchases, price updates and reviews will be recorded here.
+            {t("Purchases, price updates and reviews will be recorded here.")}
           </p>
         </div>
       ) : (
@@ -86,9 +138,9 @@ export const ActivityCard: React.FC<{ logs?: ActivityLogItem[] }> = ({ logs }) =
                   <Icon className="w-4 h-4" />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs text-(--text) leading-snug">{log.description}</p>
+                  <p className="text-xs text-(--text) leading-snug">{localizedDescription(log.description, t)}</p>
                   <p className="text-[11px] text-(--text-muted) mt-0.5">
-                    {log.type.replace(/_/g, " ")}
+                    {t(titleCase(log.type))}
                     {log.createdAt ? ` • ${timeLabel(log.createdAt)}` : ""}
                   </p>
                 </div>

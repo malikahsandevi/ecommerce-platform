@@ -6,6 +6,7 @@ import Button from "@/components/ui/Button";
 import MediaPickerModal from "@/components/models/MediaPickerModal";
 import { effectiveMediaAlt, mediaService } from "@/services/resourceRegistry";
 import { extractApiError } from "@/services/api";
+import { useLanguage } from "@/services/i18n";
 
 /** One image in a product's gallery (the API's canonical entry shape). */
 export interface GalleryImage {
@@ -42,6 +43,7 @@ export const ProductMediaManager: React.FC<ProductMediaManagerProps> = ({
   onChange,
   maxImages = MAX_PRODUCT_IMAGES,
 }) => {
+  const { t } = useLanguage();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
@@ -58,7 +60,7 @@ export const ProductMediaManager: React.FC<ProductMediaManagerProps> = ({
       for (const file of Array.from(files)) {
         if (next.length >= maxImages) break;
         const uploaded = await mediaService.upload({ file, title: file.name, purpose: "products" });
-        if (!uploaded?.url) throw new Error("The upload did not return a URL.");
+        if (!uploaded?.url) throw new Error(t("The upload did not return a URL."));
         next.push({
           url: uploaded.url,
           publicId: uploaded.path,
@@ -122,14 +124,14 @@ export const ProductMediaManager: React.FC<ProductMediaManagerProps> = ({
                 />
                 {isMain && (
                   <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded-md bg-[var(--primary)] text-white text-[9px] font-bold shadow">
-                    Main
+                    {t("Main")}
                   </span>
                 )}
                 <button
                   type="button"
                   onClick={() => handleRemove(index)}
-                  aria-label="Remove image"
-                  title="Remove image"
+                  aria-label={t("Remove image")}
+                  title={t("Remove image")}
                   className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-red-500 transition-colors cursor-pointer"
                 >
                   <X className="w-3 h-3" />
@@ -138,12 +140,12 @@ export const ProductMediaManager: React.FC<ProductMediaManagerProps> = ({
                   <button
                     type="button"
                     onClick={() => handleSetMain(index)}
-                    aria-label="Set as main image"
-                    title="Set as main image"
+                    aria-label={t("Set as main image")}
+                    title={t("Set as main image")}
                     className="absolute bottom-1 left-1 h-5 px-1.5 rounded-full bg-black/60 text-white flex items-center gap-1 text-[9px] font-semibold hover:bg-[var(--primary)] transition-colors cursor-pointer"
                   >
                     <Star className="w-3 h-3" />
-                    Main
+                    {t("Main")}
                   </button>
                 )}
               </div>
@@ -152,7 +154,7 @@ export const ProductMediaManager: React.FC<ProductMediaManagerProps> = ({
         </div>
       ) : (
         <div className="mb-2 rounded-xl border border-dashed border-[var(--border)] px-3 py-4 text-center text-[11px] text-[var(--text-muted)]">
-          No images yet — upload files or select from the media library.
+          {t("No images yet — upload files or select from the media library.")}
         </div>
       )}
 
@@ -165,7 +167,7 @@ export const ProductMediaManager: React.FC<ProductMediaManagerProps> = ({
           }`}
         >
           <UploadCloud className="w-3.5 h-3.5" />
-          {uploading ? "Uploading…" : "Upload"}
+          {uploading ? t("Uploading…") : t("Upload")}
           <input
             type="file"
             accept="image/*"
@@ -187,15 +189,15 @@ export const ProductMediaManager: React.FC<ProductMediaManagerProps> = ({
           onClick={() => setPickerOpen(true)}
           className="text-xs"
         >
-          Select Media
+          {t("Select Media")}
         </Button>
 
         <span className="text-[11px] text-[var(--text-muted)]">
-          {images.length} / {maxImages} images
+          {t("{count} / {max} images").replace("{count}", String(images.length)).replace("{max}", String(maxImages))}
           {atMax && (
             <span className="text-[var(--primary)] font-semibold">
               {" "}
-              — Max {maxImages} images
+              — {t("Max {max} images").replace("{max}", String(maxImages))}
             </span>
           )}
         </span>

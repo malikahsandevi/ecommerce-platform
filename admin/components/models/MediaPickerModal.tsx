@@ -7,6 +7,7 @@ import { effectiveMediaAlt, mediaService } from "@/services/resourceRegistry";
 import { extractApiError } from "@/services/api";
 import type { MediaItem } from "@/config/mediaConfig";
 import type { GalleryImage } from "@/components/models/ProductMediaManager";
+import { useLanguage } from "@/services/i18n";
 
 export interface MediaPickerModalProps {
   isOpen: boolean;
@@ -42,6 +43,7 @@ export const MediaPickerModal: React.FC<MediaPickerModalProps> = ({
   single = false,
   onEditSelected,
 }) => {
+  const { t } = useLanguage();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -148,14 +150,14 @@ export const MediaPickerModal: React.FC<MediaPickerModalProps> = ({
         {/* HEADER */}
         <div className="p-4 sm:p-5 border-b border-[var(--border)] flex items-start justify-between gap-3 bg-[var(--surface-muted)] shrink-0">
           <div className="min-w-0">
-            <h3 className="font-bold text-[var(--text)] text-base">Select Media</h3>
+            <h3 className="font-bold text-[var(--text)] text-base">{t("Select Media")}</h3>
             <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
               {single
-                ? "Pick one image from the media library."
-                : "Pick images from the media library to add to this product."}
+                ? t("Pick one image from the media library.")
+                : t("Pick images from the media library to add to this product.")}
             </p>
           </div>
-          <Button variant="ghost" size="sm" icon={X} onClick={onClose} aria-label="Close picker" className="close-x" />
+          <Button variant="ghost" size="sm" icon={X} onClick={onClose} aria-label={t("Close picker")} className="close-x" />
         </div>
 
         {/* SEARCH */}
@@ -170,7 +172,11 @@ export const MediaPickerModal: React.FC<MediaPickerModalProps> = ({
               // (name, alt text) are case-insensitive on the server, so
               // uppercasing the query loses nothing.
               onChange={(e) => setQuery(e.target.value.toUpperCase())}
-              placeholder="Search by name, alt text or code…"
+              placeholder={t("Search by name, alt text or code…")}
+              autoComplete="off"
+              spellCheck={false}
+              autoCorrect="off"
+              autoCapitalize="off"
               autoFocus
               className="w-full pl-9 pr-3 py-2 bg-[var(--surface-muted)] border border-[var(--border)] rounded-xl outline-none text-xs text-[var(--text)] focus:border-[var(--primary)] transition-colors"
             />
@@ -178,15 +184,15 @@ export const MediaPickerModal: React.FC<MediaPickerModalProps> = ({
           <p className="text-[11px] text-[var(--text-muted)] mt-2">
             {single
               ? selected.length > 0
-                ? "1 image selected."
-                : "Select one image from the library."
+                ? t("1 image selected.")
+                : t("Select one image from the library.")
               : remaining === 0
-                ? `This product already has the maximum of ${maxTotal} images.`
-                : `${remaining} of ${maxTotal} image slots available — ${selected.length} selected.`}
+                ? t("This product already has the maximum of {maxTotal} images.").replace("{maxTotal}", String(maxTotal))
+                : t("{remaining} of {maxTotal} image slots available — {selected} selected.").replace("{remaining}", String(remaining)).replace("{maxTotal}", String(maxTotal)).replace("{selected}", String(selected.length))}
             {!single && limitHit && remaining > 0 && (
               <span className="text-[var(--primary)] font-semibold">
                 {" "}
-                Slot limit reached; deselect one to pick another.
+                {t("Slot limit reached; deselect one to pick another.")}
               </span>
             )}
           </p>
@@ -199,13 +205,13 @@ export const MediaPickerModal: React.FC<MediaPickerModalProps> = ({
           ) : loading && results.length === 0 ? (
             <div className="flex items-center justify-center gap-2 py-10 text-xs text-[var(--text-muted)]">
               <Loader2 className="w-4 h-4 animate-spin text-[var(--primary)]" />
-              Loading media…
+              {t("Loading media…")}
             </div>
           ) : results.length === 0 ? (
             <p className="text-xs text-[var(--text-muted)] italic py-10 text-center">
               {query
-                ? "No media matches that search. Try a name, alt text or code."
-                : "The media library is empty — upload an image first."}
+                ? t("No media matches that search. Try a name, alt text or code.")
+                : t("The media library is empty — upload an image first.")}
             </p>
           ) : (
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2.5">
@@ -244,12 +250,12 @@ export const MediaPickerModal: React.FC<MediaPickerModalProps> = ({
                     )}
                     {added && (
                       <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded-md bg-black/65 text-white text-[9px] font-bold">
-                        Added
+                        {t("Added")}
                       </span>
                     )}
                     <span className="block px-1.5 py-1 bg-[var(--surface)]">
                       <span className="block text-[10px] font-semibold text-[var(--text)] truncate">
-                        {media.originalName || media.filename || "Untitled file"}
+                        {media.originalName || media.filename || t("Untitled file")}
                       </span>
                       <span className="block text-[9px] text-[var(--text-muted)] truncate">
                         {media.code ? `${media.code} · ${alt}` : alt}
@@ -272,11 +278,11 @@ export const MediaPickerModal: React.FC<MediaPickerModalProps> = ({
               icon={Pencil}
               onClick={() => onEditSelected(selected[0])}
             >
-              Edit
+              {t("Edit")}
             </Button>
           )}
           <Button variant="outline" size="md" type="button" onClick={onClose}>
-            Cancel
+            {t("Cancel")}
           </Button>
           <Button
             type="button"
@@ -285,7 +291,7 @@ export const MediaPickerModal: React.FC<MediaPickerModalProps> = ({
             disabled={selected.length === 0}
             onClick={handleConfirm}
           >
-            {single ? "Select Image" : `Add Selected (${selected.length})`}
+            {single ? t("Select Image") : t("Add Selected ({count})").replace("{count}", String(selected.length))}
           </Button>
         </div>
       </div>

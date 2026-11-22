@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState, ComponentPropsWithoutRef } from "react";
 import { Check, ChevronDown, Plus, Search } from "lucide-react";
+import { useLanguage } from "@/services/i18n";
 
 // Types Definition
 export type SelectVariant = "primary" | "secondary" | "outline" | "ghost" | "danger";
@@ -87,6 +88,7 @@ const Select: React.FC<SelectProps> = ({
   onEmptyAction,
   ...props
 }) => {
+  const { t } = useLanguage();
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -145,7 +147,7 @@ const Select: React.FC<SelectProps> = ({
       >
         <span className="inline-flex items-center gap-1.5 truncate">
           <span className="truncate font-medium">
-            {selectedOption ? selectedOption.label : placeholder}
+            {selectedOption ? selectedOption.label : t(placeholder)}
           </span>
         </span>
         <ChevronDown
@@ -173,7 +175,11 @@ const Select: React.FC<SelectProps> = ({
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   onClick={(event) => event.stopPropagation()}
-                  placeholder={searchPlaceholder}
+                  placeholder={t(searchPlaceholder)}
+                  autoComplete="off"
+                  spellCheck={false}
+                  autoCorrect="off"
+                  autoCapitalize="off"
                   className="h-8 w-full rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] pl-8 pr-2.5 text-xs text-[var(--text)] placeholder:text-[var(--text-muted)] outline-none transition focus:border-[var(--primary)]"
                 />
               </div>
@@ -182,7 +188,7 @@ const Select: React.FC<SelectProps> = ({
           {options.length === 0 && (emptyText || emptyActionLabel) ? (
             <div className="px-3 py-2.5">
               {emptyText && (
-                <p className="text-xs text-[var(--text-muted)]">{emptyText}</p>
+                <p className="text-xs text-[var(--text-muted)]">{t(emptyText)}</p>
               )}
               {emptyActionLabel && onEmptyAction && (
                 <button
@@ -194,13 +200,13 @@ const Select: React.FC<SelectProps> = ({
                   className="mt-2 inline-flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 py-2 text-xs font-bold text-[var(--primary-text,#ffffff)] transition-opacity hover:opacity-90"
                 >
                   <Plus className="h-3.5 w-3.5" />
-                  {emptyActionLabel}
+                  {t(emptyActionLabel)}
                 </button>
               )}
             </div>
           ) : visibleOptions.length === 0 ? (
             <p className="px-3 py-2.5 text-xs text-[var(--text-muted)]">
-              No matches found
+              {t("No matches found")}
             </p>
           ) : (
             visibleOptions.map((option) => {

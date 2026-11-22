@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Cloud, Database, HardDrive, Image as ImageIcon } from "lucide-react";
 import StatCard, { StatCardProps } from "@/components/ui/StatsCard";
 import { mediaService } from "@/services/resourceRegistry";
+import { useLanguage } from "@/services/i18n";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Row = Record<string, any>;
@@ -45,6 +46,7 @@ const PROVIDER_LABELS: Record<string, string> = {
  * Everything is computed from the API — nothing is hard-coded.
  */
 export default function MediaStats({ items, isLoading = false }: { items: Row[]; isLoading?: boolean }) {
+  const { t } = useLanguage();
   const [storage, setStorage] = useState<StorageInfo | null>(null);
 
   // Refetch when the row count changes (upload/delete) as well as on mount.
@@ -93,37 +95,37 @@ export default function MediaStats({ items, isLoading = false }: { items: Row[];
 
     return [
       {
-        title: "Media Library",
+        title: t("Media Library"),
         value: placeholder ?? items.length.toLocaleString(),
         change: "",
         isPositive: true,
-        period: `${published} published · ${draft} draft · ${archived} archived`,
+        period: t("{published} published · {draft} draft · {archived} archived").replace("{published}", String(published)).replace("{draft}", String(draft)).replace("{archived}", String(archived)),
         icon: ImageIcon,
         theme: "blue",
       },
       {
-        title: "Storage Used",
+        title: t("Storage Used"),
         value: placeholder ?? formatBytes(cloudUsed),
         change: "",
         isPositive: true,
         period:
           cloudTotal != null
-            ? `${formatBytes(cloudAvailable)} available of ${formatBytes(cloudTotal)} (${cloud?.plan || "Cloudinary"} plan)`
-            : "Cloudinary usage unavailable",
+            ? t("{available} available of {total} ({plan} plan)").replace("{available}", formatBytes(cloudAvailable)).replace("{total}", formatBytes(cloudTotal)).replace("{plan}", cloud?.plan || "Cloudinary")
+            : t("Cloudinary usage unavailable"),
         icon: HardDrive,
         theme: "green",
       },
       {
-        title: "Storage Providers",
+        title: t("Storage Providers"),
         value: placeholder ?? "Cloudinary",
         change: "",
         isPositive: true,
-        period: "Connected · AWS S3 & Firebase not configured",
+        period: t("Connected · AWS S3 & Firebase not configured"),
         icon: Cloud,
         theme: "orange",
       },
       {
-        title: "Space by Provider",
+        title: t("Space by Provider"),
         value:
           placeholder ??
           (topProvider ? formatBytes(topProvider[1]?.usedBytes || 0) : "0 B"),
@@ -134,7 +136,7 @@ export default function MediaStats({ items, isLoading = false }: { items: Row[];
         theme: "purple",
       },
     ] as StatCardProps[];
-  }, [items, storage, isLoading]);
+  }, [items, storage, isLoading, t]);
 
   return (
     <div className="w-full grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4 text-[var(--text)]">

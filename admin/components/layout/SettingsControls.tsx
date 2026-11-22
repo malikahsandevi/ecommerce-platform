@@ -16,11 +16,12 @@ export function SettingsCard({
   description: string;
   children: ReactNode;
 }) {
+  const { t } = useLanguage();
   return (
     <section className="rounded-xl border border-[var(--border)] bg-[var(--background)] p-5 lg:p-6">
       <header className="mb-6">
-        <h2 className="text-base font-semibold text-[var(--text)]">{title}</h2>
-        <p className="mt-1 text-xs text-[var(--text-muted)]">{description}</p>
+        <h2 className="text-base font-semibold text-[var(--text)]">{t(title)}</h2>
+        <p className="mt-1 text-xs text-[var(--text-muted)]">{t(description)}</p>
       </header>
       {children}
     </section>
@@ -32,6 +33,7 @@ export function SettingsInput({
   className = "",
   ...props
 }: InputHTMLAttributes<HTMLInputElement> & { label: string }) {
+  const { t } = useLanguage();
   const inputRef = useRef<HTMLInputElement>(null);
   const isNumber = props.type === "number";
 
@@ -57,11 +59,23 @@ export function SettingsInput({
 
   return (
     <label className={`block ${className}`}>
-      <span className="mb-2 block text-xs font-medium text-[var(--text-soft)]">{label}</span>
+      <span className="mb-2 block text-xs font-medium text-[var(--text-soft)]">{t(label)}</span>
       <span className="relative block">
         <input
           ref={inputRef}
           {...props}
+          placeholder={typeof props.placeholder === "string" ? t(props.placeholder) : props.placeholder}
+          // AUTOFILL IS OFF across the whole Settings panel (Ahsan's
+          // order): the browser must never suggest or populate saved
+          // values in a Settings field. Password-type (credential)
+          // inputs use "new-password" — the value browsers actually
+          // honour for password fields — everything else gets "off".
+          // An explicitly-passed value (the 2FA code's "one-time-code")
+          // is respected; nothing may pass "on".
+          autoComplete={props.autoComplete ?? (props.type === "password" ? "new-password" : "off")}
+          spellCheck={false}
+          autoCorrect="off"
+          autoCapitalize="off"
           className={`h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-sm text-[var(--text)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)] ${isNumber ? "pr-7" : ""}`}
         />
         {isNumber && (
@@ -89,16 +103,21 @@ export function SettingsSelect({
   searchable?: boolean;
   searchPlaceholder?: string;
 }) {
+  const { t } = useLanguage();
   return (
     <div>
-      <span className="mb-2 block text-xs font-medium text-[var(--text-soft)]">{label}</span>
+      <span className="mb-2 block text-xs font-medium text-[var(--text-soft)]">{t(label)}</span>
       <Select
         value={value}
         options={options.map((option) =>
-          typeof option === "string" ? { label: option, value: option } : option,
+          // String options are UI enums (themes, auth types, methods):
+          // their DISPLAY label translates, the value stays English.
+          // Object options carry data labels (timezones, currencies)
+          // and pass through untouched.
+          typeof option === "string" ? { label: t(option), value: option } : option,
         )}
         onChange={onChange}
-        placeholder={placeholder}
+        placeholder={placeholder ? t(placeholder) : placeholder}
         variant="outline"
         fullWidth
         // Settings selects sit beside SettingsInput fields and must
@@ -107,7 +126,7 @@ export function SettingsSelect({
         // rendering bigger than the neighbouring input).
         triggerClassName="h-10 px-3"
         searchable={searchable}
-        searchPlaceholder={searchPlaceholder}
+        searchPlaceholder={searchPlaceholder ? t(searchPlaceholder) : searchPlaceholder}
       />
     </div>
   );
@@ -122,12 +141,13 @@ export function SettingsToggle({
   enabled: boolean;
   onChange: (enabled: boolean) => void;
 }) {
+  const { t } = useLanguage();
   return (
     <button
       type="button"
       role="switch"
       aria-checked={enabled}
-      aria-label={label}
+      aria-label={t(label)}
       onClick={() => onChange(!enabled)}
       className={`relative h-5 w-9 shrink-0 rounded-full transition ${
         enabled ? "bg-[var(--primary)]" : "bg-[var(--border)]"
@@ -143,7 +163,8 @@ export function SettingsToggle({
 }
 
 export function SettingsSectionTitle({ title }: { title: string }) {
-  return <h3 className="text-sm font-semibold text-[var(--text)]">{title}</h3>;
+  const { t } = useLanguage();
+  return <h3 className="text-sm font-semibold text-[var(--text)]">{t(title)}</h3>;
 }
 
 export function SettingsSaveButton({

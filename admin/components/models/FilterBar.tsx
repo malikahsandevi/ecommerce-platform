@@ -10,6 +10,7 @@ import Select, {
   DropdownDirection,
 } from "@/components/ui/Select";
 import Button from "@/components/ui/Button";
+import { useLanguage } from "@/services/i18n";
 
 export interface FilterConfigItem {
   id: string;
@@ -60,6 +61,8 @@ export const FilterBar = <TSearchData extends SearchableEntityRecord>({
   onDataChange,
   clearButtonText = "Clear",
 }: FilterBarProps<TSearchData>) => {
+  const { t } = useLanguage();
+
   // Internal State
   const [searchedData, setSearchedData] = useState<TSearchData[]>(sourceData);
   const [filterValues, setFilterValues] = useState<Record<string, string>>(
@@ -130,7 +133,7 @@ export const FilterBar = <TSearchData extends SearchableEntityRecord>({
         searchSourceData={sourceData}
         searchableFieldsKeys={searchableFieldsKeys}
         onSearchResultsUpdate={setSearchedData}
-        searchPlaceholder={searchPlaceholder}
+        searchPlaceholder={t(searchPlaceholder)}
         searchVariant={searchVariant}
         searchSize={searchSize}
         showShortcut={showShortcut}
@@ -145,11 +148,14 @@ export const FilterBar = <TSearchData extends SearchableEntityRecord>({
             menuWide={true}
             className="flex-1 border-[var(--border)] bg-[var(--surface)] text-[var(--text)]"
             value={filterValues[item.id] || "all"}
-            options={item.options}
+            options={item.options.map((option) => ({
+              ...option,
+              label: t(option.label),
+            }))}
             onChange={(selectedValue) =>
               handleFilterChange(item.id, selectedValue)
             }
-            placeholder={item.placeholder}
+            placeholder={item.placeholder ? t(item.placeholder) : item.placeholder}
             variant={item.variant || "primary"}
             size={item.size || "md"}
             direction={item.direction || "bottom"}
@@ -165,7 +171,7 @@ export const FilterBar = <TSearchData extends SearchableEntityRecord>({
           onClick={handleClearFilters}
           disabled={!isClearActive}
         >
-          {clearButtonText}
+          {t(clearButtonText)}
         </Button>
       </div>
     </div>

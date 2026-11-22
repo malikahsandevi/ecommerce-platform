@@ -12,6 +12,7 @@ import {
   CircleAlert,
 } from "lucide-react";
 import { apiClient } from "@/services/api";
+import { useLanguage } from "@/services/i18n";
 
 export interface GlobalSearchResult {
   type: "product" | "category" | "brand" | "media";
@@ -114,6 +115,7 @@ function parseQuery(raw: string): {
  * dropdown panel under the box. Supports the `text//scope` syntax.
  */
 export const GlobalSearch: React.FC = () => {
+  const { t } = useLanguage();
   const router = useRouter();
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -259,6 +261,9 @@ export const GlobalSearch: React.FC = () => {
         ref={inputRef}
         type="text"
         value={query}
+        spellCheck={false}
+        autoCorrect="off"
+        autoCapitalize="off"
         onChange={(e) => {
           setQuery(e.target.value);
           setOpen(true);
@@ -278,9 +283,9 @@ export const GlobalSearch: React.FC = () => {
             goToResult(results[activeIndex]);
           }
         }}
-        placeholder={showHintOverlay ? "" : SEARCH_HINTS[0]}
+        placeholder={showHintOverlay ? "" : t(SEARCH_HINTS[0])}
         autoComplete="off"
-        aria-label="Global search"
+        aria-label={t("Global search")}
         className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] py-1.5 pl-8 pr-1 text-sm font-medium text-[var(--text)] outline-none transition-all placeholder:text-[var(--text-muted)]"
       />
       {showHintOverlay && (
@@ -296,7 +301,7 @@ export const GlobalSearch: React.FC = () => {
             data-search-hint
             className="search-hint-roll block truncate text-sm font-medium text-[var(--text-muted)]"
           >
-            {SEARCH_HINTS[hintIndex]}
+            {t(SEARCH_HINTS[hintIndex])}
           </span>
         </span>
       )}
@@ -310,17 +315,17 @@ export const GlobalSearch: React.FC = () => {
         <div className="absolute left-0 right-0 top-full z-50 mt-2 max-h-80 overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--surface)] py-1 shadow-[0_16px_40px_-8px_rgba(0,0,0,0.45)] animate-in fade-in zoom-in-95 duration-100 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-[var(--surface-muted)] [&::-webkit-scrollbar-thumb]:bg-[var(--primary)] [&::-webkit-scrollbar-thumb]:rounded-full">
           {scope !== "all" && (
             <p className="border-b border-[var(--border)] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
-              {SCOPE_LABEL[scope]} only
+              {t("{scope} only").replace("{scope}", t(SCOPE_LABEL[scope]))}
             </p>
           )}
           {loading ? (
             <p className="flex items-center gap-2 px-3 py-2.5 text-xs text-[var(--text-muted)]">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              Searching…
+              {t("Searching…")}
             </p>
           ) : results.length === 0 ? (
             <p className="px-3 py-2.5 text-xs text-[var(--text-muted)]">
-              No results found
+              {t("No results found")}
             </p>
           ) : (
             results.map((result, index) => {
@@ -368,7 +373,7 @@ export const GlobalSearch: React.FC = () => {
                   <span
                     className={`shrink-0 rounded-full px-1.5 py-px text-[9px] font-bold uppercase tracking-wide ${meta.tagClasses}`}
                   >
-                    {meta.label}
+                    {t(meta.label)}
                   </span>
                 </button>
               );
@@ -383,8 +388,9 @@ export const GlobalSearch: React.FC = () => {
                 <CircleAlert className="h-4 w-4 text-amber-500" />
               </span>
               <span className="min-w-0 flex-1 truncate text-xs text-[var(--text-muted)]">
-                &quot;{invalidTag}&quot; invalid tag — results from &quot;
-                {text}&quot;
+                {t('"{tag}" invalid tag — results from "{text}"')
+                  .replace("{tag}", invalidTag)
+                  .replace("{text}", text)}
               </span>
             </div>
           )}

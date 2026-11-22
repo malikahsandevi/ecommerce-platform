@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { apiClient } from './api';
 
 export interface AppearanceSettings {
@@ -5,6 +6,12 @@ export interface AppearanceSettings {
   compactSidebar?: boolean;
   showBreadcrumbs?: boolean;
   enableAnimations?: boolean;
+  /** Settings → Appearance theme colors: two INDEPENDENT hex colors.
+   *  adminColor drives THIS panel's primary/accent; storefrontColor
+   *  is only stored (the storefront reads it from the public
+   *  /api/storefront/theme endpoint) and never affects the panel. */
+  adminColor?: string;
+  storefrontColor?: string;
 }
 
 export const SIDEBAR_PREF_EVENT = 'admin:sidebar-pref';
@@ -35,9 +42,133 @@ export function persistTheme(theme: DeviceTheme): void {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('theme', theme);
     document.cookie = `theme=${theme}; path=/; max-age=31536000; SameSite=Lax`;
+    // The admin color's derived shades depend on the theme (light
+    // tints vs dark shades) — re-apply them for the new theme.
+    applyAdminColor(getDeviceAdminColor());
   } catch {
     /* theme is cosmetic — never let it break the panel */
   }
+}
+
+// ── Admin theme color ────────────────────────────────────────────────
+// Settings → Appearance → "Admin Panel Color". The saved hex drives
+// the panel's --primary family through inline custom properties on
+// <html> (inline properties beat the stylesheet's :root / [data-theme]
+// rules), persisted exactly like the theme: localStorage + cookie for
+// the pre-paint script in the root layout, Setting doc for other
+// devices. No saved color → no inline override → the stylesheet's
+// current orange rules, so nothing changes until a color is picked.
+export const DEFAULT_ADMIN_COLOR = '#f97316';
+export const ADMIN_COLOR_EVENT = 'admin:color';
+const ADMIN_COLOR_KEY = 'admin-color';
+
+export const isValidHexColor = (value: string): boolean => /^#[0-9a-fA-F]{6}$/.test(value);
+
+const hexToRgb = (hex: string): [number, number, number] => [
+  parseInt(hex.slice(1, 3), 16),
+  parseInt(hex.slice(3, 5), 16),
+  parseInt(hex.slice(5, 7), 16),
+];
+
+const rgbToHex = (rgb: [number, number, number]): string =>
+  `#${rgb.map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('')}`;
+
+/** Mix a hex color toward white (amount 0..1). */
+export const tint = (hex: string, amount: number): string => {
+  const rgb = hexToRgb(hex);
+  return rgbToHex([rgb[0] + (255 - rgb[0]) * amount, rgb[1] + (255 - rgb[1]) * amount, rgb[2] + (255 - rgb[2]) * amount]);
+};
+
+/** Mix a hex color toward black (amount 0..1). */
+export const shade = (hex: string, amount: number): string => {
+  const rgb = hexToRgb(hex);
+  return rgbToHex([rgb[0] * (1 - amount), rgb[1] * (1 - amount), rgb[2] * (1 - amount)]);
+};
+
+/** The four --primary* values for a base color under a theme. The
+ *  root layout's pre-paint script computes these with the same math,
+ *  so the first paint and the runtime application always agree. */
+export function adminColorVars(color: string, theme: DeviceTheme): Record<string, string> {
+  if (theme === 'dark') {
+    return {
+      '--primary': color,
+      '--primary-dark': shade(color, 0.15),
+      '--primary-light': shade(color, 0.12),
+      '--primary-soft': shade(color, 0.8),
+    };
+  }
+  return {
+    '--primary': color,
+    '--primary-dark': shade(color, 0.12),
+    '--primary-light': tint(color, 0.76),
+    '--primary-soft': tint(color, 0.93),
+  };
+}
+
+const ADMIN_COLOR_VARS = ['--primary', '--primary-light', '--primary-soft', '--primary-dark'];
+
+/** The device's stored admin color (null = built-in default). */
+export function getDeviceAdminColor(): string | null {
+  try {
+    const stored = localStorage.getItem(ADMIN_COLOR_KEY);
+    return stored && isValidHexColor(stored) ? stored : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Applies a color (or clears the override for the default) to <html>
+ *  for the CURRENT theme. Does not persist — persistAdminColor does. */
+export function applyAdminColor(color: string | null): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const root = document.documentElement;
+    if (!color || !isValidHexColor(color)) {
+      for (const name of ADMIN_COLOR_VARS) root.style.removeProperty(name);
+      return;
+    }
+    const theme: DeviceTheme = root.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+    const vars = adminColorVars(color, theme);
+    for (const [name, value] of Object.entries(vars)) root.style.setProperty(name, value);
+  } catch {
+    /* color is cosmetic — never let it break the panel */
+  }
+}
+
+/** Writes an admin color choice to every store at once (inline vars,
+ *  localStorage, the SSR/pre-paint cookie) and notifies consumers. */
+export function persistAdminColor(color: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    if (color && isValidHexColor(color)) {
+      localStorage.setItem(ADMIN_COLOR_KEY, color);
+      document.cookie = `${ADMIN_COLOR_KEY}=${encodeURIComponent(color)}; path=/; max-age=31536000; SameSite=Lax`;
+      applyAdminColor(color);
+    } else {
+      localStorage.removeItem(ADMIN_COLOR_KEY);
+      document.cookie = `${ADMIN_COLOR_KEY}=; path=/; max-age=0; SameSite=Lax`;
+      applyAdminColor(null);
+    }
+    window.dispatchEvent(new CustomEvent(ADMIN_COLOR_EVENT, { detail: color || '' }));
+  } catch {
+    /* color is cosmetic — never let it break the panel */
+  }
+}
+
+/** The panel's current admin color (the saved one, or the default) —
+ *  reactive: chart accents and ramps re-derive when it changes. */
+export function useAdminColor(): string {
+  const [color, setColor] = useState<string>(() => getDeviceAdminColor() ?? DEFAULT_ADMIN_COLOR);
+  useEffect(() => {
+    setColor(getDeviceAdminColor() ?? DEFAULT_ADMIN_COLOR);
+    const onChange = (event: Event) => {
+      const detail = (event as CustomEvent<string>).detail;
+      setColor(detail && isValidHexColor(detail) ? detail : (getDeviceAdminColor() ?? DEFAULT_ADMIN_COLOR));
+    };
+    window.addEventListener(ADMIN_COLOR_EVENT, onChange);
+    return () => window.removeEventListener(ADMIN_COLOR_EVENT, onChange);
+  }, []);
+  return color;
 }
 
 /**
@@ -95,6 +226,13 @@ export function applyAppearance(appearance: AppearanceSettings | undefined): voi
         appearance.enableAnimations ? 'on' : 'off',
       );
     }
+
+    // Admin theme color — persisted to the device stores and applied
+    // as inline --primary* overrides. (storefrontColor is NOT applied
+    // here: it belongs to the customer storefront only.)
+    if (typeof appearance.adminColor === 'string') {
+      persistAdminColor(appearance.adminColor);
+    }
   } catch {
     /* appearance is cosmetic — never let it break the panel */
   }
@@ -127,8 +265,13 @@ export async function fetchAndApplyAppearance(): Promise<void> {
     const toApply: AppearanceSettings = { ...appearance };
     if (deviceTheme) delete toApply.theme;
     if (deviceSidebar) delete toApply.compactSidebar;
+    // Same device precedence for the admin color: a color this device
+    // already chose wins; the server value only seeds a fresh device.
+    const deviceColor = getDeviceAdminColor();
+    if (deviceColor) delete toApply.adminColor;
     applyAppearance(toApply);
     if (deviceTheme) persistTheme(deviceTheme);
+    if (deviceColor) applyAdminColor(deviceColor);
   } catch {
     /* settings may be unreachable — the panel keeps its local defaults */
   }

@@ -1,5 +1,6 @@
 import React from "react";
 import { LucideIcon, TrendingDown, TrendingUp } from "lucide-react";
+import { useLanguage } from "@/services/i18n";
 
 export interface DashboardStatCardProps {
   title: string;
@@ -24,6 +25,7 @@ export const DashboardStatCard: React.FC<DashboardStatCardProps> = ({
   highlighted = false,
   loading = false,
 }) => {
+  const { t } = useLanguage();
   if (loading) {
     return (
       <div className="w-full min-w-0 p-5 bg-(--background) rounded-2xl shadow-sm border border-(--border) animate-pulse flex flex-col justify-between min-h-30">
@@ -93,7 +95,7 @@ export const DashboardStatCard: React.FC<DashboardStatCardProps> = ({
           ) : (
             <span className="text-xs font-bold text-(--text-muted)">—</span>
           )}
-          <p className="text-[10px] text-(--text-muted) mt-0.5">vs last week</p>
+          <p className="text-[10px] text-(--text-muted) mt-0.5">{t("vs last week")}</p>
         </div>
       </div>
     </div>

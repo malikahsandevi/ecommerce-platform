@@ -12,6 +12,7 @@ import {
   ProfileCardsPopup,
   type ProfilePopupKind,
 } from "@/components/models/ProfileCardsPopup";
+import { useLanguage } from "@/services/i18n";
 
 export const FAVORITE_CATEGORY_LIMIT = 3;
 
@@ -33,10 +34,12 @@ const PopupEntry: React.FC<{
   title: string;
   count: number;
   onClick: () => void;
-}> = ({ title, count, onClick }) => (
+}> = ({ title, count, onClick }) => {
+  const { t } = useLanguage();
+  return (
   <div>
     <span className="mb-1 block text-[11px] font-semibold text-[var(--text-soft)]">
-      {title}
+      {t(title)}
     </span>
     <button
       type="button"
@@ -44,12 +47,13 @@ const PopupEntry: React.FC<{
       className="flex w-full cursor-pointer items-center justify-between gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-2 py-2 text-left transition-colors hover:border-[var(--primary)]"
     >
       <span className="text-xs font-medium text-[var(--text)]">
-        {count} {count === 1 ? "product" : "products"}
+        {t(count === 1 ? "{count} product" : "{count} products").replace("{count}", String(count))}
       </span>
       <ChevronRight size={14} className="shrink-0 text-[var(--text-muted)]" />
     </button>
   </div>
-);
+  );
+};
 
 /**
  * The customer form's "Shopping Profile" section. Favorite Categories
@@ -64,6 +68,7 @@ export const CustomerShoppingProfile: React.FC<CustomerShoppingProfileProps> = (
   value,
   onChange,
 }) => {
+  const { t } = useLanguage();
   const [categories, setCategories] = useState<CategoryOption[]>([]);
   const [profile, setProfile] = useState<CustomerProfile | null>(null);
   const [popup, setPopup] = useState<ProfilePopupKind | null>(null);
@@ -78,7 +83,7 @@ export const CustomerShoppingProfile: React.FC<CustomerShoppingProfileProps> = (
         setCategories(
           rows.map((row: { _id?: string; id?: string; name?: string }) => ({
             id: String(row._id || row.id || ""),
-            name: row.name || "Unnamed category",
+            name: row.name || t("Unnamed category"),
           })).filter((row: CategoryOption) => row.id),
         );
       })
@@ -88,7 +93,7 @@ export const CustomerShoppingProfile: React.FC<CustomerShoppingProfileProps> = (
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (!customerId) {
@@ -123,7 +128,7 @@ export const CustomerShoppingProfile: React.FC<CustomerShoppingProfileProps> = (
       <div>
         <div className="mb-1 flex items-baseline justify-between">
           <span className="block text-[11px] font-semibold text-[var(--text-soft)]">
-            Favorite Categories
+            {t("Favorite Categories")}
           </span>
           <span className="text-[11px] font-medium text-[var(--text-muted)]">
             {value.length}/{FAVORITE_CATEGORY_LIMIT}
@@ -156,12 +161,12 @@ export const CustomerShoppingProfile: React.FC<CustomerShoppingProfileProps> = (
           </div>
         ) : (
           <p className="text-[11px] text-[var(--text-muted)]">
-            No categories available yet.
+            {t("No categories available yet.")}
           </p>
         )}
         {atCap && (
           <p className="mt-1 text-[10px] text-[var(--text-muted)]">
-            Maximum {FAVORITE_CATEGORY_LIMIT} favorite categories — remove one to pick another.
+            {t("Maximum {limit} favorite categories — remove one to pick another.").replace("{limit}", String(FAVORITE_CATEGORY_LIMIT))}
           </p>
         )}
       </div>

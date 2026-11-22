@@ -136,6 +136,10 @@ export const SERVICE_CATALOGUE: ServiceCategoryDef[] = [
         fields: [F("merchantId", "Merchant ID"), F("securedKey", "Secured Key", true)],
         endpoints: [],
       },
+      // Custom is ALWAYS last (Ahsan's order): any gateway not in the
+      // list is added with free key-value pairs; the entry still
+      // stores this tab's category (PAYMENT) with sub-service "custom".
+      { id: "custom", name: "Custom", hasFixedBase: false, fields: [], endpoints: [] },
     ],
   },
   {
@@ -260,6 +264,10 @@ export const SERVICE_CATALOGUE: ServiceCategoryDef[] = [
       { id: "aftership", name: "AfterShip", hasFixedBase: true, fields: [F("apiKey", "API Key", true)], endpoints: [{ name: "couriers", path: "/couriers", method: "GET" }] },
       { id: "leopards", name: "Leopards Courier", hasFixedBase: false, fields: [F("apiKey", "API Key", true)], endpoints: [] },
       { id: "postex", name: "PostEx", hasFixedBase: true, fields: [F("apiToken", "API Token", true)], endpoints: [] },
+      // Custom is ALWAYS last (Ahsan's order): any carrier not in the
+      // list is added with free key-value pairs; the entry still
+      // stores this tab's category (SHIPPING) with sub-service "custom".
+      { id: "custom", name: "Custom", hasFixedBase: false, fields: [], endpoints: [] },
     ],
   },
   {

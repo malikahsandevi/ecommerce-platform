@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, Info, Loader2 } from "lucide-react";
 import Button from "@/components/ui/Button";
+import { useLanguage } from "@/services/i18n";
 
 /**
  * The admin's own confirmation dialog — the ONLY confirmation UI in the
@@ -55,6 +56,7 @@ export function noticeDialog(
 }
 
 export const ConfirmDialogHost: React.FC = () => {
+  const { t } = useLanguage();
   const [queue, setQueue] = useState<PendingRequest[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -92,13 +94,13 @@ export const ConfirmDialogHost: React.FC = () => {
         setError(
           confirmError instanceof Error
             ? confirmError.message
-            : "Something went wrong. Please try again.",
+            : t("Something went wrong. Please try again."),
         );
       }
       return;
     }
     finish(true);
-  }, [current, busy, finish]);
+  }, [current, busy, finish, t]);
 
   const handleCancel = useCallback(() => {
     if (busy) return;
@@ -130,7 +132,8 @@ export const ConfirmDialogHost: React.FC = () => {
   const { options } = current;
   const danger = options.variant === "danger";
   const title =
-    options.title ?? (options.notice ? "Notice" : danger ? "Are you sure?" : "Confirm");
+    options.title ??
+    (options.notice ? t("Notice") : danger ? t("Are you sure?") : t("Confirm"));
 
   return (
     <div
@@ -183,7 +186,7 @@ export const ConfirmDialogHost: React.FC = () => {
         <div className="mt-5 flex items-center justify-end gap-2">
           {!options.notice && (
             <Button variant="ghost" size="md" onClick={handleCancel} disabled={busy}>
-              {options.cancelLabel ?? "Cancel"}
+              {options.cancelLabel ?? t("Cancel")}
             </Button>
           )}
           <Button
@@ -200,10 +203,10 @@ export const ConfirmDialogHost: React.FC = () => {
             {busy ? (
               <span className="flex items-center gap-1.5">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Working...
+                {t("Working...")}
               </span>
             ) : (
-              (options.confirmLabel ?? (options.notice ? "OK" : "Confirm"))
+              (options.confirmLabel ?? (options.notice ? t("OK") : t("Confirm")))
             )}
           </Button>
         </div>

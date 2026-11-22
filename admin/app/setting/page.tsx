@@ -96,7 +96,7 @@ export default function SettingsPage() {
         if (!cancelled) setSettings(data);
       })
       .catch((loadError: unknown) => {
-        if (!cancelled) toast.error(loadError instanceof Error ? loadError.message : "Unable to load settings.");
+        if (!cancelled) toast.error(loadError instanceof Error ? loadError.message : t("Unable to load settings."));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -116,7 +116,7 @@ export default function SettingsPage() {
         if (!cancelled) setUsers(data);
       })
       .catch((loadError: unknown) => {
-        if (!cancelled) toast.error(loadError instanceof Error ? loadError.message : "Unable to load users.");
+        if (!cancelled) toast.error(loadError instanceof Error ? loadError.message : t("Unable to load users."));
       });
 
     return () => {
@@ -139,9 +139,9 @@ export default function SettingsPage() {
         const language = (updated.general as { language?: string } | undefined)?.language;
         if (language) applyLanguage(language);
       }
-      toast.success("Settings saved.");
+      toast.success(t("Settings saved."));
     } catch (saveError) {
-      toast.error(saveError instanceof Error ? saveError.message : "Unable to save settings.");
+      toast.error(saveError instanceof Error ? saveError.message : t("Unable to save settings."));
     } finally {
       setSaving(false);
     }
@@ -149,9 +149,9 @@ export default function SettingsPage() {
 
   const deleteUser = async (id: string) => {
     const confirmed = await confirmDialog({
-      title: "Delete this user?",
-      message: "The account will be removed permanently. This cannot be undone.",
-      confirmLabel: "Delete",
+      title: t("Delete this user?"),
+      message: t("The account will be removed permanently. This cannot be undone."),
+      confirmLabel: t("Delete"),
       variant: "danger",
     });
     if (!confirmed) return;
@@ -159,7 +159,7 @@ export default function SettingsPage() {
       await settingsService.deleteUser(id);
       setUsers((currentUsers) => currentUsers.filter((user) => user._id !== id));
     } catch (deleteError) {
-      toast.error(deleteError instanceof Error ? deleteError.message : "Unable to delete user.");
+      toast.error(deleteError instanceof Error ? deleteError.message : t("Unable to delete user."));
     }
   };
 
@@ -174,14 +174,14 @@ export default function SettingsPage() {
     try {
       const created = await settingsService.createUser(values);
       setUsers((currentUsers) => [...currentUsers, created]);
-      toast.success("User created.");
+      toast.success(t("User created."));
     } catch (createError) {
       // Rethrow with the API's message so the Add User form can show it
       // in place (e.g. "A user with this email already exists.").
       const apiMessage = (createError as { response?: { data?: { message?: string } } })?.response
         ?.data?.message;
       throw new Error(
-        apiMessage || (createError instanceof Error ? createError.message : "Unable to create user."),
+        apiMessage || (createError instanceof Error ? createError.message : t("Unable to create user.")),
       );
     }
   };
@@ -192,13 +192,13 @@ export default function SettingsPage() {
       setUsers((currentUsers) =>
         currentUsers.map((user) => (user._id === id ? { ...user, ...updated } : user)),
       );
-      toast.success("User updated.");
+      toast.success(t("User updated."));
     } catch (updateError) {
       // The API's own message explains guard refusals (own role, last
       // Super Admin) better than a generic fallback — prefer it.
       const apiMessage = (updateError as { response?: { data?: { message?: string } } })?.response
         ?.data?.message;
-      toast.error(apiMessage || (updateError instanceof Error ? updateError.message : "Unable to update user."));
+      toast.error(apiMessage || (updateError instanceof Error ? updateError.message : t("Unable to update user.")));
     }
   };
 
@@ -221,11 +221,10 @@ export default function SettingsPage() {
             <ShieldAlert className="h-7 w-7" />
           </span>
           <h2 className="text-base font-bold text-[var(--text)]">
-            You don&apos;t have permission to view Settings
+            {t("You don't have permission to view Settings")}
           </h2>
           <p className="max-w-sm text-xs text-[var(--text-muted)]">
-            Your role ({user?.role || "Staff"}) can&apos;t access this section. Ask a
-            Super Admin to change it in Settings → Users &amp; Roles.
+            {t("Your role ({role}) can't access this section. Ask a Super Admin to change it in Settings → Users & Roles.").replace("{role}", user?.role || "Staff")}
           </p>
         </div>
       </main>
@@ -311,7 +310,7 @@ export default function SettingsPage() {
       </header>
 
       <div className="grid grid-row-2 gap-3 ">
-        <nav aria-label="Settings sections" className="h-fit rounded-xl border border-[var(--border)] bg-[var(--background)] p-2 flex flex-wrap gap-3">
+        <nav aria-label={t("Settings sections")} className="h-fit rounded-xl border border-[var(--border)] bg-[var(--background)] p-2 flex flex-wrap gap-3">
           {visibleMenus.map(({ name, icon: Icon }) => {
             const active = activeMenu === name;
             return (

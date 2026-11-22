@@ -7,6 +7,7 @@ import {
   type CustomerProfile,
 } from "@/services/resourceRegistry";
 import { formatMoney, useStoreCurrency } from "@/services/currency";
+import { useLanguage } from "@/services/i18n";
 import {
   ProfileCardsPopup,
   type ProfilePopupKind,
@@ -53,6 +54,7 @@ const EntryRow: React.FC<{
 export const CustomerProfileSections: React.FC<{ customerId: string }> = ({
   customerId,
 }) => {
+  const { t } = useLanguage();
   useStoreCurrency();
   const [profile, setProfile] = useState<CustomerProfile | null>(null);
   const [failed, setFailed] = useState(false);
@@ -79,16 +81,16 @@ export const CustomerProfileSections: React.FC<{ customerId: string }> = ({
   if (failed) {
     return (
       <div className="pt-1">
-        <SectionTitle>Shopping Profile</SectionTitle>
-        <EmptyLine>The shopping profile could not be loaded.</EmptyLine>
+        <SectionTitle>{t("Shopping Profile")}</SectionTitle>
+        <EmptyLine>{t("The shopping profile could not be loaded.")}</EmptyLine>
       </div>
     );
   }
   if (!profile) {
     return (
       <div className="pt-1">
-        <SectionTitle>Shopping Profile</SectionTitle>
-        <EmptyLine>Loading shopping profile…</EmptyLine>
+        <SectionTitle>{t("Shopping Profile")}</SectionTitle>
+        <EmptyLine>{t("Loading shopping profile…")}</EmptyLine>
       </div>
     );
   }
@@ -129,7 +131,7 @@ export const CustomerProfileSections: React.FC<{ customerId: string }> = ({
   return (
     <div className="space-y-3 pt-1">
       <div>
-        <SectionTitle>Shopping Profile</SectionTitle>
+        <SectionTitle>{t("Shopping Profile")}</SectionTitle>
         <div className="grid grid-cols-2 gap-2 text-xs">
           {statTiles.map((tile) =>
             tile.kind ? (
@@ -140,7 +142,7 @@ export const CustomerProfileSections: React.FC<{ customerId: string }> = ({
                 className="cursor-pointer rounded border border-[var(--border)] bg-[var(--background)] p-1.5 text-left transition-colors hover:border-[var(--primary)]"
               >
                 <span className="flex items-center justify-between text-[10px] text-[var(--text-muted)]">
-                  {tile.label}
+                  {t(tile.label)}
                   <ChevronRight size={11} />
                 </span>
                 <span className="font-bold text-[var(--text)]">{tile.value}</span>
@@ -151,7 +153,7 @@ export const CustomerProfileSections: React.FC<{ customerId: string }> = ({
                 className="rounded border border-[var(--border)] bg-[var(--background)] p-1.5"
               >
                 <span className="block text-[10px] text-[var(--text-muted)]">
-                  {tile.label}
+                  {t(tile.label)}
                 </span>
                 <span className="font-bold text-[var(--text)]">{tile.value}</span>
               </div>
@@ -162,9 +164,9 @@ export const CustomerProfileSections: React.FC<{ customerId: string }> = ({
 
       {entries.map((entry) => (
         <div key={entry.kind}>
-          <SectionTitle>{entry.label}</SectionTitle>
+          <SectionTitle>{t(entry.label)}</SectionTitle>
           <EntryRow
-            label={entry.label}
+            label={t(entry.label)}
             count={entry.count}
             onClick={() => setPopup(entry.kind)}
           />

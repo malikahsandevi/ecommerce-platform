@@ -52,33 +52,68 @@ const resolveUsageType = (item) => {
     );
 };
 
-// ── Secret masking ───────────────────────────────────────────────────
-// Integration entries hold credential VALUES (auth credentials, preset
-// fields, custom key-value pairs). No settings API response may carry
-// a full secret: secret slots are replaced by the fixed mask, and on
-// save a slot that still holds the mask (or is blank) keeps the stored
-// value — the same rule the credentials endpoints have always used.
+// ── Credential masking (Ahsan's rule: "star sary credentials ko") ────
+// EVERY value stored inside an integration entry is a credential —
+// secrets AND identifiers AND usernames/hosts/from-addresses AND every
+// custom key-value pair. Masking happens HERE, at the API
+// serialization layer, before the response leaves the server: the
+// full value never travels over the wire at all, so nothing in
+// between (a proxy, a log, a compromised client) can ever see it.
+// The client only ever receives stars + the last 4 characters:
+//   "716294989856861" → "***********6861",  "465" → "****",  "" → ""
+// Metadata is NOT masked: field keys, labels, slugs, service and
+// sub-service names, baseUrl, the header NAME (headerKey), toggles.
+// The runtime resolver/gate reads the database directly and always
+// uses the FULL stored values — this serializer is the only place
+// masks exist.
+const maskValue = (value) => {
+    if (value === undefined || value === null) return value;
+    const text = String(value);
+    if (text.length === 0) return '';
+    if (text.length <= 4) return '****';
+    return '*'.repeat(text.length - 4) + text.slice(-4);
+};
+
+/** True when a client-sent value is a mask of the stored value (the
+ *  per-value stars+last4 form, or the legacy fixed mask). */
+const isMaskOf = (incoming, stored) => {
+    if (incoming === undefined || incoming === null || stored === undefined || stored === null || stored === '') {
+        return false;
+    }
+    const text = String(incoming);
+    return text === SECRET_MASK || text === maskValue(stored);
+};
+
 const maskIntegrationEntry = (entry) => {
     const obj = entry?.toObject ? entry.toObject() : { ...entry };
     if (obj.authCredentials) {
         obj.authCredentials = { ...obj.authCredentials };
-        if (obj.authCredentials.apiKey) obj.authCredentials.apiKey = SECRET_MASK;
-        if (obj.authCredentials.password) obj.authCredentials.password = SECRET_MASK;
+        // apiKey / password / username are credentials — all masked.
+        // headerKey is the NAME of the header (metadata) and stays.
+        if (obj.authCredentials.apiKey) obj.authCredentials.apiKey = maskValue(obj.authCredentials.apiKey);
+        if (obj.authCredentials.password) obj.authCredentials.password = maskValue(obj.authCredentials.password);
+        if (obj.authCredentials.username) obj.authCredentials.username = maskValue(obj.authCredentials.username);
     }
-    const definition = getDefinition(obj.subService);
     if (obj.fields) {
         const fields = obj.fields instanceof Map ? Object.fromEntries(obj.fields) : { ...obj.fields };
-        if (definition) {
-            for (const field of definition.fields) {
-                if (field.secret && fields[field.key]) fields[field.key] = SECRET_MASK;
-            }
+        for (const key of Object.keys(fields)) {
+            if (fields[key]) fields[key] = maskValue(fields[key]);
         }
         obj.fields = fields;
     }
     if (Array.isArray(obj.customFields)) {
         obj.customFields = obj.customFields.map((pair) =>
-            pair?.secret && pair.value ? { ...pair, value: SECRET_MASK } : pair,
+            pair?.value ? { ...pair, value: maskValue(pair.value) } : pair,
         );
+    }
+    if (obj.globalHeaders) {
+        const headers = obj.globalHeaders instanceof Map
+            ? Object.fromEntries(obj.globalHeaders)
+            : { ...obj.globalHeaders };
+        for (const key of Object.keys(headers)) {
+            if (headers[key]) headers[key] = maskValue(headers[key]);
+        }
+        obj.globalHeaders = headers;
     }
     return obj;
 };
@@ -119,13 +154,18 @@ const parseCurrencyNumber = (value, fieldName) => {
     return numericValue;
 };
 
-// A secret slot being saved: the mask or an empty string means "keep
-// what is stored" (the panel never receives the real value, so it can
-// only ever send the mask back, a blank, or a genuinely new value).
-const keepSecret = (incoming, existing) => {
-    if (incoming === undefined || incoming === null) return existing ?? '';
+// A credential slot being saved: the panel never receives the real
+// value (only its stars+last4 mask), so on save a slot can hold the
+// mask of the stored value, the legacy fixed mask, a blank, or a
+// genuinely new typed value. Mask/blank → keep what is stored; a new
+// value replaces it. This applies to EVERY credential slot now that
+// every value is masked on read, not only to secret-flagged ones.
+const keepMaskedValue = (incoming, existing, fallback = '') => {
+    const stored = existing ?? fallback;
+    if (incoming === undefined || incoming === null) return stored;
     const text = String(incoming);
-    if (text === '' || text === SECRET_MASK) return existing ?? '';
+    if (text === '' || text === SECRET_MASK) return stored;
+    if (stored !== '' && text === maskValue(stored)) return stored;
     return text;
 };
 
@@ -154,9 +194,7 @@ const normalizeIntegration = (item, existingBySlug) => {
         const fields = {};
         for (const field of definition.fields) {
             const incoming = item.fields?.[field.key];
-            fields[field.key] = field.secret
-                ? keepSecret(incoming, existingFields[field.key])
-                : (incoming === undefined || incoming === null ? (existingFields[field.key] ?? field.default ?? '') : String(incoming));
+            fields[field.key] = keepMaskedValue(incoming, existingFields[field.key], field.default ?? '');
         }
         return {
             usageType: definition.service,
@@ -200,16 +238,21 @@ const normalizeIntegration = (item, existingBySlug) => {
                 isActive: pair.isActive !== undefined
                     ? Boolean(pair.isActive)
                     : (existingCustom.get(key)?.isActive !== false),
-                value: secret
-                    ? keepSecret(pair.value, existingCustom.get(key)?.value)
-                    : String(pair.value ?? ''),
+                value: keepMaskedValue(pair.value, existingCustom.get(key)?.value),
             };
         });
     // CUSTOM entries may also carry preset-style `fields` (unused —
     // their values live in customFields), keep the map empty.
     const authIn = item.authCredentials || {};
-    const keptApiKey = keepSecret(authIn.apiKey, existingAuth.apiKey);
-    const keptPassword = keepSecret(authIn.password, existingAuth.password);
+    const keptApiKey = keepMaskedValue(authIn.apiKey, existingAuth.apiKey);
+    const keptPassword = keepMaskedValue(authIn.password, existingAuth.password);
+    const existingHeaders = existing?.globalHeaders instanceof Map
+        ? Object.fromEntries(existing.globalHeaders)
+        : (existing?.globalHeaders || {});
+    const globalHeaders = {};
+    for (const [key, value] of Object.entries(item.globalHeaders || {})) {
+        globalHeaders[key] = keepMaskedValue(value, existingHeaders[key]);
+    }
     const normalizedGeneric = {
         usageType: resolveUsageType(item),
         subService: definition ? 'custom' : (item.subService || ''),
@@ -220,11 +263,11 @@ const normalizeIntegration = (item, existingBySlug) => {
         authCredentials: {
             apiKey: keptApiKey,
             headerKey: authIn.headerKey || 'Authorization',
-            username: authIn.username || '',
+            username: keepMaskedValue(authIn.username, existingAuth.username),
         },
         fields: {},
         customFields,
-        globalHeaders: item.globalHeaders || {},
+        globalHeaders,
         endpoints: Array.isArray(item.endpoints) ? item.endpoints.map(ep => ({
             name: ep.name,
             path: ep.path,
@@ -269,6 +312,20 @@ const normalizeSection = (section, value, currentValue) => {
     }
 
     const normalized = { ...(currentValue?.toObject?.() || currentValue || {}), ...value };
+    if (section === 'appearance') {
+        // Theme colors: empty = built-in default; anything else must
+        // be a full #rrggbb hex — an invalid color is rejected, never
+        // stored (the panel also validates and toasts before saving).
+        for (const key of ['adminColor', 'storefrontColor']) {
+            if (value[key] !== undefined) {
+                const text = String(value[key] ?? '').trim();
+                if (text !== '' && !/^#[0-9a-fA-F]{6}$/.test(text)) {
+                    throw new Error(`${key} must be a valid hex color like #f97316`);
+                }
+                normalized[key] = text.toLowerCase();
+            }
+        }
+    }
     if (section === 'general' && value.monthlyTarget !== undefined) {
         normalized.monthlyTarget = parseCurrencyNumber(value.monthlyTarget, 'monthlyTarget');
     }
@@ -442,4 +499,4 @@ const deleteIntegrationEntry = async (req, res) => {
     }
 };
 
-module.exports = { getSettings, updateSettings, executeIntegration, getServicesCatalogue, maskSettingsDocument, getSettingById, updateSettingById, saveIntegrationEntry, deleteIntegrationEntry };
+module.exports = { getSettings, updateSettings, executeIntegration, getServicesCatalogue, maskSettingsDocument, maskValue, isMaskOf, getSettingById, updateSettingById, saveIntegrationEntry, deleteIntegrationEntry };

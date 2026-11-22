@@ -2,6 +2,7 @@
 import React, { useLayoutEffect, useRef, useState } from "react";
 import { Inbox, Pencil, Trash2 } from "lucide-react";
 import { AvatarViewerTrigger } from "@/components/ui/AvatarViewer";
+import { useLanguage } from "@/services/i18n";
 
 export interface CreateTableProps<T extends Record<string, any>> {
   data: T[];
@@ -110,11 +111,12 @@ function statusPillClasses(status: string): string {
  * constantly) made the crash easy to hit.
  */
 function CellThumb({ src, alt }: { src: string; alt: string }) {
+  const { t } = useLanguage();
   const [failed, setFailed] = useState(false);
   if (failed) {
     return (
       <span className="text-[10px] text-[var(--text-muted)] font-bold">
-        N/A
+        {t("N/A")}
       </span>
     );
   }
@@ -129,6 +131,7 @@ function CellThumb({ src, alt }: { src: string; alt: string }) {
 }
 
 export function StatusPill({ status }: { status: unknown }) {
+  const { t } = useLanguage();
   const label = String(status ?? "")
     .replace(/_/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase());
@@ -139,10 +142,31 @@ export function StatusPill({ status }: { status: unknown }) {
         String(status)
       )}`}
     >
-      {label}
+      {t(label)}
     </span>
   );
 }
+
+
+const ENUM_VALUE_COLUMNS = new Set([
+  "role",
+  "paymentstatus",
+  "paymentmethod",
+  "moderationstatus",
+  "accountstatus",
+]);
+const ENUM_VALUE_LABELS = new Set([
+  "Super Admin", "Admin", "Manager", "Editor", "Support", "Customer", "Staff",
+  "Pending", "Paid", "Unpaid", "Failed", "Refunded", "Partially Paid",
+  "Processing", "Shipped", "Delivered", "Cancelled", "Active", "Inactive",
+  "Approved", "Rejected", "Spam", "Published", "Draft",
+  "Cash on Delivery", "Card", "Bank Transfer",
+]);
+const enumTitleCase = (value: string): string =>
+  value
+    .replace(/_/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
 
 export function CreateTable<T extends Record<string, any>>({
   data,
@@ -155,6 +179,7 @@ export function CreateTable<T extends Record<string, any>>({
   columnMaxChars,
   enableAvatarViewer,
 }: CreateTableProps<T>) {
+  const { t } = useLanguage();
   const showActions = Boolean(onEditItem || onDeleteItem);
 
   const alignFor = (key: string): "left" | "center" =>
@@ -326,12 +351,12 @@ export function CreateTable<T extends Record<string, any>>({
                     className={`px-2.5 py-3 whitespace-nowrap ${align === "center" ? "text-center" : "text-left"}`}
                   >
                     <div className={`flex items-center gap-1 select-none whitespace-nowrap ${align === "center" ? "justify-center" : ""}`}>
-                      {columnHeaders?.[colKey] ?? String(colKey)}
+                      {t(columnHeaders?.[colKey] ?? String(colKey))}
                     </div>
                   </th>
                 );
               })}
-              {showActions && <th className="px-2.5 py-3 w-20 whitespace-nowrap text-center">Actions</th>}
+              {showActions && <th className="px-2.5 py-3 w-20 whitespace-nowrap text-center">{t("Actions")}</th>}
             </tr>
           </thead>
         </table>
@@ -422,7 +447,7 @@ export function CreateTable<T extends Record<string, any>>({
                             {enableAvatarViewer && isUrl ? (
                               <AvatarViewerTrigger
                                 src={imgUrl as string}
-                                alt={String(rawValue || "User")}
+                                alt={String(rawValue || t("User"))}
                                 sizeClass="w-8 h-8"
                                 roundedClass="rounded-lg"
                                 className="border border-[var(--border)]"
@@ -435,7 +460,7 @@ export function CreateTable<T extends Record<string, any>>({
                                 <CellThumb
                                   key={imgUrl as string}
                                   src={imgUrl as string}
-                                  alt={String(rawValue || "Product")}
+                                  alt={String(rawValue || t("Product"))}
                                 />
                               ) : (
                                 <span className="text-[10px] text-[var(--text-muted)] font-bold">
@@ -466,10 +491,20 @@ export function CreateTable<T extends Record<string, any>>({
                     // PLAIN TEXT (Ahsan: "sirf name show krna tha, link
                     // bhi nhi bnana tha"), never the raw full URL and
                     // never a clickable link.
-                    const displayText =
+                    const rawDisplayText =
                       rawValue !== undefined && rawValue !== null && rawValue !== ""
                         ? String(rawValue)
                         : "-";
+                    // Enum columns (role, payment status/method, …) show
+                    // their label in the active language; anything else
+                    // is data and stays untouched.
+                    const enumLabel = ENUM_VALUE_COLUMNS.has(colKeyStr)
+                      ? enumTitleCase(rawDisplayText)
+                      : null;
+                    const displayText =
+                      enumLabel && ENUM_VALUE_LABELS.has(enumLabel)
+                        ? t(enumLabel)
+                        : rawDisplayText;
                     const isUrlCell =
                       typeof rawValue === "string" &&
                       (/^https?:\/\//i.test(rawValue) ||
@@ -529,8 +564,8 @@ export function CreateTable<T extends Record<string, any>>({
                         {onEditItem && (
                           <button
                             type="button"
-                            title="Edit"
-                            aria-label="Edit record"
+                            title={t("Edit")}
+                            aria-label={t("Edit record")}
                             onClick={(event) => {
                               event.stopPropagation();
                               onEditItem(item);
@@ -547,8 +582,8 @@ export function CreateTable<T extends Record<string, any>>({
                         {onDeleteItem && (
                           <button
                             type="button"
-                            title="Delete"
-                            aria-label="Delete record"
+                            title={t("Delete")}
+                            aria-label={t("Delete record")}
                             onClick={(event) => {
                               event.stopPropagation();
                               onDeleteItem(item);
@@ -577,10 +612,10 @@ export function CreateTable<T extends Record<string, any>>({
                 <div className="flex flex-col items-center gap-1.5 text-[var(--text-muted)]">
                   <Inbox className="w-7 h-7 opacity-50" />
                   <span className="text-xs font-semibold text-[var(--text)]">
-                    No records found
+                    {t("No records found")}
                   </span>
                   <span className="text-[11px]">
-                    Nothing here yet — new records will appear in this list.
+                    {t("Nothing here yet — new records will appear in this list.")}
                   </span>
                 </div>
               </td>

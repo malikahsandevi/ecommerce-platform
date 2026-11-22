@@ -1,5 +1,8 @@
+"use client";
+
 import React from "react";
 import { LucideIcon } from "lucide-react";
+import { useLanguage } from "@/services/i18n";
 
 // Theme types
 export type CardTheme = "green" | "purple" | "orange" | "blue";
@@ -50,6 +53,7 @@ const StatCard: React.FC<StatCardProps> = ({
   icon: Icon,
   theme = "green",
 }) => {
+  const { t } = useLanguage();
   const currentTheme = themeStyles[theme] || themeStyles.green;
 
   return (
@@ -81,7 +85,7 @@ const StatCard: React.FC<StatCardProps> = ({
           {value}
         </h3>
 
-        <p className="text-[11px] text-[var(--text-muted)] mt-0.5">{period}</p>
+        <p className="text-[11px] text-[var(--text-muted)] mt-0.5">{t(period)}</p>
       </div>
     </div>
   );

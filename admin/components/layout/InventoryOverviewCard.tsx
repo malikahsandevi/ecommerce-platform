@@ -1,6 +1,7 @@
 import React from "react";
 import { PackageSearch } from "lucide-react";
 import { useLanguage } from "@/services/i18n";
+import { shade, tint, useAdminColor } from "@/services/appearance";
 
 export interface InventoryData {
   total: number;
@@ -15,7 +16,9 @@ interface InventoryOverviewCardProps {
   data?: InventoryData;
 }
 
-const BAR_COLORS = ["#fed7aa", "#fdba74", "#fb923c", "#f97316", "#ea580c"];
+// Bar ramp of the Admin Panel Color (Settings → Appearance),
+// lightest first. With the default color these are the original
+// orange bars.
 
 /**
  * Occupies the reference design's "Conversion Rate" slot — a descending
@@ -24,6 +27,14 @@ const BAR_COLORS = ["#fed7aa", "#fdba74", "#fb923c", "#f97316", "#ea580c"];
  * out of stock. Bar heights are each count's share of the catalog.
  */
 export const InventoryOverviewCard: React.FC<InventoryOverviewCardProps> = ({ data }) => {
+  const adminColor = useAdminColor();
+  const BAR_COLORS = [
+    tint(adminColor, 0.76),
+    tint(adminColor, 0.52),
+    tint(adminColor, 0.27),
+    adminColor,
+    shade(adminColor, 0.08),
+  ];
   if (data === undefined) {
     return (
       <div className="p-5 w-full h-full bg-(--background) rounded-2xl shadow-sm border border-(--border) animate-pulse">
@@ -57,7 +68,7 @@ export const InventoryOverviewCard: React.FC<InventoryOverviewCardProps> = ({ da
       <div className="flex items-center justify-between">
         <h3 className="text-base font-bold text-(--text)">{t("Inventory Overview")}</h3>
         <span className="text-[11px] font-medium text-(--text-muted)">
-          Live catalog counts
+          {t("Live catalog counts")}
         </span>
       </div>
 
@@ -66,24 +77,23 @@ export const InventoryOverviewCard: React.FC<InventoryOverviewCardProps> = ({ da
           <span className="w-11 h-11 rounded-2xl bg-(--primary-soft) text-(--primary) flex items-center justify-center">
             <PackageSearch className="w-5 h-5" />
           </span>
-          <p className="text-xs font-semibold text-(--text)">No products yet</p>
+          <p className="text-xs font-semibold text-(--text)">{t("No products yet")}</p>
           <p className="text-[11px] text-(--text-muted) max-w-60">
-            Add products to the catalog and their stock breakdown will appear
-            here.
+            {t("Add products to the catalog and their stock breakdown will appear here.")}
           </p>
         </div>
       ) : (
         <div className="flex items-stretch gap-2 sm:gap-3 mt-4 flex-1">
           {stages.map((stage, index) => (
-            <div key={stage.label} className="flex-1 min-w-0 flex flex-col">
+            <div key={t(stage.label)} className="flex-1 min-w-0 flex flex-col">
               <p className="text-[11px] font-medium text-(--text-muted) leading-tight min-h-7">
-                {stage.label}
+                {t(stage.label)}
               </p>
               <p className="text-xl sm:text-2xl font-bold text-(--text) mt-1">
                 {stage.value.toLocaleString()}
               </p>
               <p className="text-[10px] font-semibold text-(--primary-dark) mt-0.5">
-                {index === 0 ? "catalog" : `${share(stage.value)}% of catalog`}
+                {index === 0 ? t("catalog") : t("{percent}% of catalog").replace("{percent}", String(share(stage.value)))}
               </p>
               <div className="flex-1 flex items-end mt-3 min-h-16">
                 <div

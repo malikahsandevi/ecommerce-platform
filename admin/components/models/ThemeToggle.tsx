@@ -2,10 +2,12 @@
 
 import React, { useEffect, useState } from "react";
 import { Sun, Moon } from "lucide-react";
+import { useLanguage } from "@/services/i18n";
 import { settingsService } from "@/services/settingsService";
 import { getDeviceTheme, persistTheme } from "@/services/appearance";
 
 export default function ThemeToggle() {
+  const { t } = useLanguage();
   // Initialise from the already-applied document attribute (set pre-paint
   // by the inline script / SSR cookie) so the icon never disagrees with
   // the painted theme, even for a click that lands before effects run.
@@ -46,7 +48,7 @@ export default function ThemeToggle() {
     <button
       onClick={toggleTheme}
       className="flex items-center justify-center p-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] hover:opacity-85 transition-all cursor-pointer"
-      title="Toggle Theme"
+      title={t("Toggle Theme")}
     >
       {theme === "light" ? (
         <Moon className="w-5 h-5 text-slate-700" />

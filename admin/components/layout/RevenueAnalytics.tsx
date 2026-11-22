@@ -17,6 +17,7 @@ import {
   useStoreCurrency,
 } from "@/services/currency";
 import { useLanguage } from "@/services/i18n";
+import { tint, useAdminColor } from "@/services/appearance";
 
 export interface RevenuePoint {
   month: string;
@@ -38,8 +39,10 @@ interface RevenueAnalyticsProps {
 
 type RangeKey = "8days" | "6months";
 
-const REVENUE_COLOR = "#f97316";
-const ORDERS_COLOR = "#fdba74";
+// Chart accents derive from the Admin Panel Color (Settings →
+// Appearance): the revenue line IS the primary color, the orders line
+// its mid tint. With the default color these are the original
+// #f97316 / #fdba74.
 
 interface ChartPoint {
   label: string;
@@ -85,6 +88,8 @@ export const RevenueAnalytics: React.FC<RevenueAnalyticsProps> = ({
 }) => {
   // Re-render the axis in the active store currency when it changes.
   useStoreCurrency();
+  const REVENUE_COLOR = useAdminColor();
+  const ORDERS_COLOR = tint(REVENUE_COLOR, 0.52);
   const [range, setRange] = useState<RangeKey>("8days");
 
   if (dailyData === undefined || monthlyData === undefined) {
@@ -134,10 +139,10 @@ export const RevenueAnalytics: React.FC<RevenueAnalyticsProps> = ({
           value={range}
           onChange={(value) => setRange(value as RangeKey)}
           options={[
-            { label: "Last 8 Days", value: "8days" },
-            { label: "Last 6 Months", value: "6months" },
+            { label: t("Last 8 Days"), value: "8days" },
+            { label: t("Last 6 Months"), value: "6months" },
           ]}
-          aria-label="Chart range"
+          aria-label={t("Chart range")}
           className="min-w-36"
         />
       </div>
@@ -149,14 +154,14 @@ export const RevenueAnalytics: React.FC<RevenueAnalyticsProps> = ({
             className="inline-block w-5 border-t-[2.5px] rounded"
             style={{ borderColor: REVENUE_COLOR }}
           />
-          Revenue
+          {t("Revenue")}
         </span>
         <span className="inline-flex items-center gap-2">
           <span
             className="inline-block w-5 border-t-[2.5px] border-dashed rounded"
             style={{ borderColor: ORDERS_COLOR }}
           />
-          Order
+          {t("Order")}
         </span>
       </div>
 

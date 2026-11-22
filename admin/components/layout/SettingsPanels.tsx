@@ -5,7 +5,6 @@ import Image from "next/image";
 import { Check, Copy, Eye, EyeOff, KeyRound, LoaderCircle, Play, Plus, Save, ShieldCheck, Trash2, Code2, Globe } from "lucide-react";
 import {
   SERVICE_CATALOGUE,
-  SECRET_MASK,
   categoryById,
   subServiceById,
 } from "@/services/serviceCatalogue";
@@ -41,6 +40,7 @@ import type {
 } from "@/services/settingsService";
 import { confirmDialog } from "@/components/ui/ConfirmDialog";
 import { LANGUAGE_OPTIONS, applyLanguage, useLanguage } from "@/services/i18n";
+import { DEFAULT_ADMIN_COLOR, isValidHexColor } from "@/services/appearance";
 
 type ObjectData = Record<string, unknown>;
 
@@ -204,14 +204,15 @@ function MediaUrlField({
   onChange: (value: string) => void;
   onSelect: () => void;
 }) {
+  const { t } = useLanguage();
   return (
     <div>
-      <span className="mb-2 block text-xs font-medium text-[var(--text-soft)]">{label}</span>
+      <span className="mb-2 block text-xs font-medium text-[var(--text-soft)]">{t(label)}</span>
       <div className="flex items-center gap-2">
         {isPreviewableImageSrc(value) && (
           <Image
             src={value}
-            alt={`${label} preview`}
+            alt={t("{label} preview").replace("{label}", t(label))}
             width={40}
             height={40}
             unoptimized
@@ -222,6 +223,10 @@ function MediaUrlField({
           type="text"
           value={value}
           onChange={(event) => onChange(event.target.value)}
+          autoComplete="off"
+          spellCheck={false}
+          autoCorrect="off"
+          autoCapitalize="off"
           className="h-10 min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-sm text-[var(--text)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]"
         />
         <Button
@@ -230,7 +235,7 @@ function MediaUrlField({
           onClick={onSelect}
           className="h-10 shrink-0 text-xs"
         >
-          Select
+          {t("Select")}
         </Button>
       </div>
     </div>
@@ -312,8 +317,7 @@ function GeneralPanel({ data, saving, onSave }: SectionPanelProps<ObjectData>) {
             searchPlaceholder="Search currencies..."
           />
           <p className="mt-1.5 text-[11px] text-[var(--text-muted)]">
-            Every price and total in the panel is shown in this currency.
-            Amounts are never converted — only the symbol changes.
+            {t("Every price and total in the panel is shown in this currency. Amounts are never converted — only the symbol changes.")}
           </p>
         </div>
         <MediaUrlField
@@ -324,7 +328,7 @@ function GeneralPanel({ data, saving, onSave }: SectionPanelProps<ObjectData>) {
         />
         <div>
           <SettingsInput
-            label={`Monthly Target (amount ${currencySymbolFor(form.currency)})`}
+            label={t("Monthly Target (amount {symbol})").replace("{symbol}", currencySymbolFor(form.currency))}
             type="number"
             min="0"
             step="any"
@@ -333,8 +337,7 @@ function GeneralPanel({ data, saving, onSave }: SectionPanelProps<ObjectData>) {
             onChange={(event) => setForm({ ...form, monthlyTarget: event.target.value })}
           />
           <p className="mt-1.5 text-[11px] text-[var(--text-muted)]">
-            Revenue goal for the current month — shown as the gauge on the
-            dashboard. Leave empty for no target.
+            {t("Revenue goal for the current month — shown as the gauge on the dashboard. Leave empty for no target.")}
           </p>
         </div>
         <MediaUrlField
@@ -474,6 +477,7 @@ const notificationFields = [
 ] as const;
 
 function NotificationsPanel({ data, saving, onSave }: SectionPanelProps<ObjectData>) {
+  const { t } = useLanguage();
   const [values, setValues] = useState(() =>
     Object.fromEntries(
       notificationFields.map(([key]) => [key, Boolean(data?.[key])]),
@@ -486,8 +490,8 @@ function NotificationsPanel({ data, saving, onSave }: SectionPanelProps<ObjectDa
         {notificationFields.map(([key, title, description]) => (
           <div key={key} className="flex items-center justify-between gap-4 rounded-lg border border-[var(--border)] p-4">
             <div>
-              <h3 className="text-sm font-medium text-[var(--text)]">{title}</h3>
-              <p className="mt-1 text-xs text-[var(--text-muted)]">{description}</p>
+              <h3 className="text-sm font-medium text-[var(--text)]">{t(title)}</h3>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">{t(description)}</p>
             </div>
             <SettingsToggle
               label={title}
@@ -541,6 +545,7 @@ function UsersPanel({
   onUpdateUser: (id: string, values: { role?: string; isActive?: boolean }) => void;
   onCreateUser: (values: NewUserValues) => Promise<void>;
 }) {
+  const { t } = useLanguage();
   const { hasPermission } = useAdminAuth();
   const canCreateUsers =
     typeof hasPermission !== "function" || hasPermission("Users", "create");
@@ -578,15 +583,15 @@ function UsersPanel({
 
   const submitAddForm = async () => {
     if (!form.firstName.trim()) {
-      setFormError("A first name is required.");
+      setFormError(t("A first name is required."));
       return;
     }
     if (!/^\S+@\S+\.\S+$/.test(form.email.trim())) {
-      setFormError("Enter a valid email address.");
+      setFormError(t("Enter a valid email address."));
       return;
     }
     if (form.password.length < 6) {
-      setFormError("Password must be at least 6 characters.");
+      setFormError(t("Password must be at least 6 characters."));
       return;
     }
     setCreating(true);
@@ -601,7 +606,7 @@ function UsersPanel({
       setShowAddForm(false);
     } catch (createError) {
       // The page rethrows with the API's message (e.g. duplicate email).
-      setFormError(createError instanceof Error ? createError.message : "Unable to create the user.");
+      setFormError(createError instanceof Error ? createError.message : t("Unable to create the user."));
     } finally {
       setCreating(false);
     }
@@ -619,7 +624,7 @@ function UsersPanel({
       {canCreateUsers && (
         <div className="mb-4 flex justify-end">
           <Button variant="primary" icon={Plus} onClick={openAddForm}>
-            Add User
+            {t("Add User")}
           </Button>
         </div>
       )}
@@ -630,9 +635,9 @@ function UsersPanel({
           {...addUserBackdrop}
         >
           <div className="w-full max-w-md rounded-xl border border-[var(--border)] bg-[var(--background)] p-5 shadow-2xl">
-            <h3 className="text-base font-semibold text-[var(--text)]">Add User</h3>
+            <h3 className="text-base font-semibold text-[var(--text)]">{t("Add User")}</h3>
             <p className="mt-1 text-xs text-[var(--text-muted)]">
-              The new account can sign in to the admin panel right away (staff roles) with this email and password.
+              {t("The new account can sign in to the admin panel right away (staff roles) with this email and password.")}
             </p>
 
             <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -664,30 +669,30 @@ function UsersPanel({
                 />
               </div>
               <div>
-                <span className="mb-2 block text-xs font-medium text-[var(--text-soft)]">Role</span>
+                <span className="mb-2 block text-xs font-medium text-[var(--text-soft)]">{t("Role")}</span>
                 <select
-                  aria-label="Role for the new user"
+                  aria-label={t("Role for the new user")}
                   value={form.role}
                   onChange={(event) => setForm({ ...form, role: event.target.value })}
                   className={selectClassName}
                 >
                   {USER_ROLE_OPTIONS.map((role) => (
                     <option key={role} value={role}>
-                      {role}
+                      {t(role)}
                     </option>
                   ))}
                 </select>
               </div>
               <div>
-                <span className="mb-2 block text-xs font-medium text-[var(--text-soft)]">Status</span>
+                <span className="mb-2 block text-xs font-medium text-[var(--text-soft)]">{t("Status")}</span>
                 <select
-                  aria-label="Status for the new user"
+                  aria-label={t("Status for the new user")}
                   value={form.isActive ? "active" : "inactive"}
                   onChange={(event) => setForm({ ...form, isActive: event.target.value === "active" })}
                   className={selectClassName}
                 >
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
+                  <option value="active">{t("Active")}</option>
+                  <option value="inactive">{t("Inactive")}</option>
                 </select>
               </div>
             </div>
@@ -700,10 +705,10 @@ function UsersPanel({
 
             <div className="mt-5 flex justify-end gap-3">
               <Button variant="ghost" onClick={() => setShowAddForm(false)} disabled={creating}>
-                Cancel
+                {t("Cancel")}
               </Button>
               <Button variant="primary" onClick={() => void submitAddForm()} disabled={creating}>
-                {creating ? "Creating..." : "Create User"}
+                {creating ? t("Creating...") : t("Create User")}
               </Button>
             </div>
           </div>
@@ -714,11 +719,11 @@ function UsersPanel({
         <table className="w-full min-w-[600px] text-left text-sm">
           <thead className="bg-[var(--surface)] text-xs text-[var(--text-muted)]">
             <tr>
-              <th className="px-4 py-3 whitespace-nowrap">Name</th>
-              <th className="px-4 py-3 whitespace-nowrap text-center">Email</th>
-              <th className="px-4 py-3 whitespace-nowrap text-center">Role</th>
-              <th className="px-4 py-3 whitespace-nowrap text-center">Status</th>
-              <th className="px-4 py-3 text-center whitespace-nowrap">Actions</th>
+              <th className="px-4 py-3 whitespace-nowrap">{t("Name")}</th>
+              <th className="px-4 py-3 whitespace-nowrap text-center">{t("Email")}</th>
+              <th className="px-4 py-3 whitespace-nowrap text-center">{t("Role")}</th>
+              <th className="px-4 py-3 whitespace-nowrap text-center">{t("Status")}</th>
+              <th className="px-4 py-3 text-center whitespace-nowrap">{t("Actions")}</th>
             </tr>
           </thead>
           <tbody>
@@ -733,7 +738,7 @@ function UsersPanel({
                 <td className="px-4 py-3 text-[var(--text-soft)] text-center">{user.email}</td>
                 <td className="px-4 py-3 text-center">
                   <select
-                    aria-label={`Role for ${user.email}`}
+                    aria-label={t("Role for {email}").replace("{email}", user.email)}
                     value={user.role || "Customer"}
                     disabled={!canEditUsers}
                     onChange={(event) => onUpdateUser(user._id, { role: event.target.value })}
@@ -741,7 +746,7 @@ function UsersPanel({
                   >
                     {USER_ROLE_OPTIONS.map((role) => (
                       <option key={role} value={role}>
-                        {role}
+                        {t(role)}
                       </option>
                     ))}
                   </select>
@@ -756,9 +761,9 @@ function UsersPanel({
                         ? "bg-red-500/10 text-red-500"
                         : "bg-emerald-500/10 text-emerald-600"
                     }`}
-                    title={user.isActive === false ? "Reactivate this account" : "Deactivate this account"}
+                    title={user.isActive === false ? t("Reactivate this account") : t("Deactivate this account")}
                   >
-                    {user.isActive === false ? "Inactive" : "Active"}
+                    {user.isActive === false ? t("Inactive") : t("Active")}
                   </button>
                 </td>
                 <td className="px-4 py-3 text-center">
@@ -769,8 +774,8 @@ function UsersPanel({
                   {canDeleteUsers && (
                     <button
                       type="button"
-                      aria-label={`Delete ${user.email}`}
-                      title="Delete"
+                      aria-label={t("Delete {email}").replace("{email}", user.email)}
+                      title={t("Delete")}
                       onClick={() => onDeleteUser(user._id)}
                       className="rounded-md p-1.5 text-[var(--text-muted)] transition-colors duration-200 hover:bg-red-500/10 hover:text-red-500 group-hover:text-red-500"
                     >
@@ -783,7 +788,7 @@ function UsersPanel({
             {users.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-4 py-8 text-center text-sm text-[var(--text-muted)]">
-                  No users found.
+                  {t("No users found.")}
                 </td>
               </tr>
             )}
@@ -843,6 +848,7 @@ function MatrixTick({
  * can never lock its top admin out.
  */
 function RolePermissionsPanel() {
+  const { t } = useLanguage();
   const [data, setData] = useState<RolePermissionsData | null>(null);
   const [matrix, setMatrix] = useState<PermissionMatrixData>({});
   const [selectedRole, setSelectedRole] = useState("Admin");
@@ -896,7 +902,7 @@ function RolePermissionsPanel() {
     try {
       const saved = await settingsService.updatePermissions(matrix);
       setMatrix(saved);
-      toast.success("Role permissions saved.");
+      toast.success(t("Role permissions saved."));
     } catch (saveError) {
       toast.error(extractApiError(saveError));
     } finally {
@@ -911,10 +917,10 @@ function RolePermissionsPanel() {
         description="Control what each role can see and do in the admin panel. Changes apply to new sessions right away."
       >
         {loading ? (
-          <p className="text-sm text-[var(--text-muted)]">Loading permissions…</p>
+          <p className="text-sm text-[var(--text-muted)]">{t("Loading permissions…")}</p>
         ) : loadFailed && !data ? (
           <p className="rounded-lg border border-red-300 bg-red-500/10 p-3 text-xs text-red-600" role="alert">
-            Role permissions could not be loaded.
+            {t("Role permissions could not be loaded.")}
           </p>
         ) : data ? (
           <>
@@ -933,7 +939,7 @@ function RolePermissionsPanel() {
                       : "border-[var(--border)] bg-[var(--surface)] text-[var(--text-soft)]"
                   }`}
                 >
-                  {role}
+                  {t(role)}
                   {selectedRole === role && <Check size={11} strokeWidth={3.5} />}
                 </button>
               ))}
@@ -941,14 +947,11 @@ function RolePermissionsPanel() {
 
             {roleLocked ? (
               <p className="mb-4 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 text-xs text-[var(--text-soft)]">
-                Super Admin always has full access to everything — this row
-                can&apos;t be changed, so the store&apos;s top admin can never be
-                locked out.
+                {t("Super Admin always has full access to everything — this row can't be changed, so the store's top admin can never be locked out.")}
               </p>
             ) : !canEdit ? (
               <p className="mb-4 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 text-xs text-[var(--text-soft)]">
-                Only a Super Admin can change role permissions. You&apos;re
-                viewing them read-only.
+                {t("Only a Super Admin can change role permissions. You're viewing them read-only.")}
               </p>
             ) : null}
 
@@ -956,10 +959,10 @@ function RolePermissionsPanel() {
               <table className="w-full min-w-[520px] text-left text-sm">
                 <thead className="bg-[var(--surface)] text-xs text-[var(--text-muted)]">
                   <tr>
-                    <th className="px-4 py-3">Module</th>
+                    <th className="px-4 py-3">{t("Module")}</th>
                     {MATRIX_ACTIONS.map((action) => (
                       <th key={action} className="px-4 py-3 text-center capitalize">
-                        {action}
+                        {t(action)}
                       </th>
                     ))}
                   </tr>
@@ -968,7 +971,7 @@ function RolePermissionsPanel() {
                   {data.modules.map((module) => (
                     <tr key={module} className="border-t border-[var(--border)]">
                       <td className="px-4 py-2.5 font-medium text-[var(--text)]">
-                        {module}
+                        {t(module)}
                       </td>
                       {MATRIX_ACTIONS.map((action) => {
                         const supported = (
@@ -981,7 +984,7 @@ function RolePermissionsPanel() {
                               <MatrixTick
                                 on={on}
                                 disabled={!editable}
-                                label={`${selectedRole} can ${action} ${module}`}
+                                label={t("{role} can {action} {module}").replace("{role}", t(selectedRole)).replace("{action}", t(action)).replace("{module}", t(module))}
                                 onToggle={() => toggleCell(module, action)}
                               />
                             ) : (
@@ -1003,7 +1006,7 @@ function RolePermissionsPanel() {
                   onClick={() => void saveMatrix()}
                   disabled={saving}
                 >
-                  {saving ? "Saving..." : "Save Permissions"}
+                  {saving ? t("Saving...") : t("Save Permissions")}
                 </Button>
               </div>
             )}
@@ -1022,6 +1025,7 @@ function RolePermissionsPanel() {
  * session alone. Disabling likewise requires a current code.
  */
 function SecurityPanel() {
+  const { t } = useLanguage();
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
   const [setupData, setSetupData] = useState<{ secret: string; qrCode: string } | null>(null);
@@ -1067,7 +1071,7 @@ function SecurityPanel() {
       setEnabled(true);
       setSetupData(null);
       setCode("");
-      toast.success("Two-factor authentication is now on. Your next sign-in will ask for a code.");
+      toast.success(t("Two-factor authentication is now on. Your next sign-in will ask for a code."));
     } catch (enableError) {
       toast.error(extractApiError(enableError));
     } finally {
@@ -1081,7 +1085,7 @@ function SecurityPanel() {
       await apiClient.post("/auth/2fa/disable", { code: code.trim() });
       setEnabled(false);
       setCode("");
-      toast.success("Two-factor authentication has been turned off.");
+      toast.success(t("Two-factor authentication has been turned off."));
     } catch (disableError) {
       toast.error(extractApiError(disableError));
     } finally {
@@ -1120,10 +1124,9 @@ function SecurityPanel() {
           <div className="flex items-start gap-3">
             <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-[var(--primary)]" />
             <div>
-              <h3 className="text-sm font-medium text-[var(--text)]">Two-Factor Authentication (2FA)</h3>
+              <h3 className="text-sm font-medium text-[var(--text)]">{t("Two-Factor Authentication (2FA)")}</h3>
               <p className="mt-1 max-w-xl text-xs text-[var(--text-muted)]">
-                Adds a 6-digit code from an authenticator app (Google Authenticator, Microsoft
-                Authenticator, Authy…) on top of your password when signing in to this panel.
+                {t("Adds a 6-digit code from an authenticator app (Google Authenticator, Microsoft Authenticator, Authy…) on top of your password when signing in to this panel.")}
               </p>
             </div>
           </div>
@@ -1133,19 +1136,19 @@ function SecurityPanel() {
                 enabled ? "bg-emerald-500/10 text-emerald-600" : "bg-[var(--surface)] text-[var(--text-muted)]"
               }`}
             >
-              {enabled ? "Enabled" : "Off"}
+              {enabled ? t("Enabled") : t("Off")}
             </span>
           )}
         </div>
 
         {enabled === null && !loadFailed && (
-          <p className="mt-4 text-sm text-[var(--text-muted)]">Checking your two-factor status…</p>
+          <p className="mt-4 text-sm text-[var(--text-muted)]">{t("Checking your two-factor status…")}</p>
         )}
 
         {enabled === false && !setupData && (
           <div className="mt-4">
             <Button variant="primary" onClick={() => void startSetup()} disabled={busy}>
-              {busy ? "Preparing..." : "Enable Two-Factor Authentication"}
+              {busy ? t("Preparing...") : t("Enable Two-Factor Authentication")}
             </Button>
           </div>
         )}
@@ -1153,29 +1156,29 @@ function SecurityPanel() {
         {enabled === false && setupData && (
           <div className="mt-5 space-y-4 border-t border-[var(--border)] pt-5">
             <ol className="list-decimal space-y-1 pl-5 text-xs text-[var(--text-muted)]">
-              <li>Open your authenticator app and scan this QR code (or enter the secret manually).</li>
-              <li>Type the 6-digit code the app shows to confirm and switch 2FA on.</li>
+              <li>{t("Open your authenticator app and scan this QR code (or enter the secret manually).")}</li>
+              <li>{t("Type the 6-digit code the app shows to confirm and switch 2FA on.")}</li>
             </ol>
             <div className="flex flex-wrap items-start gap-5">
               {/* Server-generated QR for the otpauth:// enrolment URL. */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={setupData.qrCode}
-                alt="Two-factor enrolment QR code"
+                alt={t("Two-factor enrolment QR code")}
                 width={160}
                 height={160}
                 className="rounded-lg border border-[var(--border)] bg-white p-1"
               />
               <div className="min-w-56 flex-1">
                 <span className="mb-2 block text-xs font-medium text-[var(--text-soft)]">
-                  Manual Secret Key
+                  {t("Manual Secret Key")}
                 </span>
                 <div className="flex items-center gap-2">
                   <code className="flex-1 break-all rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 font-mono text-xs text-[var(--text)]">
                     {setupData.secret}
                   </code>
                   <Button variant="outline" size="sm" icon={Copy} onClick={() => void copySecret()}>
-                    {copied ? "Copied" : "Copy"}
+                    {copied ? t("Copied") : t("Copy")}
                   </Button>
                 </div>
                 <div className="mt-4 max-w-xs">
@@ -1187,7 +1190,7 @@ function SecurityPanel() {
                     onClick={() => void confirmEnable()}
                     disabled={busy || code.length !== 6}
                   >
-                    {busy ? "Confirming..." : "Confirm & Enable"}
+                    {busy ? t("Confirming...") : t("Confirm & Enable")}
                   </Button>
                   <Button
                     variant="ghost"
@@ -1197,7 +1200,7 @@ function SecurityPanel() {
                     }}
                     disabled={busy}
                   >
-                    Cancel
+                    {t("Cancel")}
                   </Button>
                 </div>
               </div>
@@ -1208,12 +1211,12 @@ function SecurityPanel() {
         {enabled === true && (
           <div className="mt-5 border-t border-[var(--border)] pt-5">
             <p className="text-xs text-[var(--text-muted)]">
-              To turn 2FA off, enter a current code from your authenticator app.
+              {t("To turn 2FA off, enter a current code from your authenticator app.")}
             </p>
             <div className="mt-3 max-w-xs">{codeInput("two-factor-disable-code")}</div>
             <div className="mt-4">
               <Button variant="danger" onClick={() => void disable()} disabled={busy || code.length !== 6}>
-                {busy ? "Turning off..." : "Disable Two-Factor Authentication"}
+                {busy ? t("Turning off...") : t("Disable Two-Factor Authentication")}
               </Button>
             </div>
           </div>
@@ -1235,10 +1238,13 @@ function SecurityPanel() {
 // (config/services/index.js) enforces that for the runner, the media
 // path and JWT signing; this panel only edits the stored state.
 //
-// SECURITY: the settings API never returns a full secret. Secret fields
-// come back as a fixed mask, so the form starts them EMPTY with a
-// "leave blank to keep" hint — a blank (or untouched) secret on save
-// keeps the stored value, a typed value replaces it.
+// SECURITY: the settings API never returns a full credential value —
+// the backend masks EVERY value server-side (stars + the last 4
+// characters) before the response leaves the server, so the full
+// value never travels over the wire. The form therefore DISPLAYS the
+// masked string it received; on save the backend recognises the mask
+// of the stored value and keeps the stored value, while a genuinely
+// new typed value replaces it.
 
 const slugifyTitle = (title: string): string =>
   title
@@ -1247,7 +1253,8 @@ const slugifyTitle = (title: string): string =>
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
 
-const SECRET_HINT = "•••••••••• — leave blank to keep the current secret";
+const MASKED_VALUES_NOTE =
+  "Saved values are shown masked — stars plus the last 4 characters only. Leave a field unchanged to keep its saved value; type a new value to replace it.";
 
 interface CustomPairState {
   key: string;
@@ -1288,6 +1295,13 @@ interface ServiceEntryState {
 const entryCategory = (entry: ServiceEntryState): string => {
   const def = subServiceById(entry.subService);
   if (def) {
+    // A "custom" sub-service exists in several categories (the Custom
+    // category itself, plus Payment and Shipping, where it sits last
+    // in the list). Its category is whatever the entry itself stores —
+    // a custom payment gateway belongs to PAYMENT, not to CUSTOM.
+    if (def.id === "custom" && SERVICE_CATALOGUE.some((category) => category.id === entry.usageType)) {
+      return entry.usageType;
+    }
     for (const category of SERVICE_CATALOGUE) {
       if (category.subServices.some((sub) => sub.id === def.id)) return category.id;
     }
@@ -1300,14 +1314,14 @@ const entryFromApi = (item: Record<string, unknown>): ServiceEntryState => {
   const auth = (item.authCredentials as Record<string, unknown>) || {};
   const rawFields = (item.fields as Record<string, unknown>) || {};
   const fields: Record<string, string> = {};
+  // Every value the API returns is already masked server-side (stars +
+  // last 4). The form displays that masked string verbatim — there is
+  // no unmasking anywhere on the client. "configured" simply records
+  // that a value is stored for the slot.
   const configuredSecrets: Record<string, boolean> = {};
   for (const [key, value] of Object.entries(rawFields)) {
-    if (value === SECRET_MASK) {
-      fields[key] = "";
-      configuredSecrets[key] = true;
-    } else {
-      fields[key] = String(value ?? "");
-    }
+    fields[key] = String(value ?? "");
+    if (fields[key] !== "") configuredSecrets[key] = true;
   }
   const apiKeyRaw = String(auth.apiKey ?? "");
   const passwordRaw = String(auth.password ?? "");
@@ -1318,20 +1332,20 @@ const entryFromApi = (item: Record<string, unknown>): ServiceEntryState => {
     title: String(item.title ?? ""),
     baseUrl: String(item.baseUrl ?? ""),
     authType: (item.authType as AuthType) || "NONE",
-    authApiKey: apiKeyRaw === SECRET_MASK ? "" : apiKeyRaw,
-    authApiKeyConfigured: apiKeyRaw === SECRET_MASK,
+    authApiKey: apiKeyRaw,
+    authApiKeyConfigured: apiKeyRaw !== "",
     authHeaderKey: String(auth.headerKey ?? "Authorization"),
     authUsername: String(auth.username ?? ""),
-    authPassword: passwordRaw === SECRET_MASK ? "" : passwordRaw,
-    authPasswordConfigured: passwordRaw === SECRET_MASK,
+    authPassword: passwordRaw,
+    authPasswordConfigured: passwordRaw !== "",
     fields,
     configuredSecrets,
     customFields: Array.isArray(item.customFields)
       ? (item.customFields as Array<Record<string, unknown>>).map((pair) => ({
           key: String(pair.key ?? ""),
-          value: String(pair.value ?? "") === SECRET_MASK ? "" : String(pair.value ?? ""),
+          value: String(pair.value ?? ""),
           secret: Boolean(pair.secret),
-          configured: String(pair.value ?? "") === SECRET_MASK,
+          configured: String(pair.value ?? "") !== "",
           isActive: pair.isActive !== false,
         }))
       : [],
@@ -1352,7 +1366,11 @@ const entryToApi = (entry: ServiceEntryState): Record<string, unknown> => {
     for (const field of def.fields) fields[field.key] = entry.fields[field.key] ?? "";
   }
   return {
-    usageType: isPreset ? entryCategory(entry) : entry.subService === "custom" ? "CUSTOM" : entry.usageType,
+    // Presets take their category from the definition; a "custom"
+    // sub-service takes it from the entry itself (its tab) — so a
+    // custom gateway saved from the Payment tab stores PAYMENT, and
+    // one from the API tab's Custom category stores CUSTOM.
+    usageType: isPreset || entry.subService === "custom" ? entryCategory(entry) : entry.usageType,
     subService: entry.subService,
     serviceSlug: entry.serviceSlug,
     title: entry.title,
@@ -1419,6 +1437,10 @@ function ServiceBuilderPanel({
   const [busy, setBusy] = useState<Record<number, "save" | "test" | "delete">>({});
 
   const allowedCategories = SERVICE_CATALOGUE.filter((category) => categoryIds.includes(category.id));
+  // A tab bound to exactly ONE category (Payment Methods, Shipping):
+  // the category comes from the tab, so the entry form shows no
+  // Service selector — only Sub-Service.
+  const fixedCategory = categoryIds.length === 1 ? allowedCategories[0] : undefined;
   const visible = entries
     .map((entry, index) => ({ entry, index }))
     .filter(({ entry }) => categoryIds.includes(entryCategory(entry)));
@@ -1500,22 +1522,22 @@ function ServiceBuilderPanel({
 
   /** One entry's problems, worded for a toast (never an inline bar). */
   const validateEntry = (item: ServiceEntryState): string => {
-    const label = item.title || "This service";
-    if (!item.title.trim()) return "A service title is required before saving.";
-    if (!item.serviceSlug.trim()) return `${label}: a unique service slug is required.`;
+    const label = item.title || t("This service");
+    if (!item.title.trim()) return t("A service title is required before saving.");
+    if (!item.serviceSlug.trim()) return t("{label}: a unique service slug is required.").replace("{label}", label);
     if (entries.some((other) => other !== item && other.serviceSlug.trim() === item.serviceSlug.trim())) {
-      return `${label}: the slug "${item.serviceSlug}" is already used by another service — slugs must be unique.`;
+      return t("{label}: the slug \"{slug}\" is already used by another service — slugs must be unique.").replace("{label}", label).replace("{slug}", item.serviceSlug);
     }
     const def = subServiceById(item.subService);
     const isPreset = Boolean(def && def.id !== "custom");
     if (!isPreset) {
-      if (!item.baseUrl.trim()) return `${label}: a base API URL is required for custom services.`;
+      if (!item.baseUrl.trim()) return t("{label}: a base API URL is required for custom services.").replace("{label}", label);
       for (const endpoint of item.endpoints) {
-        if (!endpoint.name.trim()) return `${label}: every endpoint needs an action name.`;
-        if (!endpoint.path.trim()) return `${label}: every endpoint needs a path.`;
+        if (!endpoint.name.trim()) return t("{label}: every endpoint needs an action name.").replace("{label}", label);
+        if (!endpoint.path.trim()) return t("{label}: every endpoint needs a path.").replace("{label}", label);
       }
       for (const pair of item.customFields) {
-        if (!pair.key.trim() && pair.value.trim()) return `${label}: every key-value pair needs a key.`;
+        if (!pair.key.trim() && pair.value.trim()) return t("{label}: every key-value pair needs a key.").replace("{label}", label);
       }
     }
     return "";
@@ -1541,7 +1563,7 @@ function ServiceBuilderPanel({
         updateEntry(index, { persisted: true });
       }
       onSync(result.integrations);
-      toast.success(`${item.title} saved.`);
+      toast.success(t("{title} saved.").replace("{title}", item.title));
       return true;
     } catch (saveError) {
       toast.error(extractApiError(saveError));
@@ -1564,7 +1586,7 @@ function ServiceBuilderPanel({
     const isPreset = Boolean(def && def.id !== "custom");
     const endpointName = isPreset ? (def?.endpoints[0]?.name ?? "config") : item.endpoints[0]?.name;
     if (!endpointName) {
-      toast.error(`${item.title || "This service"}: add an endpoint before testing.`);
+      toast.error(t("{title}: add an endpoint before testing.").replace("{title}", item.title || t("This service")));
       return;
     }
     setBusy((current) => ({ ...current, [index]: "test" }));
@@ -1573,7 +1595,7 @@ function ServiceBuilderPanel({
       if (!saved) return;
       const result = await settingsService.executeIntegration(item.serviceSlug, endpointName);
       const summary = JSON.stringify(result.data ?? result).slice(0, 220);
-      toast.success(`${item.title}: connection works — ${summary}`);
+      toast.success(t("{title}: connection works — {summary}").replace("{title}", item.title).replace("{summary}", summary));
     } catch (testError) {
       toast.error(extractApiError(testError).slice(0, 300));
     } finally {
@@ -1592,9 +1614,9 @@ function ServiceBuilderPanel({
       return;
     }
     const confirmed = await confirmDialog({
-      title: `Remove ${item.title || "this service"}?`,
-      message: "Its saved configuration will be deleted. This cannot be undone.",
-      confirmLabel: "Remove",
+      title: t("Remove {title}?").replace("{title}", item.title || t("this service")),
+      message: t("Its saved configuration will be deleted. This cannot be undone."),
+      confirmLabel: t("Remove"),
       variant: "danger",
     });
     if (!confirmed) return;
@@ -1603,7 +1625,7 @@ function ServiceBuilderPanel({
       const result = await settingsService.deleteIntegration(item.serviceSlug);
       setEntries((current) => current.filter((_, idx) => idx !== index));
       onSync(result.integrations);
-      toast.success(`${item.title} removed.`);
+      toast.success(t("{title} removed.").replace("{title}", item.title));
     } catch (removeError) {
       toast.error(extractApiError(removeError));
     } finally {
@@ -1673,7 +1695,7 @@ function ServiceBuilderPanel({
                 <div className="flex items-center gap-2">
                   <Globe className="h-4 w-4 text-[var(--primary)]" />
                   <span className="font-semibold text-sm text-[var(--text)]">
-                    {item.title || "New Service"}
+                    {item.title || t("New Service")}
                   </span>
                   <span className="ml-2 rounded-md bg-[var(--primary-light)]/20 px-2 py-0.5 text-xs text-[var(--primary)] border border-[var(--primary)]/30 font-medium">
                     {def ? def.name : item.usageType}
@@ -1699,16 +1721,23 @@ function ServiceBuilderPanel({
                     variant="danger"
                     size="sm"
                     icon={Trash2}
-                    title="Remove service"
-                    aria-label="Remove service"
+                    title={t("Remove service")}
+                    aria-label={t("Remove service")}
                     disabled={entryBusy === "delete"}
                     onClick={() => void removeEntry(index)}
                   />
                 </div>
               </div>
 
-              {/* Title / Service / Slug / Sub-Service */}
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+              {/* Title / (Service) / Slug / Sub-Service. In the
+                  single-category tabs (Payment Methods, Shipping) the
+                  category is fixed by the tab itself, so there is NO
+                  Service dropdown — the form goes Title → Slug →
+                  Sub-Service (Ahsan's order). The API / Integrations
+                  tab spans categories and keeps both selectors. The
+                  saved entry still stores the tab's category: it is
+                  derived from the chosen sub-service's definition. */}
+              <div className={`grid grid-cols-1 gap-4 ${fixedCategory ? "md:grid-cols-3" : "md:grid-cols-4"}`}>
                 <SettingsInput
                   label="Service Title"
                   placeholder="e.g. My Cloudinary Storage"
@@ -1728,18 +1757,20 @@ function ServiceBuilderPanel({
                     });
                   }}
                 />
-                <SettingsSelect
-                  label="Service"
-                  value={category}
-                  options={allowedCategories.map((c) => ({ label: c.label, value: c.id }))}
-                  onChange={(value) => changeService(index, value)}
-                />
+                {!fixedCategory && (
+                  <SettingsSelect
+                    label="Service"
+                    value={category}
+                    options={allowedCategories.map((c) => ({ label: t(c.label), value: c.id }))}
+                    onChange={(value) => changeService(index, value)}
+                  />
+                )}
                 <SettingsInput
                   label="Service Slug (Unique)"
                   placeholder="e.g. my-service"
                   value={item.serviceSlug}
                   disabled={item.persisted}
-                  title={item.persisted ? "The slug is this service's identity — it is set when the service is first saved and does not change." : undefined}
+                  title={item.persisted ? t("The slug is this service's identity — it is set when the service is first saved and does not change.") : undefined}
                   onChange={(e) => updateEntry(index, { serviceSlug: e.target.value })}
                 />
                 <SettingsSelect
@@ -1750,12 +1781,14 @@ function ServiceBuilderPanel({
                 />
               </div>
 
+              <p className="text-xs text-[var(--text-muted)]">{t(MASKED_VALUES_NOTE)}</p>
+
               {isPreset && def ? (
                 <>
                   <p className="text-xs text-[var(--text-muted)]">
                     {def.hasFixedBase
-                      ? `Calls go to ${def.name}'s fixed API address with exactly these saved credentials — there is no URL to type, so this service can only ever talk to ${def.name}.`
-                      : `${def.name} has no HTTP API base of its own — these saved values are what the store uses for it.`}
+                      ? t("Calls go to {name}'s fixed API address with exactly these saved credentials — there is no URL to type, so this service can only ever talk to {name}.").replaceAll("{name}", def.name)
+                      : t("{name} has no HTTP API base of its own — these saved values are what the store uses for it.").replace("{name}", def.name)}
                   </p>
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-3 bg-[var(--background)] p-3 rounded-lg border border-[var(--border)]">
                     {def.fields.map((field) =>
@@ -1764,20 +1797,34 @@ function ServiceBuilderPanel({
                           key={field.key}
                           label={field.label}
                           value={item.fields[field.key] ?? field.default ?? ""}
-                          options={field.options ?? []}
+                          options={(() => {
+                            // A saved entry's value arrives MASKED from
+                            // the API (stars + last 4), which matches no
+                            // option — surface the mask itself as the
+                            // current selection so it displays instead
+                            // of a blank; picking a real option replaces
+                            // it, leaving it submits the mask and the
+                            // backend keeps the stored value.
+                            const opts = field.options ?? [];
+                            const current = item.fields[field.key] ?? field.default ?? "";
+                            const base = opts.map((option) => ({ label: t(option), value: option }));
+                            return current && !opts.includes(current)
+                              ? [{ label: current, value: current }, ...base]
+                              : base;
+                          })()}
                           onChange={(value) => updateField(index, field.key, value)}
                         />
                       ) : (
                         <SettingsInput
                           key={field.key}
                           label={field.label}
-                          type={field.secret ? "password" : field.type === "number" ? "number" : "text"}
+                          // Always a text input: credential values are
+                          // displayed MASKED (stars + last 4), and a
+                          // number input cannot render the mask.
+                          type={field.secret ? "password" : "text"}
+                          inputMode={field.type === "number" ? "numeric" : undefined}
                           value={item.fields[field.key] ?? ""}
-                          placeholder={
-                            field.secret && item.configuredSecrets[field.key]
-                              ? SECRET_HINT
-                              : field.placeholder
-                          }
+                          placeholder={field.placeholder}
                           autoComplete={field.secret ? "new-password" : "off"}
                           onChange={(e) => updateField(index, field.key, e.target.value)}
                         />
@@ -1817,7 +1864,7 @@ function ServiceBuilderPanel({
                           label="API Key"
                           type="password"
                           value={item.authApiKey}
-                          placeholder={item.authApiKeyConfigured ? SECRET_HINT : "Paste the API key — hidden after saving"}
+                          placeholder="Paste the API key — shown masked after saving"
                           onChange={(e) => updateEntry(index, { authApiKey: e.target.value })}
                         />
                       </>
@@ -1827,7 +1874,7 @@ function ServiceBuilderPanel({
                         label="Bearer Token"
                         type="password"
                         value={item.authApiKey}
-                        placeholder={item.authApiKeyConfigured ? SECRET_HINT : "Paste the token — hidden after saving"}
+                        placeholder="Paste the token — shown masked after saving"
                         onChange={(e) => updateEntry(index, { authApiKey: e.target.value })}
                       />
                     )}
@@ -1843,7 +1890,7 @@ function ServiceBuilderPanel({
                           label="Password"
                           type="password"
                           value={item.authPassword}
-                          placeholder={item.authPasswordConfigured ? SECRET_HINT : "Paste the password — hidden after saving"}
+                          placeholder="Paste the password — shown masked after saving"
                           onChange={(e) => updateEntry(index, { authPassword: e.target.value })}
                         />
                       </>
@@ -1860,7 +1907,7 @@ function ServiceBuilderPanel({
                           label="Header Value"
                           type="password"
                           value={item.authApiKey}
-                          placeholder={item.authApiKeyConfigured ? SECRET_HINT : "Paste the header value — hidden after saving"}
+                          placeholder="Paste the header value — shown masked after saving"
                           onChange={(e) => updateEntry(index, { authApiKey: e.target.value })}
                         />
                       </>
@@ -1874,16 +1921,15 @@ function ServiceBuilderPanel({
                   <div className="pt-2">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-xs font-semibold text-[var(--text-soft)] flex items-center gap-1">
-                        <KeyRound className="h-3.5 w-3.5" /> Key-Value Pairs
+                        <KeyRound className="h-3.5 w-3.5" /> {t("Key-Value Pairs")}
                       </span>
                       <Button variant="outline" size="sm" icon={Plus} onClick={() => addPair(index)}>
-                        Add Pair
+                        {t("Add Pair")}
                       </Button>
                     </div>
                     {item.customFields.length === 0 && (
                       <p className="text-xs text-[var(--text-muted)]">
-                        No key-value pairs yet — add the fields this service needs. Toggle a pair
-                        Secret to keep its value masked, and OFF to keep it saved but unused.
+                        {t("No key-value pairs yet — add the fields this service needs. Toggle a pair Secret to keep its value masked, and OFF to keep it saved but unused.")}
                       </p>
                     )}
                     <div className="space-y-2">
@@ -1899,21 +1945,21 @@ function ServiceBuilderPanel({
                             label="Value"
                             type={pair.secret ? "password" : "text"}
                             value={pair.value}
-                            placeholder={pair.secret && pair.configured ? SECRET_HINT : "Value (e.g. eu)"}
+                            placeholder="Value (e.g. eu)"
                             onChange={(e) => updatePair(index, pairIdx, { value: e.target.value })}
                           />
                           <div className="flex flex-col items-center gap-1 pb-1">
-                            <span className="text-[10px] font-medium text-[var(--text-muted)]">Secret</span>
+                            <span className="text-[10px] font-medium text-[var(--text-muted)]">{t("Secret")}</span>
                             <SettingsToggle
-                              label={`Pair ${pair.key || pairIdx} secret`}
+                              label={t("Pair {name} secret").replace("{name}", String(pair.key || pairIdx))}
                               enabled={pair.secret}
                               onChange={(secret) => updatePair(index, pairIdx, { secret })}
                             />
                           </div>
                           <div className="flex flex-col items-center gap-1 pb-1">
-                            <span className="text-[10px] font-medium text-[var(--text-muted)]">On</span>
+                            <span className="text-[10px] font-medium text-[var(--text-muted)]">{t("On")}</span>
                             <SettingsToggle
-                              label={`Pair ${pair.key || pairIdx} active`}
+                              label={t("Pair {name} active").replace("{name}", String(pair.key || pairIdx))}
                               enabled={pair.isActive}
                               onChange={(isActive) => updatePair(index, pairIdx, { isActive })}
                             />
@@ -1930,10 +1976,10 @@ function ServiceBuilderPanel({
                   <div className="pt-2">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-xs font-semibold text-[var(--text-soft)] flex items-center gap-1">
-                        <Code2 className="h-3.5 w-3.5" /> Service Endpoints
+                        <Code2 className="h-3.5 w-3.5" /> {t("Service Endpoints")}
                       </span>
                       <Button variant="outline" size="sm" icon={Plus} onClick={() => addEndpoint(index)}>
-                        Add Endpoint
+                        {t("Add Endpoint")}
                       </Button>
                     </div>
                     <div className="space-y-2">
@@ -1975,14 +2021,14 @@ function ServiceBuilderPanel({
                   disabled={entryBusy !== undefined}
                   icon={entryBusy === "test" ? LoaderCircle : Play}
                 >
-                  {entryBusy === "test" ? "Testing…" : t("Test")}
+                  {entryBusy === "test" ? t("Testing…") : t("Test")}
                 </Button>
                 <Button
                   onClick={() => void saveEntry(index)}
                   disabled={entryBusy !== undefined}
                   icon={entryBusy === "save" ? LoaderCircle : Save}
                 >
-                  {entryBusy === "save" ? "Saving..." : t("Save")}
+                  {entryBusy === "save" ? t("Saving...") : t("Save")}
                 </Button>
               </div>
             </div>
@@ -1990,7 +2036,7 @@ function ServiceBuilderPanel({
         })}
 
         {visible.length === 0 && (
-          <p className="text-sm text-[var(--text-muted)]">No services configured yet — add the first one below.</p>
+          <p className="text-sm text-[var(--text-muted)]">{t("No services configured yet — add the first one below.")}</p>
         )}
 
         <Button variant="outline" icon={Plus} onClick={addEntry}>
@@ -2001,18 +2047,127 @@ function ServiceBuilderPanel({
   );
 }
 
+const THEME_COLOR_PRESETS = [
+  "#f97316", "#2563eb", "#4f46e5", "#7c3aed",
+  "#059669", "#0d9488", "#e11d48", "#475569",
+];
+
+/** One theme-color picker: preset swatches + a native color input +
+ *  a hex text field. The hex field only commits a VALID #rrggbb —
+ *  anything else is rejected with a toast and the text reverts. An
+ *  empty stored value means the built-in default color. */
+function ThemeColorControl({
+  label,
+  description,
+  value,
+  onChange,
+}: {
+  label: string;
+  description: string;
+  value: string;
+  onChange: (hex: string) => void;
+}) {
+  const { t } = useLanguage();
+  const effective = value || DEFAULT_ADMIN_COLOR;
+  const [hexText, setHexText] = useState(effective);
+  useEffect(() => {
+    setHexText(value || DEFAULT_ADMIN_COLOR);
+  }, [value]);
+
+  const commitHexText = () => {
+    const raw = hexText.trim();
+    const normalized = raw.startsWith("#") ? raw : `#${raw}`;
+    if (isValidHexColor(normalized)) {
+      onChange(normalized.toLowerCase());
+    } else {
+      toast.error(t("Please enter a valid hex color, e.g. #f97316"));
+      setHexText(effective);
+    }
+  };
+
+  return (
+    <div className="rounded-lg border border-[var(--border)] p-4">
+      <h3 className="text-sm font-medium text-[var(--text)]">{t(label)}</h3>
+      <p className="mt-1 text-xs text-[var(--text-muted)]">{t(description)}</p>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        {THEME_COLOR_PRESETS.map((preset) => (
+          <button
+            key={preset}
+            type="button"
+            title={preset}
+            aria-label={`${t("Color")} ${preset}`}
+            onClick={() => onChange(preset)}
+            className={`h-8 w-8 rounded-full border border-black/10 transition ${
+              effective === preset
+                ? "ring-2 ring-[var(--text)] ring-offset-2 ring-offset-[var(--background)]"
+                : "hover:scale-110"
+            }`}
+            style={{ backgroundColor: preset }}
+          />
+        ))}
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <input
+          type="color"
+          autoComplete="off"
+          value={effective}
+          onChange={(event) => onChange(event.target.value)}
+          aria-label={t("Custom color")}
+          className="h-10 w-14 cursor-pointer rounded-lg border border-[var(--border)] bg-[var(--background)] p-1"
+        />
+        <input
+          type="text"
+          value={hexText}
+          onChange={(event) => setHexText(event.target.value)}
+          onBlur={commitHexText}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") commitHexText();
+          }}
+          autoComplete="off"
+          spellCheck={false}
+          autoCorrect="off"
+          autoCapitalize="off"
+          aria-label={t("Hex color")}
+          className="h-10 w-32 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-sm text-[var(--text)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]"
+        />
+        {value && (
+          <Button variant="outline" size="sm" onClick={() => onChange("")}>
+            {t("Reset to default")}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function AppearancePanel({ data, saving, onSave }: SectionPanelProps<ObjectData>) {
+  const { t } = useLanguage();
   const [form, setForm] = useState({
     theme: String(data?.theme ?? "Light"),
     compactSidebar: Boolean(data?.compactSidebar),
     showBreadcrumbs: data?.showBreadcrumbs !== false,
     enableAnimations: data?.enableAnimations !== false,
+    adminColor: String(data?.adminColor ?? ""),
+    storefrontColor: String(data?.storefrontColor ?? ""),
   });
 
   const setBoolean = (
     key: "compactSidebar" | "showBreadcrumbs" | "enableAnimations",
     value: boolean,
   ) => setForm({ ...form, [key]: value });
+
+  const handleSave = () => {
+    // Belt-and-braces: the hex fields validate on commit, but a color
+    // that is not a valid #rrggbb must never reach the API.
+    for (const key of ["adminColor", "storefrontColor"] as const) {
+      const value = form[key];
+      if (value && !isValidHexColor(value)) {
+        toast.error(t("Please enter a valid hex color, e.g. #f97316"));
+        return;
+      }
+    }
+    onSave(form);
+  };
 
   return (
     <SettingsCard title="Appearance" description="Customize saved dashboard preferences">
@@ -2023,6 +2178,20 @@ function AppearancePanel({ data, saving, onSave }: SectionPanelProps<ObjectData>
         onChange={(theme) => setForm({ ...form, theme })}
       />
       <div className="mt-5 space-y-3">
+        <ThemeColorControl
+          label="Admin Panel Color"
+          description="The accent color used across this admin panel — buttons, active states, toggles and charts."
+          value={form.adminColor}
+          onChange={(adminColor) => setForm({ ...form, adminColor })}
+        />
+        <ThemeColorControl
+          label="Storefront Color"
+          description="The accent color for the customer storefront. It is stored separately and never changes the admin panel."
+          value={form.storefrontColor}
+          onChange={(storefrontColor) => setForm({ ...form, storefrontColor })}
+        />
+      </div>
+      <div className="mt-5 space-y-3">
         {(
           [
             ["compactSidebar", "Compact Sidebar", "Use a smaller navigation sidebar"],
@@ -2032,8 +2201,8 @@ function AppearancePanel({ data, saving, onSave }: SectionPanelProps<ObjectData>
         ).map(([key, title, description]) => (
           <div key={key} className="flex items-center justify-between gap-4 rounded-lg border border-[var(--border)] p-4">
             <div>
-              <h3 className="text-sm font-medium text-[var(--text)]">{title}</h3>
-              <p className="mt-1 text-xs text-[var(--text-muted)]">{description}</p>
+              <h3 className="text-sm font-medium text-[var(--text)]">{t(title)}</h3>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">{t(description)}</p>
             </div>
             <SettingsToggle
               label={title}
@@ -2043,7 +2212,7 @@ function AppearancePanel({ data, saving, onSave }: SectionPanelProps<ObjectData>
           </div>
         ))}
       </div>
-      <SettingsSaveButton onSave={() => onSave(form)} saving={saving} />
+      <SettingsSaveButton onSave={handleSave} saving={saving} />
     </SettingsCard>
   );
 }

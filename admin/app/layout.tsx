@@ -74,6 +74,25 @@ export default async function RootLayout({
                 if (sidebar === "collapsed" || (sidebar === null && window.innerWidth < 1024)) {
                   document.documentElement.setAttribute("data-sidebar", "collapsed");
                 }
+                // The saved Admin Panel Color (Settings → Appearance):
+                // applied as inline --primary* properties before first
+                // paint, with the same shade math as
+                // services/appearance.ts (adminColorVars), and mirrored
+                // into its cookie. No saved color → no override → the
+                // stylesheet's default orange.
+                const savedColor = localStorage.getItem("admin-color");
+                if (savedColor && /^#[0-9a-fA-F]{6}$/.test(savedColor)) {
+                  document.cookie = "admin-color=" + savedColor + "; path=/; max-age=31536000; SameSite=Lax";
+                  const rgb = [parseInt(savedColor.slice(1, 3), 16), parseInt(savedColor.slice(3, 5), 16), parseInt(savedColor.slice(5, 7), 16)];
+                  const mixTo = (target, amt) => rgb.map((v, i) => Math.round(v + (target[i] - v) * amt));
+                  const toHex = (a) => "#" + a.map((v) => v.toString(16).padStart(2, "0")).join("");
+                  const dark = resolved === "dark";
+                  const style = document.documentElement.style;
+                  style.setProperty("--primary", savedColor);
+                  style.setProperty("--primary-dark", toHex(mixTo([0, 0, 0], dark ? 0.15 : 0.12)));
+                  style.setProperty("--primary-light", dark ? toHex(mixTo([0, 0, 0], 0.12)) : toHex(mixTo([255, 255, 255], 0.76)));
+                  style.setProperty("--primary-soft", dark ? toHex(mixTo([0, 0, 0], 0.8)) : toHex(mixTo([255, 255, 255], 0.93)));
+                }
               } catch (e) {}
             `,
           }}

@@ -35,6 +35,7 @@ const initialsOf = (name: string, email: string) => {
  * country data, so none is shown).
  */
 export const NewCustomersCard: React.FC<NewCustomersCardProps> = ({ customers }) => {
+  const { t } = useLanguage();
   if (customers === undefined) {
     return (
       <div className="p-5 w-full h-full bg-(--background) rounded-2xl shadow-sm border border-(--border) animate-pulse">
@@ -52,7 +53,6 @@ export const NewCustomersCard: React.FC<NewCustomersCardProps> = ({ customers })
     );
   }
 
-  const { t } = useLanguage();
   return (
     <div className="p-5 w-full h-full bg-(--background) rounded-2xl shadow-sm border border-(--border) flex flex-col">
       <div className="flex items-center justify-between mb-1">
@@ -60,7 +60,7 @@ export const NewCustomersCard: React.FC<NewCustomersCardProps> = ({ customers })
         <Ellipsis className="w-5 h-5 text-(--text-muted)" />
       </div>
       <p className="text-[11px] text-(--text-muted) mb-4">
-        Latest registered accounts
+        {t("Latest registered accounts")}
       </p>
 
       {customers.length === 0 ? (
@@ -68,9 +68,9 @@ export const NewCustomersCard: React.FC<NewCustomersCardProps> = ({ customers })
           <span className="w-11 h-11 rounded-2xl bg-(--primary-soft) text-(--primary) flex items-center justify-center">
             <UserRound className="w-5 h-5" />
           </span>
-          <p className="text-xs font-semibold text-(--text)">No customers yet</p>
+          <p className="text-xs font-semibold text-(--text)">{t("No customers yet")}</p>
           <p className="text-[11px] text-(--text-muted) max-w-50">
-            New sign-ups will appear here as soon as customers register.
+            {t("New sign-ups will appear here as soon as customers register.")}
           </p>
         </div>
       ) : (
@@ -110,7 +110,7 @@ export const NewCustomersCard: React.FC<NewCustomersCardProps> = ({ customers })
         href="/customers"
         className="mt-auto pt-4 text-xs font-semibold text-(--primary) hover:text-(--primary-dark) transition-colors"
       >
-        View all customers →
+        {t("View all customers →")}
       </Link>
     </div>
   );

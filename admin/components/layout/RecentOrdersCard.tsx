@@ -22,6 +22,7 @@ interface RecentOrdersProps {
 }
 
 export const RecentOrdersCard: React.FC<RecentOrdersProps> = ({ orders }) => {
+  const { t } = useLanguage();
   // Totals follow the store currency setting.
   useStoreCurrency();
   if (!orders) {
@@ -37,7 +38,6 @@ export const RecentOrdersCard: React.FC<RecentOrdersProps> = ({ orders }) => {
     );
   }
 
-  const { t } = useLanguage();
   return (
     <div className="bg-(--background) p-5 rounded-2xl shadow-sm border border-(--border) h-full w-full flex flex-col">
       <div className="flex items-center justify-between mb-4">
@@ -46,7 +46,7 @@ export const RecentOrdersCard: React.FC<RecentOrdersProps> = ({ orders }) => {
           href="/orders"
           className="inline-flex items-center gap-1 text-xs font-semibold text-(--primary) hover:text-(--primary-dark) transition-colors"
         >
-          View all
+          {t("View all")}
           <ArrowRight className="w-3.5 h-3.5" />
         </Link>
       </div>
@@ -56,9 +56,9 @@ export const RecentOrdersCard: React.FC<RecentOrdersProps> = ({ orders }) => {
           <span className="w-11 h-11 rounded-2xl bg-(--primary-soft) text-(--primary) flex items-center justify-center">
             <ShoppingBag className="w-5 h-5" />
           </span>
-          <p className="text-xs font-semibold text-(--text)">No orders yet</p>
+          <p className="text-xs font-semibold text-(--text)">{t("No orders yet")}</p>
           <p className="text-[11px] text-(--text-muted) max-w-55">
-            When customers place orders, the latest ones will show up here.
+            {t("When customers place orders, the latest ones will show up here.")}
           </p>
         </div>
       ) : (
@@ -66,12 +66,12 @@ export const RecentOrdersCard: React.FC<RecentOrdersProps> = ({ orders }) => {
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="text-[11px] uppercase tracking-wide text-(--text-muted) border-b border-(--border)">
-                <th className="py-2 pr-3 font-semibold whitespace-nowrap">Order</th>
-                <th className="py-2 pr-3 font-semibold whitespace-nowrap">Customer</th>
-                <th className="py-2 pr-3 font-semibold whitespace-nowrap">Product</th>
-                <th className="py-2 pr-3 font-semibold whitespace-nowrap">Qty</th>
-                <th className="py-2 pr-3 font-semibold whitespace-nowrap">Total</th>
-                <th className="py-2 font-semibold whitespace-nowrap">Status</th>
+                <th className="py-2 pr-3 font-semibold whitespace-nowrap">{t("Order")}</th>
+                <th className="py-2 pr-3 font-semibold whitespace-nowrap">{t("Customer")}</th>
+                <th className="py-2 pr-3 font-semibold whitespace-nowrap">{t("Product")}</th>
+                <th className="py-2 pr-3 font-semibold whitespace-nowrap">{t("Qty")}</th>
+                <th className="py-2 pr-3 font-semibold whitespace-nowrap">{t("Total")}</th>
+                <th className="py-2 font-semibold whitespace-nowrap">{t("Status")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-(--border)">

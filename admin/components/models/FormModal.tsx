@@ -23,6 +23,7 @@ import ProductMediaManager, {
 import CustomerShoppingProfile from "@/components/models/CustomerShoppingProfile";
 import { mediaService } from "@/services/resourceRegistry";
 import { extractApiError } from "@/services/api";
+import { useLanguage } from "@/services/i18n";
 
 // Export SelectOption for module integration
 export type { SelectOption };
@@ -157,6 +158,7 @@ export const FormModal: React.FC<FormModalProps> = ({
   error,
 }) => {
   const router = useRouter();
+  const { t } = useLanguage();
   const [tagInputs, setTagInputs] = useState<Record<string, string>>({});
   const [imageUpload, setImageUpload] = useState<{ field: string; busy: boolean; error: string }>({
     field: "",
@@ -245,7 +247,7 @@ export const FormModal: React.FC<FormModalProps> = ({
         title: file.name,
         purpose: fields.find((f) => f.name === fieldName)?.uploadPurpose,
       });
-      if (!uploaded?.url) throw new Error("The upload did not return a URL.");
+      if (!uploaded?.url) throw new Error(t("The upload did not return a URL."));
       handleFieldChange(fieldName, uploaded.url);
       setImageUpload({ field: fieldName, busy: false, error: "" });
     } catch (uploadError) {
@@ -363,7 +365,7 @@ export const FormModal: React.FC<FormModalProps> = ({
         return (
           <div key={field.name} className={colClass}>
             <label className="font-bold text-[var(--text)] block mb-1 text-xs">
-              {field.label} {field.required && <span className="text-red-500">*</span>}
+              {t(field.label)} {field.required && <span className="text-red-500">*</span>}
             </label>
             <input
               type="text"
@@ -371,12 +373,12 @@ export const FormModal: React.FC<FormModalProps> = ({
               disabled={field.disabled}
               value={rawValue}
               onChange={(e) => handleFieldChange(field.name, e.target.value)}
-              placeholder={field.placeholder || `Enter ${field.label}`}
+              placeholder={field.placeholder ? t(field.placeholder) : t("Enter {label}").replace("{label}", t(field.label))}
               className="w-full px-3 py-2 bg-[var(--surface-muted)] border border-[var(--border)] rounded-xl outline-none text-xs text-[var(--text)] focus:border-[var(--primary)] transition-colors"
             />
             {field.helperText && (
               <span className="text-[10px] text-[var(--text-muted)] mt-0.5 block">
-                {field.helperText}
+                {t(field.helperText)}
               </span>
             )}
           </div>
@@ -386,7 +388,7 @@ export const FormModal: React.FC<FormModalProps> = ({
         return (
           <div key={field.name} className={colClass}>
             <label className="font-bold text-[var(--text)] block mb-1 text-xs">
-              {field.label} {field.required && <span className="text-red-500">*</span>}
+              {t(field.label)} {field.required && <span className="text-red-500">*</span>}
             </label>
             <div className="relative">
               <input
@@ -403,7 +405,7 @@ export const FormModal: React.FC<FormModalProps> = ({
                     e.target.value === "" ? "" : Number(e.target.value)
                   )
                 }
-                placeholder={field.placeholder || "0"}
+                placeholder={field.placeholder ? t(field.placeholder) : "0"}
                 className="w-full px-3 py-2 pr-7 bg-[var(--surface-muted)] border border-[var(--border)] rounded-xl outline-none text-xs text-[var(--text)] focus:border-[var(--primary)] transition-colors"
               />
               <StepperButtons
@@ -418,7 +420,7 @@ export const FormModal: React.FC<FormModalProps> = ({
             </div>
             {field.helperText && (
               <span className="text-[10px] text-[var(--text-muted)] mt-0.5 block">
-                {field.helperText}
+                {t(field.helperText)}
               </span>
             )}
           </div>
@@ -428,7 +430,7 @@ export const FormModal: React.FC<FormModalProps> = ({
         return (
           <div key={field.name} className={colClass}>
             <label className="font-bold text-[var(--text)] block mb-1 text-xs">
-              {field.label} {field.required && <span className="text-red-500">*</span>}
+              {t(field.label)} {field.required && <span className="text-red-500">*</span>}
             </label>
             <input
               type="date"
@@ -446,7 +448,7 @@ export const FormModal: React.FC<FormModalProps> = ({
             />
             {field.helperText && (
               <span className="text-[10px] text-[var(--text-muted)] mt-0.5 block">
-                {field.helperText}
+                {t(field.helperText)}
               </span>
             )}
           </div>
@@ -464,19 +466,19 @@ export const FormModal: React.FC<FormModalProps> = ({
           return (
             <div key={field.name} className={colClass}>
               <label className="font-bold text-[var(--text)] block mb-1 text-xs">
-                {field.label}{" "}
+                {t(field.label)}{" "}
                 {field.required && <span className="text-red-500">*</span>}
               </label>
               <div
                 aria-disabled="true"
                 className="flex h-11 w-full cursor-not-allowed select-none items-center justify-between gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-3 text-sm text-[var(--text-muted)]"
               >
-                <span className="truncate">{selectedLabel}</span>
+                <span className="truncate">{selectedLabel === "—" ? selectedLabel : t(selectedLabel)}</span>
                 <Lock className="h-3.5 w-3.5 shrink-0 opacity-60" />
               </div>
               {field.helperText && (
                 <span className="text-[10px] text-[var(--text-muted)] mt-0.5 block">
-                  {field.helperText}
+                  {t(field.helperText)}
                 </span>
               )}
             </div>
@@ -485,26 +487,26 @@ export const FormModal: React.FC<FormModalProps> = ({
         return (
           <div key={field.name} className={colClass}>
             <label className="font-bold text-[var(--text)] block mb-1 text-xs">
-              {field.label} {field.required && <span className="text-red-500">*</span>}
+              {t(field.label)} {field.required && <span className="text-red-500">*</span>}
             </label>
             <Select
               value={String(rawValue || "")}
-              options={field.options || []}
+              options={(field.options || []).map((option) => ({ ...option, label: t(option.label) }))}
               onChange={(val) => handleFieldChange(field.name, val)}
-              placeholder={field.placeholder || `Select ${field.label}`}
+              placeholder={field.placeholder ? t(field.placeholder) : t("Select {label}").replace("{label}", t(field.label))}
               fullWidth
               variant="outline"
               size="md"
               disabled={field.disabled}
-              emptyText={field.createNew?.emptyMessage}
-              emptyActionLabel={field.createNew?.buttonLabel}
+              emptyText={field.createNew ? t(field.createNew.emptyMessage) : undefined}
+              emptyActionLabel={field.createNew ? t(field.createNew.buttonLabel) : undefined}
               onEmptyAction={
                 field.createNew ? () => handleCreateNew(field.createNew!) : undefined
               }
             />
             {field.helperText && (
               <span className="text-[10px] text-[var(--text-muted)] mt-0.5 block">
-                {field.helperText}
+                {t(field.helperText)}
               </span>
             )}
           </div>
@@ -525,7 +527,7 @@ export const FormModal: React.FC<FormModalProps> = ({
               <div className="w-9 h-5 bg-[var(--border)] rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-[var(--surface)] after:border-[var(--border)] after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[var(--primary)]" />
             </label>
             <span className="font-bold text-[var(--text)] text-xs cursor-pointer select-none">
-              {field.label}
+              {t(field.label)}
             </span>
           </div>
         );
@@ -534,7 +536,7 @@ export const FormModal: React.FC<FormModalProps> = ({
         return (
           <div key={field.name} className={colClass}>
             <label className="font-bold text-[var(--text)] block mb-1 text-xs">
-              {field.label} {field.required && <span className="text-red-500">*</span>}
+              {t(field.label)} {field.required && <span className="text-red-500">*</span>}
             </label>
             <textarea
               rows={field.rows || 3}
@@ -542,12 +544,12 @@ export const FormModal: React.FC<FormModalProps> = ({
               disabled={field.disabled}
               value={rawValue}
               onChange={(e) => handleFieldChange(field.name, e.target.value)}
-              placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}...`}
+              placeholder={field.placeholder ? t(field.placeholder) : t("Enter {label}...").replace("{label}", t(field.label).toLowerCase())}
               className="w-full px-3 py-2 bg-[var(--surface-muted)] border border-[var(--border)] rounded-xl outline-none text-xs text-[var(--text)] focus:border-[var(--primary)] resize-none transition-colors [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-[var(--primary)] [&::-webkit-scrollbar-thumb]:rounded-full"
             />
             {field.helperText && (
               <span className="text-[10px] text-[var(--text-muted)] mt-0.5 block">
-                {field.helperText}
+                {t(field.helperText)}
               </span>
             )}
           </div>
@@ -559,7 +561,7 @@ export const FormModal: React.FC<FormModalProps> = ({
         return (
           <div key={field.name} className={colClass}>
             <label className="font-bold text-[var(--text)] block mb-1 text-xs">
-              {field.label}
+              {t(field.label)}
             </label>
             <div className="flex items-center gap-2 mb-2">
               <input
@@ -568,7 +570,7 @@ export const FormModal: React.FC<FormModalProps> = ({
                 onChange={(e) =>
                   setTagInputs((prev) => ({ ...prev, [field.name]: e.target.value }))
                 }
-                placeholder={field.placeholder || "Type and press Enter to add tag"}
+                placeholder={field.placeholder ? t(field.placeholder) : t("Type and press Enter to add tag")}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     e.preventDefault();
@@ -584,7 +586,7 @@ export const FormModal: React.FC<FormModalProps> = ({
                 onClick={() => handleAddTag(field.name)}
                 className="h-[34px]"
               >
-                Add
+                {t("Add")}
               </Button>
             </div>
             <div className="flex flex-wrap gap-1.5 min-h-6">
@@ -613,7 +615,7 @@ export const FormModal: React.FC<FormModalProps> = ({
           <div key={field.name} className={colClass}>
             <div className="flex items-center justify-between mb-1 gap-2">
               <label className="font-bold text-[var(--text)] text-xs">
-                {field.label}
+                {t(field.label)}
               </label>
               <Button
                 variant="ghost"
@@ -622,7 +624,7 @@ export const FormModal: React.FC<FormModalProps> = ({
                 icon={PlusCircle}
                 onClick={() => handleAddKeyValueRow(field.name)}
               >
-                Add Row
+                {t("Add Row")}
               </Button>
             </div>
             <div className="space-y-2 max-h-36 overflow-y-auto pr-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-[var(--primary)] [&::-webkit-scrollbar-thumb]:rounded-full">
@@ -635,7 +637,7 @@ export const FormModal: React.FC<FormModalProps> = ({
                 <div key={idx} className="flex items-center gap-2">
                   <input
                     type="text"
-                    placeholder="Key / Attribute"
+                    placeholder={t("Key / Attribute")}
                     value={row.key || ""}
                     onChange={(e) =>
                       handleKeyValueChange(field.name, idx, "key", e.target.value)
@@ -650,7 +652,7 @@ export const FormModal: React.FC<FormModalProps> = ({
                   </span>
                   <input
                     type="text"
-                    placeholder="Value"
+                    placeholder={t("Value")}
                     value={row.value || ""}
                     onChange={(e) =>
                       handleKeyValueChange(field.name, idx, "value", e.target.value)
@@ -663,14 +665,14 @@ export const FormModal: React.FC<FormModalProps> = ({
                     type="button"
                     icon={Trash2}
                     onClick={() => handleRemoveKeyValueRow(field.name, idx)}
-                    aria-label="Delete row"
+                    aria-label={t("Delete row")}
                     className="h-[34px] w-[34px] shrink-0"
                   />
                 </div>
               ))}
               {rows.length === 0 && (
                 <div className="text-[11px] text-[var(--text-muted)] italic py-1">
-                  No attributes defined yet. Click "Add Row" to add.
+                  {t('No attributes defined yet. Click "Add Row" to add.')}
                 </div>
               )}
             </div>
@@ -681,21 +683,21 @@ export const FormModal: React.FC<FormModalProps> = ({
         return (
           <div key={field.name} className={colClass}>
             <label className="font-bold text-[var(--text)] block mb-1 text-xs">
-              {field.label}
+              {t(field.label)}
             </label>
             <div className="flex gap-2 items-center">
               <input
                 type="text"
                 value={rawValue}
                 onChange={(e) => handleFieldChange(field.name, e.target.value)}
-                placeholder="Image URL (https://...) or upload a file"
+                placeholder={t("Image URL (https://...) or upload a file")}
                 className="flex-1 px-3 py-2 bg-[var(--surface-muted)] border border-[var(--border)] rounded-xl outline-none text-xs text-[var(--text)]"
               />
               <label
                 className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-xs font-medium cursor-pointer hover:border-[var(--primary)] transition-colors ${imageUpload.busy && imageUpload.field === field.name ? "opacity-50 pointer-events-none" : ""}`}
               >
                 <UploadCloud className="w-3.5 h-3.5" />
-                {imageUpload.busy && imageUpload.field === field.name ? "Uploading…" : "Upload"}
+                {imageUpload.busy && imageUpload.field === field.name ? t("Uploading…") : t("Upload")}
                 <input
                   type="file"
                   accept="image/*"
@@ -712,20 +714,20 @@ export const FormModal: React.FC<FormModalProps> = ({
                 className="inline-flex shrink-0 items-center gap-1.5 px-3 py-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] text-xs font-medium cursor-pointer hover:border-[var(--primary)] transition-colors"
               >
                 <Images className="w-3.5 h-3.5" />
-                Select
+                {t("Select")}
               </button>
               {rawValue && (
                 <span className="relative shrink-0">
                   <img
                     src={rawValue}
-                    alt="Preview"
+                    alt={t("Preview")}
                     className="w-9 h-9 rounded-lg object-cover border border-[var(--border)]"
                     onError={(e) => ((e.target as HTMLElement).style.display = "none")}
                   />
                   <button
                     type="button"
-                    title="Set image"
-                    aria-label="Set image"
+                    title={t("Set image")}
+                    aria-label={t("Set image")}
                     onClick={() =>
                       setCropTarget({
                         field: field.name,
@@ -751,7 +753,7 @@ export const FormModal: React.FC<FormModalProps> = ({
         return (
           <div key={field.name} className={colClass}>
             <label className="font-bold text-[var(--text)] block mb-1 text-xs">
-              {field.label} {field.required && <span className="text-red-500">*</span>}
+              {t(field.label)} {field.required && <span className="text-red-500">*</span>}
             </label>
             <ProductMediaManager
               value={gallery}
@@ -759,7 +761,7 @@ export const FormModal: React.FC<FormModalProps> = ({
             />
             {field.helperText && (
               <span className="text-[10px] text-[var(--text-muted)] mt-0.5 block">
-                {field.helperText}
+                {t(field.helperText)}
               </span>
             )}
           </div>
@@ -784,7 +786,7 @@ export const FormModal: React.FC<FormModalProps> = ({
             />
             {field.helperText && (
               <span className="text-[10px] text-[var(--text-muted)] mt-0.5 block">
-                {field.helperText}
+                {t(field.helperText)}
               </span>
             )}
           </div>
@@ -815,11 +817,11 @@ export const FormModal: React.FC<FormModalProps> = ({
           <div className="min-w-0">
             <h3 className="font-bold text-[var(--text)] text-base">
               {formMode === "add"
-                ? `Add New ${itemTypeLabel}`
-                : `Edit ${itemTypeLabel} Details`}
+                ? t("Add New {item}").replace("{item}", t(itemTypeLabel))
+                : t("Edit {item} Details").replace("{item}", t(itemTypeLabel))}
             </h3>
             <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
-              Configure parameters, status, and attributes for this {itemTypeLabel.toLowerCase()}.
+              {t("Configure parameters, status, and attributes for this {item}.").replace("{item}", t(itemTypeLabel).toLowerCase())}
             </p>
           </div>
 
@@ -828,14 +830,14 @@ export const FormModal: React.FC<FormModalProps> = ({
             size="sm"
             icon={X}
             onClick={onClose}
-            aria-label="Close modal"
+            aria-label={t("Close modal")}
             className="close-x"
           />
         </div>
 
         {error && (
           <div className="mx-4 sm:mx-6 mt-4 p-3 text-xs text-red-500 bg-red-500/10 border border-red-500/20 rounded-lg flex items-start gap-2 shrink-0">
-             <span className="font-semibold text-red-500 text-sm">Error:</span>
+             <span className="font-semibold text-red-500 text-sm">{t("Error:")}</span>
              <span>{error}</span>
           </div>
         )}
@@ -850,7 +852,7 @@ export const FormModal: React.FC<FormModalProps> = ({
             groupedSections.map((section) => (
               <div key={section.title} className="space-y-3">
                 <h4 className="font-bold border-b border-[var(--border)] pb-1.5 uppercase tracking-wider text-[10px] text-[var(--primary)]">
-                  {section.title}
+                  {t(section.title)}
                 </h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                   {section.fields.map(renderField)}
@@ -859,7 +861,7 @@ export const FormModal: React.FC<FormModalProps> = ({
             ))
           ) : (
             <div className="text-center py-8 text-xs text-[var(--text-muted)]">
-              No form fields configured for this page.
+              {t("No form fields configured for this page.")}
             </div>
           )}
         </form>
@@ -867,11 +869,11 @@ export const FormModal: React.FC<FormModalProps> = ({
         {/* MODAL ACTIONS */}
         <div className="p-3 sm:p-4 border-t border-[var(--border)] flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 sm:gap-3 bg-[var(--surface-muted)] shrink-0">
           <Button variant="outline" size="md" type="button" onClick={onClose}>
-            Cancel
+            {t("Cancel")}
           </Button>
 
           <Button type="submit" form="itemFormModal" variant="primary" size="md">
-            {formMode === "add" ? `Create ${itemTypeLabel}` : "Save Changes"}
+            {formMode === "add" ? t("Create {item}").replace("{item}", t(itemTypeLabel)) : t("Save Changes")}
           </Button>
         </div>
       </div>

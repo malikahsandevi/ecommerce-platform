@@ -20,6 +20,7 @@ import {
 import Button from "@/components/ui/Button";
 import { useBackdropClose } from "@/hooks/useBackdropClose";
 import { mediaService, purposeFromAssetUrl } from "@/services/resourceRegistry";
+import { useLanguage } from "@/services/i18n";
 
 /** One product in the Edit Media panel's "Used In" list. */
 export interface MediaUsageProduct {
@@ -276,6 +277,7 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
   onOpenProduct,
   onOpenUsage,
 }) => {
+  const { t } = useLanguage();
   const [mediaList, setMediaList] = useState<MediaItem[]>([]);
   const [selectedIndex, setSelectedIndex] = useState<number>(0);
   const [errorMessage, setErrorMessage] = useState<string>("");
@@ -600,17 +602,17 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
     running: boolean,
   ): string => {
     if (running) {
-      return opt.compress && !opt.convert ? "Compressing…" : "Converting…";
+      return opt.compress && !opt.convert ? t("Compressing…") : t("Converting…");
     }
-    if (opt.convert && opt.compress) return "Convert & Compress";
+    if (opt.convert && opt.compress) return t("Convert & Compress");
     if (opt.convert) {
-      if (opt.format === "original") return "Convert Image";
+      if (opt.format === "original") return t("Convert Image");
       const label =
         FORMAT_OPTIONS.find((f) => f.value === opt.format)?.label ?? "WebP";
-      return `Convert to ${label}`;
+      return t("Convert to {format}").replace("{format}", label);
     }
-    if (opt.compress) return "Compress Image";
-    return "Convert & Compress";
+    if (opt.compress) return t("Compress Image");
+    return t("Convert & Compress");
   };
 
   // Process queued images in the background whenever their settings make
@@ -691,7 +693,7 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
         caption: "",
         description: "",
         dimensions:
-          category === "image" || category === "video" ? "Detecting..." : "N/A",
+          category === "image" || category === "video" ? t("Detecting...") : "N/A",
         size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
         type: file.type || `application/${file.name.split(".").pop()}`,
         ext: `.${file.name.split(".").pop()}`,
@@ -725,7 +727,7 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
 
     if (hasInvalidFiles) {
       setErrorMessage(
-        "Some unsupported files were rejected. Only Images, Videos, Audios and Documents are allowed.",
+        t("Some unsupported files were rejected. Only Images, Videos, Audios and Documents are allowed."),
       );
     }
 
@@ -925,7 +927,7 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
         setErrorMessage(
           error instanceof Error
             ? error.message
-            : "The optimized image could not be saved. Nothing was changed — please try again.",
+            : t("The optimized image could not be saved. Nothing was changed — please try again."),
         );
       } finally {
         setIsPreparing(false);
@@ -998,10 +1000,10 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
     >
       <Upload className="w-8 h-8 sm:w-10 sm:h-10 mb-2 text-[var(--primary)]" />
       <p className="text-xs sm:text-sm font-medium text-center text-[var(--text)]">
-        DRAG & DROP MEDIA FILES HERE
+        {t("DRAG & DROP MEDIA FILES HERE")}
       </p>
       <p className="text-[11px] sm:text-xs mt-1 text-center text-[var(--text-muted)]">
-        Accepted: Images, Videos, Audio & Documents
+        {t("Accepted: Images, Videos, Audio & Documents")}
       </p>
       <input
         type="file"
@@ -1021,12 +1023,12 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
         <>
           <div>
             <h3 className="text-xs font-semibold uppercase tracking-wider mb-4 text-[var(--text-muted)]">
-              MEDIA DETAILS
+              {t("MEDIA DETAILS")}
             </h3>
             <div className="space-y-3 sm:space-y-4">
               <div>
                 <label className="block text-xs mb-1 text-[var(--text-soft)]">
-                  Title / Name
+                  {t("Title / Name")}
                 </label>
                 <input
                   type="text"
@@ -1040,7 +1042,7 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
 
               <div>
                 <label className="flex items-center gap-1 text-xs mb-1 text-[var(--text-soft)]">
-                  Alt Text (SEO){" "}
+                  {t("Alt Text (SEO)")}{" "}
                   <Info size={12} className="text-[var(--text-muted)]" />
                 </label>
                 <input
@@ -1055,7 +1057,7 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
 
               <div>
                 <label className="block text-xs mb-1 text-[var(--text-soft)]">
-                  Caption
+                  {t("Caption")}
                 </label>
                 <textarea
                   rows={2}
@@ -1069,7 +1071,7 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
 
               <div>
                 <label className="block text-xs mb-1 text-[var(--text-soft)]">
-                  Description
+                  {t("Description")}
                 </label>
                 <textarea
                   rows={2}
@@ -1083,16 +1085,16 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
 
               <div>
                 <label className="block text-xs mb-1 text-[var(--text-soft)]">
-                  Status
+                  {t("Status")}
                 </label>
                 <select
                   value={currentItem.status || "published"}
                   onChange={(e) => handleInputChange("status", e.target.value)}
                   className="w-full rounded-md px-3 py-1.5 text-xs focus:outline-none bg-[var(--surface)] border border-[var(--border)] text-[var(--text)] focus:border-[var(--primary)]"
                 >
-                  <option value="published">Published</option>
-                  <option value="draft">Draft</option>
-                  <option value="archived">Archived</option>
+                  <option value="published">{t("Published")}</option>
+                  <option value="draft">{t("Draft")}</option>
+                  <option value="archived">{t("Archived")}</option>
                 </select>
               </div>
             </div>
@@ -1100,18 +1102,18 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
 
           <div className="pt-4 border-t border-[var(--border)]">
             <h3 className="text-xs font-semibold uppercase tracking-wider mb-3 text-[var(--text-muted)]">
-              System Auto-Generated Info (Read-only)
+              {t("System Auto-Generated Info (Read-only)")}
             </h3>
             <div className="space-y-2 text-xs text-[var(--text-soft)]">
               <div className="flex justify-between">
-                <span className="text-[var(--text-muted)]">Category</span>
+                <span className="text-[var(--text-muted)]">{t("Category")}</span>
                 <span className="font-mono capitalize">
                   {currentItem.mediaCategory}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-[var(--text-muted)]">
-                  Dimensions
+                  {t("Dimensions")}
                 </span>
                 <span className="font-mono">
                   {currentItem.dimensions}
@@ -1119,19 +1121,19 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
               </div>
               <div className="flex justify-between">
                 <span className="text-[var(--text-muted)]">
-                  File Size
+                  {t("File Size")}
                 </span>
                 <span className="font-mono">{currentItem.size}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-[var(--text-muted)]">
-                  Media Type
+                  {t("Media Type")}
                 </span>
                 <span className="font-mono">{currentItem.type}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-[var(--text-muted)]">
-                  Upload Date
+                  {t("Upload Date")}
                 </span>
                 <span className="font-mono">{currentItem.date}</span>
               </div>
@@ -1142,10 +1144,10 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
         <div className="flex-1 flex flex-col items-center justify-center text-center p-6 min-h-[150px]">
           <Info className="w-10 h-10 mb-2 opacity-30 text-[var(--text-muted)]" />
           <p className="text-xs font-medium text-[var(--text-soft)]">
-            No details available
+            {t("No details available")}
           </p>
           <p className="text-[11px] mt-1 text-[var(--text-muted)]">
-            Upload media files to view and edit details here.
+            {t("Upload media files to view and edit details here.")}
           </p>
         </div>
       )}
@@ -1164,7 +1166,7 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
     return (
       <span className="absolute top-1.5 right-1.5 z-10 flex items-center gap-0.5 rounded-full bg-green-600 px-1.5 py-0.5 text-[9px] font-semibold text-white">
         <Zap size={9} className="fill-current" />
-        {MIME_LABEL[eff.type] || "Optimized"}
+        {MIME_LABEL[eff.type] || t("Optimized")}
       </span>
     );
   };
@@ -1173,7 +1175,7 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
     <div className="flex min-h-0 flex-col rounded-xl border border-[var(--border)] bg-[var(--background)] p-3">
       <div className="flex shrink-0 items-center justify-between gap-2">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
-          Uploaded Images
+          {t("Uploaded Images")}
         </h3>
         <div className="flex items-center gap-3">
           {mediaList.length > 0 && (
@@ -1183,12 +1185,12 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
               className="flex items-center gap-1.5 text-xs font-medium text-[var(--primary)]"
             >
               <TickCircle on={allTicked} onSurface />
-              {allTicked ? "Deselect All" : "Select All"}
+              {allTicked ? t("Deselect All") : t("Select All")}
             </button>
           )}
           <span className="text-[11px] text-[var(--text-muted)]">
-            {mediaList.length} {mediaList.length === 1 ? "file" : "files"}
-            {mediaList.length > 3 ? " — scroll →" : ""}
+            {t(mediaList.length === 1 ? "{count} file" : "{count} files").replace("{count}", String(mediaList.length))}
+            {mediaList.length > 3 ? t(" — scroll →") : ""}
           </span>
         </div>
       </div>
@@ -1212,7 +1214,7 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
               </div>
               <button
                 type="button"
-                aria-label={item.ticked ? "Deselect file" : "Select file"}
+                aria-label={item.ticked ? t("Deselect file") : t("Select file")}
                 onClick={(e) => {
                   e.stopPropagation();
                   toggleTick(index);
@@ -1233,7 +1235,7 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
               >
                 <button
                   type="button"
-                  aria-label={`Remove ${item.title}`}
+                  aria-label={t("Remove {name}").replace("{name}", item.title)}
                   onClick={(e) => {
                     e.stopPropagation();
                     removeQueueItem(index);
@@ -1241,7 +1243,7 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
                   className="flex w-full items-center justify-center gap-1 bg-red-600/90 py-1 text-[10px] font-semibold text-white transition-colors hover:bg-red-600"
                 >
                   <Trash2 size={11} />
-                  Remove
+                  {t("Remove")}
                 </button>
               </div>
               <div className="absolute bottom-0 inset-x-0 bg-black/80 px-1.5 py-0.5 text-center text-[9px] truncate text-[var(--text-soft)]">
@@ -1254,10 +1256,10 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
         <div className="mt-3 flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-[var(--border)] text-center">
           <ImageIcon className="mb-2 h-10 w-10 opacity-40 text-[var(--text-muted)]" />
           <p className="text-xs sm:text-sm font-medium text-[var(--text)]">
-            No media yet
+            {t("No media yet")}
           </p>
           <p className="mt-1 text-[11px] sm:text-xs text-[var(--text-muted)]">
-            Upload media to see details and manage attributes.
+            {t("Upload media to see details and manage attributes.")}
           </p>
         </div>
       )}
@@ -1371,9 +1373,9 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
         >
         <h3 className="flex shrink-0 items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-[var(--primary)]">
           <Zap size={14} className="fill-current" />
-          Image Optimization
+          {t("Image Optimization")}
           <span className="rounded-full bg-[var(--primary)] px-1.5 py-px text-[9px] font-bold text-white">
-            NEW
+            {t("NEW")}
           </span>
         </h3>
 
@@ -1381,13 +1383,13 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
             {/* Scope */}
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs font-medium text-[var(--text-soft)]">
-                Apply to:
+                {t("Apply to:")}
               </span>
               {(
                 [
-                  { value: "active", label: "This Image" },
-                  { value: "selected", label: `Selected (${tickedCount})` },
-                  { value: "all", label: "All Images" },
+                  { value: "active", label: t("This Image") },
+                  { value: "selected", label: t("Selected ({count})").replace("{count}", String(tickedCount)) },
+                  { value: "all", label: t("All Images") },
                 ] as { value: OptScope; label: string }[]
               ).map((chip) => (
                 <button
@@ -1410,16 +1412,16 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-medium text-[var(--text)]">
-                  Convert to WebP
+                  {t("Convert to WebP")}
                 </p>
                 <p className="text-[11px] text-[var(--text-muted)]">
-                  Smaller size, same quality — pages load faster
+                  {t("Smaller size, same quality — pages load faster")}
                 </p>
               </div>
               <Toggle
                 on={panelOpt.convert}
                 onToggle={() => applyOpt({ convert: !panelOpt.convert })}
-                label="Convert to WebP"
+                label={t("Convert to WebP")}
               />
             </div>
             <div className="flex flex-wrap gap-2">
@@ -1435,7 +1437,7 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
                       : "border-[var(--border)] bg-[var(--surface)] text-[var(--text-soft)]"
                   } ${!panelOpt.convert ? "cursor-not-allowed opacity-50" : ""}`}
                 >
-                  {option.label}
+                  {option.value === "original" ? t(option.label) : option.label}
                   {panelOpt.format === option.value && (
                     <Check size={11} strokeWidth={3.5} />
                   )}
@@ -1447,16 +1449,16 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-medium text-[var(--text)]">
-                  Compress Image
+                  {t("Compress Image")}
                 </p>
                 <p className="text-[11px] text-[var(--text-muted)]">
-                  Quality stays at MAX — only the size goes down
+                  {t("Quality stays at MAX — only the size goes down")}
                 </p>
               </div>
               <Toggle
                 on={panelOpt.compress}
                 onToggle={() => applyOpt({ compress: !panelOpt.compress })}
-                label="Compress Image"
+                label={t("Compress Image")}
               />
             </div>
 
@@ -1464,12 +1466,12 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
             <div>
               <div className="h-1.5 rounded-full bg-[var(--primary)]" />
               <div className="mt-1.5 flex items-center justify-between text-[10px] text-[var(--text-muted)]">
-                <span>Smaller size</span>
+                <span>{t("Smaller size")}</span>
                 <span className="flex items-center gap-1 font-semibold text-[var(--primary)]">
-                  Quality: MAXIMUM (100%)
+                  {t("Quality: MAXIMUM (100%)")}
                   <Lock size={10} />
                 </span>
-                <span>Full quality</span>
+                <span>{t("Full quality")}</span>
               </div>
             </div>
 
@@ -1478,7 +1480,7 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
                 image queued, a placeholder box sits under the veil. */}
             {usingFallback && (
               <p className="text-[11px] text-[var(--text-muted)]">
-                Selected file is not an image — showing the first image.
+                {t("Selected file is not an image — showing the first image.")}
               </p>
             )}
             {displayItem ? (
@@ -1489,7 +1491,7 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
                 </span>
                 {displayItem?.procFailed ? (
                   <span className="rounded-full bg-black/10 px-2 py-0.5 text-[10px] font-semibold text-[var(--text-soft)]">
-                    Original — processing failed
+                    {t("Original — processing failed")}
                   </span>
                 ) : displayEff ? (
                   <span className="flex items-center gap-2">
@@ -1500,7 +1502,7 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
                     <span className="font-bold text-green-600">
                       {displayEff.size !== undefined
                         ? `~${formatBytes(displayEff.size)} ${MIME_LABEL[displayEff.type] || ""}`
-                        : `Converting to ${MIME_LABEL[displayEff.type] || "optimized"}…`}
+                        : t("Converting to {format}…").replace("{format}", MIME_LABEL[displayEff.type] || t("optimized"))}
                     </span>
                     {displaySavedPct !== null && displaySavedPct > 0 && (
                       <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-600">
@@ -1515,15 +1517,15 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
                     </span>
                     <span className="rounded-full bg-black/10 px-2 py-0.5 text-[10px] font-semibold text-[var(--text-soft)]">
                       {displayItem && keptOriginal(displayItem)
-                        ? "Already optimal — original kept"
-                        : "Original"}
+                        ? t("Already optimal — original kept")
+                        : t("Original")}
                     </span>
                   </span>
                 )}
               </div>
               <div className="mt-2 flex items-center justify-between gap-2 border-t border-dashed border-[var(--border)] pt-2">
                 <span className="font-semibold text-[var(--text)]">
-                  Total ({optimizedCount} optimized, {originalCount} original)
+                  {t("Total ({optimized} optimized, {original} original)").replace("{optimized}", String(optimizedCount)).replace("{original}", String(originalCount))}
                 </span>
                 <span className="font-medium text-[var(--text-soft)]">
                   {formatBytes(totalOriginal)} →{" "}
@@ -1537,13 +1539,13 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
               <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 text-xs">
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-medium text-[var(--text-muted)]">
-                    No image
+                    {t("No image")}
                   </span>
                   <span className="text-[var(--text-muted)]">—</span>
                 </div>
                 <div className="mt-2 flex items-center justify-between gap-2 border-t border-dashed border-[var(--border)] pt-2">
                   <span className="font-semibold text-[var(--text)]">
-                    Total ({optimizedCount} optimized, {originalCount} original)
+                    {t("Total ({optimized} optimized, {original} original)").replace("{optimized}", String(optimizedCount)).replace("{original}", String(originalCount))}
                   </span>
                   <span className="text-[var(--text-muted)]">—</span>
                 </div>
@@ -1574,7 +1576,7 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
           <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-[var(--surface)]/75 backdrop-blur-[1px]">
             <ImageIcon className="h-8 w-8 text-[var(--text-muted)]" />
             <p className="px-4 text-center text-sm font-medium text-[var(--text-soft)]">
-              {forcedOverlayText ?? "Upload image to use Image Optimizer"}
+              {forcedOverlayText ?? t("Upload image to use Image Optimizer")}
             </p>
           </div>
         )}
@@ -1615,7 +1617,7 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
   const renderEditPreviewPanel = () => (
     <div className="flex h-full min-h-0 flex-col rounded-xl border border-[var(--border)] bg-[var(--background)] p-3">
       <h3 className="shrink-0 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
-        Media Preview
+        {t("Media Preview")}
       </h3>
       <div className="relative mt-3 flex h-44 min-h-0 flex-1 items-center justify-center overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface)] md:h-auto">
         {currentItem ? (
@@ -1670,9 +1672,9 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
       MediaUsageType,
       { label: string; Icon: React.ElementType }
     > = {
-      product: { label: "Product", Icon: Package },
-      brand: { label: "Brand", Icon: Award },
-      category: { label: "Category", Icon: FolderTree },
+      product: { label: t("Product"), Icon: Package },
+      brand: { label: t("Brand"), Icon: Award },
+      category: { label: t("Category"), Icon: FolderTree },
     };
 
     // Status presentation: Published/Active get the filled orange tick
@@ -1714,7 +1716,7 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
           type="button"
           disabled={!canOpen(type)}
           onClick={() => openUsage(type, entity._id)}
-          title={canOpen(type) ? `Open ${entity.name} for editing` : entity.name}
+          title={canOpen(type) ? t("Open {name} for editing").replace("{name}", entity.name) : entity.name}
           className={`relative h-24 w-24 shrink-0 overflow-hidden rounded-lg border-2 bg-[var(--background)] text-left transition-all ${
             canOpen(type)
               ? "cursor-pointer border-[var(--border)] hover:border-[var(--primary)]"
@@ -1773,24 +1775,24 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
       <div className="flex h-full min-h-0 flex-col rounded-xl border border-[var(--border)] bg-[var(--background)] px-3 py-2">
         <div className="flex shrink-0 items-center justify-between gap-2">
           <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
-            Used In
+            {t("Used In")}
           </h3>
           <span className="text-[11px] text-[var(--text-muted)]">
-            {usageTotal} {usageTotal === 1 ? "link" : "links"}
+            {t(usageTotal === 1 ? "{count} link" : "{count} links").replace("{count}", String(usageTotal))}
           </span>
         </div>
 
         {usageLoading ? (
           <div className="mt-2 flex min-h-0 flex-1 items-center justify-center text-center">
-            <p className="text-xs text-[var(--text-muted)]">Loading…</p>
+            <p className="text-xs text-[var(--text-muted)]">{t("Loading…")}</p>
           </div>
         ) : usageTotal === 0 ? (
           <div className="mt-2 flex min-h-0 flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-[var(--border)] px-3 text-center">
             <p className="text-xs font-medium text-[var(--text)]">
-              Not used anywhere yet
+              {t("Not used anywhere yet")}
             </p>
             <p className="mt-1 text-[11px] text-[var(--text-muted)]">
-              Products, brands and categories that use this media will appear here.
+              {t("Products, brands and categories that use this media will appear here.")}
             </p>
           </div>
         ) : (
@@ -1833,9 +1835,9 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
         >
           <h3 className="flex shrink-0 items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-[var(--primary)]">
             <Zap size={14} className="fill-current" />
-            Image Optimization
+            {t("Image Optimization")}
             <span className="rounded-full bg-[var(--primary)] px-1.5 py-px text-[9px] font-bold text-white">
-              NEW
+              {t("NEW")}
             </span>
           </h3>
 
@@ -1843,16 +1845,16 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-sm font-medium text-[var(--text)]">
-                Convert to WebP
+                {t("Convert to WebP")}
               </p>
               <p className="text-[11px] text-[var(--text-muted)]">
-                Smaller size, same quality — pages load faster
+                {t("Smaller size, same quality — pages load faster")}
               </p>
             </div>
             <Toggle
               on={panelOpt.convert}
               onToggle={() => applyEditOpt({ convert: !panelOpt.convert })}
-              label="Convert to WebP"
+              label={t("Convert to WebP")}
             />
           </div>
           <div className="flex flex-wrap gap-2">
@@ -1868,7 +1870,7 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
                     : "border-[var(--border)] bg-[var(--surface)] text-[var(--text-soft)]"
                 } ${!panelOpt.convert ? "cursor-not-allowed opacity-50" : ""}`}
               >
-                {option.label}
+                {option.value === "original" ? t(option.label) : option.label}
                 {panelOpt.format === option.value && (
                   <Check size={11} strokeWidth={3.5} />
                 )}
@@ -1880,16 +1882,16 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-sm font-medium text-[var(--text)]">
-                Compress Image
+                {t("Compress Image")}
               </p>
               <p className="text-[11px] text-[var(--text-muted)]">
-                Quality stays at MAX — only the size goes down
+                {t("Quality stays at MAX — only the size goes down")}
               </p>
             </div>
             <Toggle
               on={panelOpt.compress}
               onToggle={() => applyEditOpt({ compress: !panelOpt.compress })}
-              label="Compress Image"
+              label={t("Compress Image")}
             />
           </div>
 
@@ -1897,12 +1899,12 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
           <div>
             <div className="h-1.5 rounded-full bg-[var(--primary)]" />
             <div className="mt-1.5 flex items-center justify-between text-[10px] text-[var(--text-muted)]">
-              <span>Smaller size</span>
+              <span>{t("Smaller size")}</span>
               <span className="flex items-center gap-1 font-semibold text-[var(--primary)]">
-                Quality: MAXIMUM (100%)
+                {t("Quality: MAXIMUM (100%)")}
                 <Lock size={10} />
               </span>
-              <span>Full quality</span>
+              <span>{t("Full quality")}</span>
             </div>
           </div>
 
@@ -1911,8 +1913,8 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
             {!fileReady ? (
               <p className="font-medium text-[var(--text-muted)]">
                 {editFileFailed
-                  ? "The image file could not be loaded, so optimization is unavailable."
-                  : "Loading image…"}
+                  ? t("The image file could not be loaded, so optimization is unavailable.")
+                  : t("Loading image…")}
               </p>
             ) : (
               <>
@@ -1922,7 +1924,7 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
                   </span>
                   {item?.procFailed ? (
                     <span className="rounded-full bg-black/10 px-2 py-0.5 text-[10px] font-semibold text-[var(--text-soft)]">
-                      Original — processing failed
+                      {t("Original — processing failed")}
                     </span>
                   ) : eff ? (
                     <span className="flex items-center gap-2">
@@ -1933,7 +1935,7 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
                       <span className="font-bold text-green-600">
                         {eff.size !== undefined
                           ? `~${formatBytes(eff.size)} ${MIME_LABEL[eff.type] || ""}`
-                          : `Converting to ${MIME_LABEL[eff.type] || "optimized"}…`}
+                          : t("Converting to {format}…").replace("{format}", MIME_LABEL[eff.type] || t("optimized"))}
                       </span>
                       {savedPct !== null && savedPct > 0 && (
                         <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-600">
@@ -1948,15 +1950,15 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
                       </span>
                       <span className="rounded-full bg-black/10 px-2 py-0.5 text-[10px] font-semibold text-[var(--text-soft)]">
                         {item && keptOriginal(item)
-                          ? "Already optimal — original kept"
-                          : "Original"}
+                          ? t("Already optimal — original kept")
+                          : t("Original")}
                       </span>
                     </span>
                   )}
                 </div>
                 {replacementPending && (
                   <p className="mt-2 border-t border-dashed border-[var(--border)] pt-2 text-[11px] text-[var(--text-muted)]">
-                    This image will be replaced with the optimized version on save.
+                    {t("This image will be replaced with the optimized version on save.")}
                   </p>
                 )}
               </>
@@ -1992,10 +1994,10 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
         <div className="flex items-center justify-between p-3 shrink-0 border-b border-[var(--border)]">
           <div>
             <h2 className="text-base sm:text-lg font-semibold text-[var(--text)]">
-              {mode === "edit" ? "Edit Media Details" : "Media Upload Panel"}
+              {mode === "edit" ? t("Edit Media Details") : t("Media Upload Panel")}
             </h2>
             <p className="text-[11px] sm:text-xs text-[var(--text-muted)]">
-              Strictly accepts Images, Videos, Audios, and Documents only.
+              {t("Strictly accepts Images, Videos, Audios, and Documents only.")}
             </p>
           </div>
           <Button variant="ghost" size="md" className="border-none close-x" onClick={onClose}>
@@ -2034,7 +2036,7 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
             <div className="grid min-h-0 flex-1 gap-3 md:grid-cols-2">
               {currentItem?.mediaCategory === "image"
                 ? renderEditOptimizationPanel()
-                : renderOptimizationPanel("Image optimization applies to images only")}
+                : renderOptimizationPanel(t("Image optimization applies to images only"))}
               {renderDetailsColumn("min-h-0")}
             </div>
           </div>
@@ -2073,7 +2075,7 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
                 onClick={handleRemoveAll}
                 disabled={mediaList.length === 0}
               >
-                Remove All
+                {t("Remove All")}
               </Button>
             ) : (
               <Button
@@ -2083,13 +2085,13 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
                 onClick={handleDeleteClick}
                 disabled={!currentItem}
               >
-                Remove Media
+                {t("Remove Media")}
               </Button>
             )}
           </div>
           <div className="flex shrink-0 items-center gap-3">
             <Button variant="ghost" size="md" onClick={onClose}>
-              Cancel
+              {t("Cancel")}
             </Button>
             <Button
               variant={`${currentItem? "primary":"ghost"}`}
@@ -2097,7 +2099,7 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
               onClick={handleSaveClick}
               disabled={!currentItem || isPreparing}
             >
-              {isPreparing ? "Processing..." : "Save Media Changes"}
+              {isPreparing ? t("Processing...") : t("Save Media Changes")}
             </Button>
           </div>
         </div>

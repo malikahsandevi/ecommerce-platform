@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { Menu, Store, X } from "lucide-react";
 import SidebarItem from "@/components/ui/SidebarItem";
 import { useAdminAuth } from "@/services/authContext";
+import { useLanguage } from "@/services/i18n";
 // Same single nav config the desktop Sidebar renders — the mobile bar
 // must offer every destination the sidebar does, never a copied subset.
 import { TOP_NAV_ITEMS, BOTTOM_NAV_ITEMS } from "@/config/navItems";
@@ -27,6 +28,7 @@ function initialsOf(name: string): string {
  */
 const MobileNav: React.FC = () => {
   const pathname = usePathname();
+  const { t } = useLanguage();
   const { user, hasPermission } = useAdminAuth();
   const [open, setOpen] = useState(false);
   const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null);
@@ -89,7 +91,7 @@ const MobileNav: React.FC = () => {
             Ecom Store
           </span>
           <span className="block text-[11px] font-medium text-(--text-soft)">
-            Admin Panel
+            {t("Admin Panel")}
           </span>
         </span>
 
@@ -120,7 +122,7 @@ const MobileNav: React.FC = () => {
         <button
           type="button"
           onClick={() => setOpen((value) => !value)}
-          aria-label={open ? "Close navigation menu" : "Open navigation menu"}
+          aria-label={open ? t("Close navigation menu") : t("Open navigation menu")}
           aria-expanded={open}
           className="shrink-0 flex items-center justify-center w-9 h-9 rounded-xl text-(--text-soft) transition-colors hover:bg-(--background)/60 hover:text-(--text)"
         >
@@ -130,9 +132,9 @@ const MobileNav: React.FC = () => {
         {/* Full nav dropdown — overlays the page, never pushes it. */}
         {open && (
           <div className="absolute left-0 right-0 top-full mt-2 shadow-xl px-3 py-2.5 bg-(--primary-light) rounded-2xl max-h-[70dvh] overflow-y-auto no-scrollbar">
-            <nav className="flex flex-col gap-0.5" aria-label="Main">
+            <nav className="flex flex-col gap-0.5" aria-label={t("Main")}>
               <span className="px-3 pb-0.5 text-[10px] font-bold uppercase tracking-widest text-(--text-soft)/80">
-                Main Menu
+                {t("Main Menu")}
               </span>
               {topItems.map((item) => (
                 <span key={item.name} onClick={() => setOpen(false)} className="block">
@@ -145,7 +147,7 @@ const MobileNav: React.FC = () => {
                 </span>
               ))}
               <span className="px-3 pt-2 pb-0.5 text-[10px] font-bold uppercase tracking-widest text-(--text-soft)/80">
-                General
+                {t("General")}
               </span>
               {bottomItems.map((item) => (
                 <span key={item.name} onClick={() => setOpen(false)} className="block">

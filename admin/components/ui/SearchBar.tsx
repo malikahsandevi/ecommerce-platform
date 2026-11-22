@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef, ComponentPropsWithoutRef } from "react";
 import { Search } from "lucide-react";
+import { useLanguage } from "@/services/i18n";
 
 // Generic Interface inside Child Component
 export interface SearchableEntityRecord {
@@ -67,6 +68,7 @@ export const SearchBar = <TSearchData extends SearchableEntityRecord>({
   className = "",
   ...props
 }: SearchBarProps<TSearchData>) => {
+  const { t } = useLanguage();
   const [searchQuery, setSearchQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -125,7 +127,7 @@ export const SearchBar = <TSearchData extends SearchableEntityRecord>({
         disabled={disabled}
         value={searchQuery}
         onChange={(e) => setSearchQuery(e.target.value)}
-        placeholder={searchPlaceholder}
+        placeholder={t(searchPlaceholder)}
         autoComplete="off"
         className={`w-full font-medium transition-all outline-none ${
           activeSize.container

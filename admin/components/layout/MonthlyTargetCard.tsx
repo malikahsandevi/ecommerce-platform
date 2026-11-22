@@ -32,6 +32,7 @@ const fmtMoney = (value: number) => formatMoney(value);
  * With no target set the card says so instead of inventing a percentage.
  */
 export const MonthlyTargetCard: React.FC<MonthlyTargetCardProps> = ({ data }) => {
+  const { t } = useLanguage();
   // Re-render the figures in the active store currency when it changes.
   useStoreCurrency();
   if (data === undefined) {
@@ -61,14 +62,14 @@ export const MonthlyTargetCard: React.FC<MonthlyTargetCardProps> = ({ data }) =>
   const encouragement = !hasTarget
     ? null
     : pct >= 100
-      ? { title: "Target Achieved 🎉", body: "This month's revenue passed the goal — every extra order is a bonus." }
+      ? { title: t("Target Achieved 🎉"), body: t("This month's revenue passed the goal — every extra order is a bonus.") }
       : pct >= 75
-        ? { title: "Great Progress! 🎉", body: `Only ${fmtMoney(remaining)} left to reach 100% this month.` }
+        ? { title: t("Great Progress! 🎉"), body: t("Only {amount} left to reach 100% this month.").replace("{amount}", fmtMoney(remaining)) }
         : pct >= 40
-          ? { title: "Good Going", body: `${fmtMoney(remaining)} to go — keep pushing to reach the target.` }
-          : { title: "Getting Started", body: `${fmtMoney(remaining)} to go this month — new orders will move the gauge.` };
+          ? { title: t("Good Going"), body: t("{amount} to go — keep pushing to reach the target.").replace("{amount}", fmtMoney(remaining)) }
+          : { title: t("Getting Started"), body: t("{amount} to go this month — new orders will move the gauge.").replace("{amount}", fmtMoney(remaining)) };
 
-  const { t } = useLanguage();
+
   return (
     <div className="p-5 w-full h-full bg-(--background) rounded-2xl shadow-sm border border-(--border) flex flex-col">
       <div className="flex items-center justify-between">
@@ -135,7 +136,7 @@ export const MonthlyTargetCard: React.FC<MonthlyTargetCardProps> = ({ data }) =>
             >
               {data.vsLastMonthPct >= 0 ? "+" : ""}
               {data.vsLastMonthPct.toFixed(2)}%{" "}
-              <span className="text-(--text-muted) font-medium">from last month</span>
+              <span className="text-(--text-muted) font-medium">{t("from last month")}</span>
             </span>
           )}
         </div>
@@ -152,13 +153,13 @@ export const MonthlyTargetCard: React.FC<MonthlyTargetCardProps> = ({ data }) =>
           </>
         ) : (
           <>
-            <p className="text-[13px] font-bold text-(--text)">No target set</p>
+            <p className="text-[13px] font-bold text-(--text)">{t("No target set")}</p>
             <p className="text-[11px] text-(--text-muted) mt-1 leading-relaxed">
-              Set a monthly target in{" "}
+              {t("Set a monthly target in")}{" "}
               <Link href="/setting" className="font-semibold text-(--primary) hover:text-(--primary-dark)">
-                Settings
+                {t("Settings")}
               </Link>{" "}
-              to track this month&apos;s revenue goal here.
+              {t("to track this month's revenue goal here.")}
             </p>
           </>
         )}
@@ -173,13 +174,13 @@ export const MonthlyTargetCard: React.FC<MonthlyTargetCardProps> = ({ data }) =>
       <div className="mt-auto pt-4">
       <div className="grid grid-cols-2 rounded-xl overflow-hidden bg-(--primary-soft)">
         <div className="py-2.5 text-center border-r border-(--background)">
-          <p className="text-[11px] font-medium text-(--text-muted)">Target</p>
+          <p className="text-[11px] font-medium text-(--text-muted)">{t("Target")}</p>
           <p className="text-sm font-bold text-(--text) mt-0.5">
-            {hasTarget ? fmtMoney(data.target) : "Not set"}
+            {hasTarget ? fmtMoney(data.target) : t("Not set")}
           </p>
         </div>
         <div className="py-2.5 text-center">
-          <p className="text-[11px] font-medium text-(--text-muted)">Revenue</p>
+          <p className="text-[11px] font-medium text-(--text-muted)">{t("Revenue")}</p>
           <p className="text-sm font-bold text-(--text) mt-0.5">
             {fmtMoney(data.revenueThisMonth)}
           </p>

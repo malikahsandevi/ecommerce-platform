@@ -1,5 +1,6 @@
 import React from "react";
 import Button from "../ui/Button";
+import { useLanguage } from "@/services/i18n";
 
 export interface TabItem {
   id: string;
@@ -33,13 +34,15 @@ const TabsBar: React.FC<TabsBarProps> = ({
   onBtnClick,
   label,
 }) => {
+  const { t } = useLanguage();
+
   return (
     <div className="flex flex-col md:flex-row md:items-center justify-between gap-1 bg-[var(--surface)]">
       {/* Left Tabs Section */}
       <div className="flex items-center gap-3 flex-wrap">
         {label && (
           <span className="text-sm sm:text-md whitespace-nowrap relative pb-1 text-[var(--primary)] font-semibold">
-            {label}
+            {t(label)}
             <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--primary)] rounded-full" />
           </span>
         )}
@@ -58,7 +61,7 @@ const TabsBar: React.FC<TabsBarProps> = ({
                   : "text-[var(--text-muted)] hover:text-[var(--text)]"
               }`}
             >
-              {tabLabel}
+              {t(tabLabel)}
               {isActive && (
                 <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--primary)] rounded-full" />
               )}
@@ -79,7 +82,7 @@ const TabsBar: React.FC<TabsBarProps> = ({
               className="flex-1 px-[8.2px] md:flex-none whitespace-nowrap"
               onClick={() => onBtnClick && onBtnClick(btn.id)}
             >
-              {btn.label}
+              {t(btn.label)}
             </Button>
           ))}
         </div>

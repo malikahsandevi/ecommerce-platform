@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Eye, X } from "lucide-react";
+import { useLanguage } from "@/services/i18n";
 
 /**
  * Avatar image viewer with a shared-element (FLIP) morph.
@@ -61,6 +62,7 @@ export const AvatarViewerTrigger: React.FC<AvatarViewerTriggerProps> = ({
   className = "",
   onError,
 }) => {
+  const { t } = useLanguage();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [failed, setFailed] = useState(false);
   const [anim, setAnim] = useState<AnimState | null>(null);
@@ -182,8 +184,8 @@ export const AvatarViewerTrigger: React.FC<AvatarViewerTriggerProps> = ({
         ref={triggerRef}
         type="button"
         onClick={openViewer}
-        aria-label={`View ${alt} image`}
-        title="View image"
+        aria-label={t("View {name} image").replace("{name}", alt)}
+        title={t("View image")}
         className={`group relative block shrink-0 cursor-pointer overflow-hidden ${sizeClass} ${roundedClass} ${className}`}
       >
         <img
@@ -233,7 +235,7 @@ export const AvatarViewerTrigger: React.FC<AvatarViewerTriggerProps> = ({
               <button
                 type="button"
                 onClick={closeViewer}
-                aria-label="Close image viewer"
+                aria-label={t("Close image viewer")}
                 className="animate-in fade-in fixed z-[96] flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-black/55 text-white shadow-lg transition-colors duration-200 hover:bg-[var(--primary)]"
                 style={{
                   left: anim.frame.left + anim.frame.width - 44,

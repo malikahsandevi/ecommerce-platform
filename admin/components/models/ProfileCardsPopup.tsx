@@ -9,6 +9,9 @@ import type {
   ProfileProduct,
 } from "@/services/resourceRegistry";
 import { formatMoney, useStoreCurrency } from "@/services/currency";
+import { useLanguage } from "@/services/i18n";
+
+type TranslateFn = (key: string) => string;
 
 export type ProfilePopupKind =
   | "spend"
@@ -64,14 +67,16 @@ const CardShell: React.FC<{ children: React.ReactNode }> = ({ children }) => (
 const ProductCard: React.FC<{ product: ProfileProduct; showQuantity?: boolean }> = ({
   product,
   showQuantity = false,
-}) => (
+}) => {
+  const { t } = useLanguage();
+  return (
   <CardShell>
     <div className="flex items-center gap-2.5">
       <Thumb src={product.image} name={product.name} />
       <div className="min-w-0 flex-1">
         <p className="truncate text-xs font-semibold text-[var(--text)]">{product.name}</p>
         <p className="mt-0.5 text-[11px] text-[var(--text-muted)]">
-          {product.price !== null ? formatMoney(product.price, 2) : "Price not set"}
+          {product.price !== null ? formatMoney(product.price, 2) : t("Price not set")}
           {showQuantity && product.quantity !== undefined && (
             <span className="font-semibold text-[var(--text-soft)]">
               {" "}
@@ -87,7 +92,8 @@ const ProductCard: React.FC<{ product: ProfileProduct; showQuantity?: boolean }>
       )}
     </div>
   </CardShell>
-);
+  );
+};
 
 const OrderCard: React.FC<{ order: ProfileOrder }> = ({ order }) => (
   <CardShell>
@@ -127,10 +133,10 @@ interface KindView {
   body: React.ReactNode;
 }
 
-const plural = (count: number, one: string, many: string) =>
-  `${count} ${count === 1 ? one : many}`;
+const plural = (t: TranslateFn, count: number, one: string, many: string) =>
+  t(count === 1 ? "{count} " + one : "{count} " + many).replace("{count}", String(count));
 
-const kindView = (kind: ProfilePopupKind, profile: CustomerProfile): KindView => {
+const kindView = (kind: ProfilePopupKind, profile: CustomerProfile, t: TranslateFn): KindView => {
   const productGrid = (items: ProfileProduct[], showQuantity = false) => (
     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
       {items.map((product) => (
@@ -149,25 +155,29 @@ const kindView = (kind: ProfilePopupKind, profile: CustomerProfile): KindView =>
   switch (kind) {
     case "spend":
       return {
-        title: "Total Spend",
-        summary: `${formatMoney(profile.stats.totalSpend, 2)} across ${plural(profile.stats.totalOrders, "order", "orders")}`,
-        emptyText: "No orders yet",
+        title: t("Total Spend"),
+        summary: t("{amount} across {orders}")
+          .replace("{amount}", formatMoney(profile.stats.totalSpend, 2))
+          .replace("{orders}", plural(t, profile.stats.totalOrders, "order", "orders")),
+        emptyText: t("No orders yet"),
         isEmpty: profile.orders.length === 0,
         body: orderList,
       };
     case "orders":
       return {
-        title: "Orders",
-        summary: `${plural(profile.stats.totalOrders, "order", "orders")} · ${formatMoney(profile.stats.totalSpend, 2)} total`,
-        emptyText: "No orders yet",
+        title: t("Orders"),
+        summary: t("{orders} · {amount} total")
+          .replace("{orders}", plural(t, profile.stats.totalOrders, "order", "orders"))
+          .replace("{amount}", formatMoney(profile.stats.totalSpend, 2)),
+        emptyText: t("No orders yet"),
         isEmpty: profile.orders.length === 0,
         body: orderList,
       };
     case "purchased":
       return {
-        title: "Purchased Products",
-        summary: plural(profile.purchasedProducts.length, "item bought", "items bought"),
-        emptyText: "No purchased products yet",
+        title: t("Purchased Products"),
+        summary: plural(t, profile.purchasedProducts.length, "item bought", "items bought"),
+        emptyText: t("No purchased products yet"),
         isEmpty: profile.purchasedProducts.length === 0,
         body: (
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -197,9 +207,9 @@ const kindView = (kind: ProfilePopupKind, profile: CustomerProfile): KindView =>
       };
     case "coupons":
       return {
-        title: "Used Coupons",
-        summary: plural(profile.usedCoupons.length, "coupon used", "coupons used"),
-        emptyText: "No coupons used yet",
+        title: t("Used Coupons"),
+        summary: plural(t, profile.usedCoupons.length, "coupon used", "coupons used"),
+        emptyText: t("No coupons used yet"),
         isEmpty: profile.usedCoupons.length === 0,
         body: (
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -215,10 +225,10 @@ const kindView = (kind: ProfilePopupKind, profile: CustomerProfile): KindView =>
                     </p>
                     <p className="mt-0.5 text-[11px] text-[var(--text-muted)]">
                       {coupon.discountType === "percentage" && coupon.discountValue !== null
-                        ? `${coupon.discountValue}% off`
+                        ? t("{value}% off").replace("{value}", String(coupon.discountValue))
                         : coupon.discountType === "fixed" && coupon.discountValue !== null
-                          ? `${formatMoney(coupon.discountValue, 2)} off`
-                          : "Discount coupon"}
+                          ? t("{amount} off").replace("{amount}", formatMoney(coupon.discountValue, 2))
+                          : t("Discount coupon")}
                     </p>
                   </div>
                   <div className="shrink-0 text-right">
@@ -226,7 +236,7 @@ const kindView = (kind: ProfilePopupKind, profile: CustomerProfile): KindView =>
                       × {coupon.timesUsed}
                     </p>
                     <p className="text-[10px] text-[var(--text-muted)]">
-                      Last {formatDate(coupon.lastUsed)}
+                      {t("Last {date}").replace("{date}", formatDate(coupon.lastUsed))}
                     </p>
                   </div>
                 </div>
@@ -237,9 +247,9 @@ const kindView = (kind: ProfilePopupKind, profile: CustomerProfile): KindView =>
       };
     case "categories":
       return {
-        title: "Favorite Categories",
-        summary: plural(profile.favoriteCategories.length, "category", "categories"),
-        emptyText: "No favorite categories yet",
+        title: t("Favorite Categories"),
+        summary: plural(t, profile.favoriteCategories.length, "category", "categories"),
+        emptyText: t("No favorite categories yet"),
         isEmpty: profile.favoriteCategories.length === 0,
         body: (
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -258,25 +268,25 @@ const kindView = (kind: ProfilePopupKind, profile: CustomerProfile): KindView =>
       };
     case "favorites":
       return {
-        title: "Favorites",
-        summary: plural(profile.favorites.length, "product", "products"),
-        emptyText: "No favorites yet",
+        title: t("Favorites"),
+        summary: plural(t, profile.favorites.length, "product", "products"),
+        emptyText: t("No favorites yet"),
         isEmpty: profile.favorites.length === 0,
         body: productGrid(profile.favorites),
       };
     case "liked":
       return {
-        title: "Liked Products",
-        summary: plural(profile.liked.length, "product", "products"),
-        emptyText: "No liked products yet",
+        title: t("Liked Products"),
+        summary: plural(t, profile.liked.length, "product", "products"),
+        emptyText: t("No liked products yet"),
         isEmpty: profile.liked.length === 0,
         body: productGrid(profile.liked),
       };
     case "cart":
       return {
-        title: "Cart",
-        summary: `${plural(profile.cart.length, "product", "products")} in cart`,
-        emptyText: "Cart is empty",
+        title: t("Cart"),
+        summary: t("{products} in cart").replace("{products}", plural(t, profile.cart.length, "product", "products")),
+        emptyText: t("Cart is empty"),
         isEmpty: profile.cart.length === 0,
         body: productGrid(profile.cart, true),
       };
@@ -296,9 +306,10 @@ export const ProfileCardsPopup: React.FC<{
   profile: CustomerProfile;
   onClose: () => void;
 }> = ({ kind, profile, onClose }) => {
+  const { t } = useLanguage();
   useStoreCurrency();
   const backdropPressRef = useRef(false);
-  const view = kindView(kind, profile);
+  const view = kindView(kind, profile, t);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -330,7 +341,7 @@ export const ProfileCardsPopup: React.FC<{
             <h3 className="font-bold text-[var(--text)] text-base">{view.title}</h3>
             <p className="text-[11px] text-[var(--text-muted)] mt-0.5">{view.summary}</p>
           </div>
-          <Button variant="ghost" size="sm" icon={X} onClick={onClose} aria-label="Close" className="close-x" />
+          <Button variant="ghost" size="sm" icon={X} onClick={onClose} aria-label={t("Close")} className="close-x" />
         </div>
         <div className="flex-1 overflow-y-auto p-4 sm:p-5 min-h-40 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-[var(--primary)] [&::-webkit-scrollbar-thumb]:rounded-full">
           {view.isEmpty ? (

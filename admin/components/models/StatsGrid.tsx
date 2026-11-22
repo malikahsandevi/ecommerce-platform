@@ -16,6 +16,7 @@ import {
   Users,
 } from "lucide-react";
 import StatCard, { CardTheme, StatCardProps } from "@/components/ui/StatsCard";
+import { useLanguage } from "@/services/i18n";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type StatRow = Record<string, any>;
@@ -136,6 +137,7 @@ export interface StatsGridProps {
 
 /** Renders four live counters derived from the records the page has loaded. */
 export default function StatsGrid({ pageUrl, items = [], isLoading = false }: StatsGridProps) {
+  const { t } = useLanguage();
   const statCards = useMemo<StatCardProps[]>(() => {
     const config = PAGE_STATS[pageUrl] || DEFAULT_STAT_CONFIG;
     const total = items.length;
@@ -159,31 +161,35 @@ export default function StatsGrid({ pageUrl, items = [], isLoading = false }: St
 
     const placeholder = isLoading ? "…" : undefined;
 
+    const resourceName = `${pageUrl.charAt(0).toUpperCase()}${pageUrl.slice(1)}`;
     const cards: StatCardProps[] = [
       {
-        title: `Total ${pageUrl.charAt(0).toUpperCase()}${pageUrl.slice(1)}`,
+        title: t("Total {name}").replace("{name}", t(resourceName)),
         value: placeholder ?? total.toLocaleString(),
         change: "",
         isPositive: true,
-        period: "All records",
+        period: t("All records"),
         icon: config.icon,
         theme: "blue",
       },
       {
-        title: config.liveLabel,
+        title: t(config.liveLabel),
         value: placeholder ?? liveCount.toLocaleString(),
         change: "",
         isPositive: true,
-        period: `${total ? Math.round((liveCount / total) * 100) : 0}% of total`,
+        period: t("{percent}% of total").replace(
+          "{percent}",
+          String(total ? Math.round((liveCount / total) * 100) : 0),
+        ),
         icon: CheckCircle2,
         theme: "green",
       },
       {
-        title: config.pendingLabel,
+        title: t(config.pendingLabel),
         value: placeholder ?? pendingCount.toLocaleString(),
         change: "",
         isPositive: pendingCount === 0,
-        period: "Needs attention",
+        period: t("Needs attention"),
         icon: Clock,
         theme: "orange",
       },
@@ -191,28 +197,28 @@ export default function StatsGrid({ pageUrl, items = [], isLoading = false }: St
 
     if (config.amountField) {
       cards.push({
-        title: config.amountLabel || "Total Value",
+        title: t(config.amountLabel || "Total Value"),
         value: placeholder ?? formatAmount(amountValue),
         change: "",
         isPositive: true,
-        period: "Sum of loaded records",
+        period: t("Sum of loaded records"),
         icon: DollarSign,
         theme: "purple",
       });
     } else {
       cards.push({
-        title: "Other Statuses",
+        title: t("Other Statuses"),
         value: placeholder ?? Math.max(0, total - liveCount - pendingCount).toLocaleString(),
         change: "",
         isPositive: true,
-        period: "Remaining statuses",
+        period: t("Remaining statuses"),
         icon: Clock,
         theme: "purple",
       });
     }
 
     return cards;
-  }, [pageUrl, items, isLoading]);
+  }, [pageUrl, items, isLoading, t]);
 
   return (
     <div className="w-full grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4 text-[var(--text)]">

@@ -3,6 +3,7 @@
 import React from "react";
 import CustomSelectUp from "@/components/ui/Select"; // Path check kar lein
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useLanguage } from "@/services/i18n";
 
 interface PaginationProps {
   currentPage: number;
@@ -28,6 +29,7 @@ export function Pagination({
     { label: "5", value: "5" },
   ],
 }: PaginationProps) {
+  const { t } = useLanguage();
 
   const handlePageChange = (page: number) => {
     if (page < 1 || page > totalPages) return;
@@ -62,6 +64,15 @@ export function Pagination({
   const startItem = (currentPage - 1) * itemsPerPage + 1;
   const endItem = totalItems ? Math.min(currentPage * itemsPerPage, totalItems) : currentPage * itemsPerPage;
 
+  const showingText = totalItems
+    ? t("Showing {from} to {to} of {total} records")
+        .replace("{from}", String(startItem))
+        .replace("{to}", String(endItem))
+        .replace("{total}", totalItems.toLocaleString())
+    : t("Showing {from} to {to} records")
+        .replace("{from}", String(startItem))
+        .replace("{to}", String(endItem));
+
   return (
     <div
       className="py-3 flex flex-row flex-wrap justify-between items-center gap-3 w-full bg-[var(--surface)] border-[var(--border)]"
@@ -70,23 +81,15 @@ export function Pagination({
       <div
         className="text-[11px] text-center sm:text-left shrink-0 text-[var(--text-muted)]"
       >
-        Showing{" "}
-        <span className="font-bold text-[var(--text)]">
-          {startItem}
-        </span>{" "}
-        to{" "}
-        <span className="font-bold text-[var(--text)]">
-          {endItem}
-        </span>
-        {totalItems ? (
-          <>
-            {" "}of{" "}
-            <span className="font-bold text-[var(--text)]">
-              {totalItems.toLocaleString()}
+        {showingText.split(/(\d[\d,]*)/g).map((part, i) =>
+          /^\d/.test(part) ? (
+            <span key={i} className="font-bold text-[var(--text)]">
+              {part}
             </span>
-          </>
-        ) : null}{" "}
-        records
+          ) : (
+            <React.Fragment key={i}>{part}</React.Fragment>
+          ),
+        )}
       </div>
 
       {/* Right Controls Container */}
@@ -95,7 +98,7 @@ export function Pagination({
         <div
           className="flex items-center gap-1.5 shrink-0 text-[11px] text-[var(--text-muted)]"
         >
-          <span>Per page:</span>
+          <span>{t("Per page:")}</span>
           <CustomSelectUp
             value={itemsPerPage.toString()}
             options={perPageOptions}

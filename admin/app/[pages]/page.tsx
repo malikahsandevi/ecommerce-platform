@@ -24,6 +24,7 @@ import { getPageIcon } from "@/config/navItems";
 import { extractApiError, PaginationMeta } from "@/services/api";
 import { useAdminAuth } from "@/services/authContext";
 import { useStoreCurrency } from "@/services/currency";
+import { useLanguage } from "@/services/i18n";
 import {
   getCapabilities,
   getResourceService,
@@ -44,6 +45,7 @@ function withDynamicOptions(
   fields: FormField[],
   options: EntityOptions,
   optionsLoaded: boolean,
+  t: (key: string) => string,
 ): FormField[] {
   return fields.map((field) => {
     switch (field.name) {
@@ -52,7 +54,7 @@ function withDynamicOptions(
           ? {
               ...field,
               options: [
-                { label: "Main Category (None)", value: "" },
+                { label: t("Main Category (None)"), value: "" },
                 ...options.categoryOptions,
               ],
             }
@@ -72,8 +74,8 @@ function withDynamicOptions(
           return {
             ...field,
             createNew: {
-              emptyMessage: "No categories yet",
-              buttonLabel: "Create New Category",
+              emptyMessage: t("No categories yet"),
+              buttonLabel: t("Create New Category"),
               path: "/categories",
               resource: "categories",
             },
@@ -92,8 +94,8 @@ function withDynamicOptions(
           return {
             ...field,
             createNew: {
-              emptyMessage: "No brands yet",
-              buttonLabel: "Create New Brand",
+              emptyMessage: t("No brands yet"),
+              buttonLabel: t("Create New Brand"),
               path: "/brands",
               resource: "brands",
             },
@@ -116,7 +118,11 @@ function withDynamicOptions(
  * Products must belong to a vendor (the schema requires it) but the config has
  * no vendor picker, so add one whenever the route supplies vendor options.
  */
-function ensureVendorField(fields: FormField[], options: EntityOptions): FormField[] {
+function ensureVendorField(
+  fields: FormField[],
+  options: EntityOptions,
+  t: (key: string) => string,
+): FormField[] {
   if (!options.vendorOptions?.length) return fields;
   if (fields.some((field) => field.name === "vendor")) return fields;
 
@@ -124,11 +130,11 @@ function ensureVendorField(fields: FormField[], options: EntityOptions): FormFie
     ...fields,
     {
       name: "vendor",
-      label: "Vendor / Store",
+      label: t("Vendor / Store"),
       type: "select",
       required: true,
       colSpan: 2,
-      section: "Basic Information",
+      section: t("Basic Information"),
       options: options.vendorOptions,
     } as FormField,
   ];
@@ -169,6 +175,7 @@ const PageLayout: React.FC = () => {
   // Money cells are produced by the config mappers at memo time — the
   // active currency is a memo dependency so they re-map on change.
   const currencyCode = useStoreCurrency();
+  const { t } = useLanguage();
 
   const moduleName = MODULE_BY_SEGMENT[pathname.split("/").filter(Boolean)[0] || ""] ?? null;
   // UI gating only — the backend answers 403 for anything not allowed.
@@ -309,16 +316,16 @@ const PageLayout: React.FC = () => {
     const base = (currentConfig.filters || []) as unknown as FilterConfigItem[];
     if (!isMediaPage) return base;
     const present = new Set(items.map(mediaTypeBucket));
-    const typeOptions = MEDIA_TYPE_META.filter((t) => present.has(t.value)).map(
-      (t) => ({ label: t.label, value: t.value }),
+    const typeOptions = MEDIA_TYPE_META.filter((meta) => present.has(meta.value)).map(
+      (meta) => ({ label: t(meta.label), value: meta.value }),
     );
     if (typeOptions.length === 0) return base;
     return [
       ...base,
       {
         id: "mediaType",
-        placeholder: "All Types",
-        options: [{ label: "All Types", value: "all" }, ...typeOptions],
+        placeholder: t("All Types"),
+        options: [{ label: t("All Types"), value: "all" }, ...typeOptions],
         matchValue: (item: Row) => mediaTypeBucket(item),
       },
     ];
@@ -350,7 +357,7 @@ const PageLayout: React.FC = () => {
     return {
       id: selectedRawRow._id || selectedRawRow.id,
       code: selectedRawRow.code,
-      title: selectedRawRow.name || "Details",
+      title: selectedRawRow.name || t("Details"),
       status: selectedRawRow.status || "active",
       attributes: selectedRawRow,
     };
@@ -367,7 +374,7 @@ const PageLayout: React.FC = () => {
       })
       .map((btn) => ({
         id: btn.id,
-        label: btn.label,
+        label: t(btn.label),
         icon: btn.icon,
         variant: btn.variant,
         disabled: btn.disabled,
@@ -377,10 +384,10 @@ const PageLayout: React.FC = () => {
   const formFields = useMemo(() => {
     // Not every route config declares form fields (media uses its own modal).
     const base = (currentConfig as { formFields?: FormField[] }).formFields || [];
-    const withOptions = withDynamicOptions(base, options, optionsLoaded);
+    const withOptions = withDynamicOptions(base, options, optionsLoaded, t);
     // Only products need the vendor picker.
     return Route.toLowerCase() === "products"
-      ? ensureVendorField(withOptions, options)
+      ? ensureVendorField(withOptions, options, t)
       : withOptions;
   }, [currentConfig, options, optionsLoaded, Route]);
 
@@ -497,25 +504,33 @@ const PageLayout: React.FC = () => {
       try {
         if (formMode === "add") {
           if (!service.create) {
-            throw new Error(`Creating ${Route} is not supported by the API.`);
+            throw new Error(
+              t("Creating {route} is not supported by the API.").replace("{route}", t(Route)),
+            );
           }
           const created = await service.create(formData);
           const generated = (created as { temporaryPassword?: string } | null)?.temporaryPassword;
           toast.success(
             generated
-              ? `${Route} created. Temporary password: ${generated}`
-              : `${Route} created successfully.`,
+              ? t("{route} created. Temporary password: {password}")
+                  .replace("{route}", t(Route))
+                  .replace("{password}", generated)
+              : t("{route} created successfully.").replace("{route}", t(Route)),
           );
         } else {
           const id = selectedRawRow?._id || selectedRawRow?.id;
           if (!service.update || !id) {
-            throw new Error(`Updating ${Route} is not supported by the API.`);
+            throw new Error(
+              t("Updating {route} is not supported by the API.").replace("{route}", t(Route)),
+            );
           }
           const result = await service.update(String(id), formData);
           toast.success(
             Array.isArray(result)
-              ? `${Route} updated: ${result.join(", ")}.`
-              : `${Route} updated successfully.`,
+              ? t("{route} updated: {details}.")
+                  .replace("{route}", t(Route))
+                  .replace("{details}", result.join(", "))
+              : t("{route} updated successfully.").replace("{route}", t(Route)),
           );
         }
 
@@ -533,7 +548,9 @@ const PageLayout: React.FC = () => {
   const handleDeleteItem = useCallback(
     async (id: string) => {
       if (!service?.remove) {
-        toast.error(`Deleting ${Route} is not supported by the API.`);
+        toast.error(
+          t("Deleting {route} is not supported by the API.").replace("{route}", t(Route)),
+        );
         return;
       }
 
@@ -541,9 +558,12 @@ const PageLayout: React.FC = () => {
       // native confirm() (it showed the hosting domain and clashed
       // with the design).
       const confirmed = await confirmDialog({
-        title: `Delete this ${Route.replace(/s$/, "").toLowerCase()}?`,
-        message: "This cannot be undone.",
-        confirmLabel: "Delete",
+        title: t("Delete this {item}?").replace(
+          "{item}",
+          Route.replace(/s$/, "").toLowerCase(),
+        ),
+        message: t("This cannot be undone."),
+        confirmLabel: t("Delete"),
         variant: "danger",
       });
       if (!confirmed) {
@@ -553,7 +573,7 @@ const PageLayout: React.FC = () => {
       try {
         await service.remove(id);
         setSelectedRawRow(null);
-        toast.success(`${Route} deleted.`);
+        toast.success(t("{route} deleted.").replace("{route}", t(Route)));
         reload();
       } catch (error) {
         toast.error(extractApiError(error));
@@ -597,9 +617,11 @@ const PageLayout: React.FC = () => {
             });
             uploaded++;
           }
-          if (!uploaded) throw new Error("Pick a file before saving.");
+          if (!uploaded) throw new Error(t("Pick a file before saving."));
           toast.success(
-            uploaded === 1 ? "Media uploaded." : `${uploaded} media uploaded.`,
+            uploaded === 1
+              ? t("Media uploaded.")
+              : t("{count} media uploaded.").replace("{count}", String(uploaded)),
           );
           setIsModalOpen(false);
           reload();
@@ -623,7 +645,7 @@ const PageLayout: React.FC = () => {
             description: mediaData.description,
             status: mediaData.status,
           });
-          toast.success("Media uploaded.");
+          toast.success(t("Media uploaded."));
         } else if (mediaData.id || mediaData._id) {
           // No new file picked — this is a metadata-only edit of an
           // already-uploaded item.
@@ -633,9 +655,9 @@ const PageLayout: React.FC = () => {
             description: mediaData.description,
             status: mediaData.status,
           });
-          toast.success("Media updated.");
+          toast.success(t("Media updated."));
         } else {
-          throw new Error("Pick a file before saving.");
+          throw new Error(t("Pick a file before saving."));
         }
 
         setIsModalOpen(false);
@@ -819,7 +841,9 @@ const PageLayout: React.FC = () => {
     if (truncatedToastKeyRef.current === key) return;
     truncatedToastKeyRef.current = key;
     toast.info(
-      `Showing the first ${items.length} of ${meta.total} records. Narrow the search to see the rest.`,
+      t("Showing the first {count} of {total} records. Narrow the search to see the rest.")
+        .replace("{count}", String(items.length))
+        .replace("{total}", String(meta.total)),
     );
   }, [isTruncated, meta, items.length, Route]);
 
@@ -832,11 +856,15 @@ const PageLayout: React.FC = () => {
           <ShieldAlert className="h-7 w-7" />
         </span>
         <h2 className="text-base font-bold">
-          You don&apos;t have permission to view {moduleName}
+          {t("You don't have permission to view {module}").replace(
+            "{module}",
+            t(moduleName),
+          )}
         </h2>
         <p className="max-w-sm text-xs text-[var(--text-muted)]">
-          Your role ({user?.role || "Staff"}) can&apos;t access this section. Ask a
-          Super Admin to change it in Settings → Users &amp; Roles.
+          {t(
+            "Your role ({role}) can't access this section. Ask a Super Admin to change it in Settings → Users & Roles.",
+          ).replace("{role}", user?.role || t("Staff"))}
         </p>
       </div>
     );
@@ -846,13 +874,16 @@ const PageLayout: React.FC = () => {
     <div className="flex gap-3 p-3 min-h-screen w-full flex-col text-[var(--text)] bg-[var(--background)] transition-colors duration-200 antialiased lg:h-screen lg:overflow-hidden">
       <header className="flex shrink-0 w-full items-center justify-between">
         <TopBar
-          title={Route}
-          subtitle={`Manage and organize all your ${Route.toLowerCase()}`}
+          title={t(Route)}
+          subtitle={t("Manage and organize all your {route}").replace(
+            "{route}",
+            t(Route).toLowerCase(),
+          )}
           user={{
-            name: user?.name || "Admin",
+            name: user?.name || t("Admin"),
             role: user?.role
-              ? user.role.charAt(0).toUpperCase() + user.role.slice(1)
-              : "Admin",
+              ? t(user.role.charAt(0).toUpperCase() + user.role.slice(1))
+              : t("Admin"),
             email: user?.email,
             avatar: user?.avatar || "",
           }}
@@ -886,7 +917,7 @@ const PageLayout: React.FC = () => {
                 tablist={[]}
                 activeTab=""
                 onTabChange={() => {}}
-                label={currentConfig.allLabel}
+                label={currentConfig.allLabel ? t(currentConfig.allLabel) : currentConfig.allLabel}
                 btnlist={btnlist}
                 onBtnClick={handleBtnClick}
               />
@@ -897,7 +928,7 @@ const PageLayout: React.FC = () => {
                 key={pathname}
                 sourceData={items as never}
                 searchableFieldsKeys={currentConfig.searchFields}
-                searchPlaceholder={`Search ${Route.toLowerCase()}...`}
+                searchPlaceholder={t("Search {route}...").replace("{route}", t(Route).toLowerCase())}
                 filtersData={filtersData}
                 onDataChange={setDisplayItems}
               />
@@ -950,7 +981,7 @@ const PageLayout: React.FC = () => {
 
         <DetailPanel
           selectedItem={selectedDetailData as never}
-          panelTitle={`${Route} Details`}
+          panelTitle={t("{route} Details").replace("{route}", t(Route))}
           emptyIcon={getPageIcon(Route)}
           onClose={() => setSelectedRawRow(null)}
           onEdit={canEdit ? handleEditItem : undefined}
@@ -961,8 +992,8 @@ const PageLayout: React.FC = () => {
                 }
               : undefined
           }
-          editLabel={`Edit ${Route}`}
-          deleteLabel={`Delete ${Route}`}
+          editLabel={t("Edit {route}").replace("{route}", t(Route))}
+          deleteLabel={t("Delete {route}").replace("{route}", t(Route))}
           extraSections={
             isCustomersPage && selectedRawRow ? (
               <CustomerProfileSections
@@ -987,7 +1018,7 @@ const PageLayout: React.FC = () => {
                     selectedRawRow.dimensions?.width &&
                     selectedRawRow.dimensions?.height
                       ? `${selectedRawRow.dimensions.width} x ${selectedRawRow.dimensions.height} px`
-                      : "N/A",
+                      : t("N/A"),
                   size:
                     typeof selectedRawRow.size === "number"
                       ? `${(selectedRawRow.size / 1024).toFixed(1)} KB`
@@ -1012,7 +1043,7 @@ const PageLayout: React.FC = () => {
           isOpen={isModalOpen}
           onClose={() => setIsModalOpen(false)}
           formMode={formMode}
-          itemTypeLabel={Route}
+          itemTypeLabel={t(Route)}
           formData={formData}
           setFormData={setFormData}
           handleSave={handleSaveItem}
@@ -1026,7 +1057,7 @@ const PageLayout: React.FC = () => {
       {isSaving && (
         <div className="fixed bottom-4 right-4 z-[60] flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs shadow-lg">
           <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--primary)]" />
-          Saving...
+          {t("Saving...")}
         </div>
       )}
     </div>

@@ -25,6 +25,7 @@ interface TopCategoriesProps {
 }
 
 export const TopCategories: React.FC<TopCategoriesProps> = ({ categoriesData, totalSales, loading = false }) => {
+  const { t } = useLanguage();
   // Subscribe so the centre figure re-renders in the active currency.
   useStoreCurrency();
   if (loading) {
@@ -53,7 +54,6 @@ export const TopCategories: React.FC<TopCategoriesProps> = ({ categoriesData, to
   const totalValue = items.reduce((acc, item) => acc + item.value, 0);
   const formattedTotalSales = formatMoney(totalSales || 0);
 
-  const { t } = useLanguage();
   return (
     <div className="p-5 w-full h-full bg-(--background) rounded-2xl shadow-sm flex flex-col border border-(--border)">
       {/* Header */}
@@ -63,7 +63,7 @@ export const TopCategories: React.FC<TopCategoriesProps> = ({ categoriesData, to
           href="/categories"
           className="text-xs font-semibold text-(--primary) hover:text-(--primary-dark) transition-colors"
         >
-          See All
+          {t("See All")}
         </Link>
       </div>
 
@@ -72,10 +72,9 @@ export const TopCategories: React.FC<TopCategoriesProps> = ({ categoriesData, to
           <span className="w-11 h-11 rounded-2xl bg-(--primary-soft) text-(--primary) flex items-center justify-center">
             <FolderTree className="w-5 h-5" />
           </span>
-          <p className="text-xs font-semibold text-(--text)">No category data yet</p>
+          <p className="text-xs font-semibold text-(--text)">{t("No category data yet")}</p>
           <p className="text-[11px] text-(--text-muted) max-w-55">
-            Add categories and products, and the categories generating the
-            most sales will appear here.
+            {t("Add categories and products, and the categories generating the most sales will appear here.")}
           </p>
         </div>
       ) : (
@@ -118,7 +117,7 @@ export const TopCategories: React.FC<TopCategoriesProps> = ({ categoriesData, to
             {/* Center Text */}
             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
               <span className="text-[11px] font-medium text-(--text-muted)">
-                Total Sales
+                {t("Total Sales")}
               </span>
               <span className="text-xl font-bold text-(--text)">
                 {formattedTotalSales}

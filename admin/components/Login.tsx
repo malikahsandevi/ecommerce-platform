@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { AlertCircle, Loader2, ShieldCheck, Store, X } from "lucide-react";
 import { describeAuthError, useAdminAuth } from "@/services/authContext";
+import { useLanguage } from "@/services/i18n";
 
 interface AdminLoginPopupProps {
   isOpen: boolean;
@@ -18,6 +19,7 @@ export const AdminLoginPopup: React.FC<AdminLoginPopupProps> = ({
   notice,
   onDismissNotice,
 }) => {
+  const { t } = useLanguage();
   const { login, verifyTwoFactor } = useAdminAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -98,12 +100,12 @@ export const AdminLoginPopup: React.FC<AdminLoginPopupProps> = ({
             {step === "code" ? <ShieldCheck className="w-5 h-5" /> : <Store className="w-5 h-5" />}
           </div>
           <h3 className="text-base font-bold" style={{ color: "var(--text)" }}>
-            {step === "code" ? "Two-Factor Authentication" : "Admin Sign In"}
+            {step === "code" ? t("Two-Factor Authentication") : t("Admin Sign In")}
           </h3>
           <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
             {step === "code"
-              ? "Enter the 6-digit code from your authenticator app"
-              : "Enter your credentials to manage the store"}
+              ? t("Enter the 6-digit code from your authenticator app")
+              : t("Enter your credentials to manage the store")}
           </p>
         </div>
 
@@ -115,7 +117,7 @@ export const AdminLoginPopup: React.FC<AdminLoginPopupProps> = ({
               <button
                 type="button"
                 onClick={onDismissNotice}
-                aria-label="Dismiss notice"
+                aria-label={t("Dismiss notice")}
                 className="close-x shrink-0 rounded-md p-0.5"
               >
                 <X className="w-3.5 h-3.5" />
@@ -138,7 +140,7 @@ export const AdminLoginPopup: React.FC<AdminLoginPopupProps> = ({
                 className="block text-xs font-medium mb-1"
                 style={{ color: "var(--text-muted)" }}
               >
-                Verification Code
+                {t("Verification Code")}
               </label>
               <input
                 type="text"
@@ -168,7 +170,7 @@ export const AdminLoginPopup: React.FC<AdminLoginPopupProps> = ({
               style={{ backgroundColor: "var(--primary)" }}
             >
               {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              {loading ? "Verifying..." : "Verify & Sign In"}
+              {loading ? t("Verifying...") : t("Verify & Sign In")}
             </button>
 
             <button
@@ -177,7 +179,7 @@ export const AdminLoginPopup: React.FC<AdminLoginPopupProps> = ({
               className="w-full text-center text-xs hover:underline"
               style={{ color: "var(--text-muted)" }}
             >
-              Back to sign in
+              {t("Back to sign in")}
             </button>
           </form>
         ) : (
@@ -187,7 +189,7 @@ export const AdminLoginPopup: React.FC<AdminLoginPopupProps> = ({
               className="block text-xs font-medium mb-1"
               style={{ color: "var(--text-muted)" }}
             >
-              Email Address
+              {t("Email Address")}
             </label>
             <input
               type="email"
@@ -211,7 +213,7 @@ export const AdminLoginPopup: React.FC<AdminLoginPopupProps> = ({
               className="block text-xs font-medium mb-1"
               style={{ color: "var(--text-muted)" }}
             >
-              Password
+              {t("Password")}
             </label>
             <input
               type="password"
@@ -237,7 +239,7 @@ export const AdminLoginPopup: React.FC<AdminLoginPopupProps> = ({
             style={{ backgroundColor: "var(--primary)" }}
           >
             {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-            {loading ? "Authenticating..." : "Login"}
+            {loading ? t("Authenticating...") : t("Login")}
           </button>
         </form>
         )}

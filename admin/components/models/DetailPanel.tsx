@@ -14,6 +14,7 @@ import Button from "@/components/ui/Button";
 import { StatusPill } from "@/components/models/CreateTable";
 import { AvatarViewerTrigger } from "@/components/ui/AvatarViewer";
 import { formatMoney, useStoreCurrency } from "@/services/currency";
+import { useLanguage } from "@/services/i18n";
 
 export interface DetailSpecification {
   key: string;
@@ -49,6 +50,8 @@ export interface DetailPanelData {
 
 /** Small copy-to-clipboard button shown after a truncated attribute value. */
 function CopyValueButton({ text, label }: { text: string; label?: string }) {
+  const { t } = useLanguage();
+
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -82,8 +85,8 @@ function CopyValueButton({ text, label }: { text: string; label?: string }) {
     <button
       type="button"
       onClick={handleCopy}
-      title={copied ? "Copied!" : `Copy ${label ?? "value"}`}
-      aria-label={copied ? "Copied" : `Copy ${label ?? "value"}`}
+      title={copied ? t("Copied!") : t("Copy {label}").replace("{label}", label ?? t("value"))}
+      aria-label={copied ? t("Copied") : t("Copy {label}").replace("{label}", label ?? t("value"))}
       className="shrink-0 cursor-pointer rounded p-0.5 text-[var(--text-muted)] transition-colors hover:bg-[var(--surface)] hover:text-[var(--primary)]"
     >
       {copied ? (
@@ -131,6 +134,36 @@ export function DetailPanel<T extends DetailPanelData>({
 }: DetailPanelProps<T>) {
   // Prices follow the store currency setting.
   useStoreCurrency();
+  const { t } = useLanguage();
+
+  const displayAttributeValue = (attrKey: string, attrVal: unknown): string => {
+    if (typeof attrVal !== "string") return String(attrVal ?? "-");
+    const keyLabel = attrKey.replace(/([A-Z])/g, " $1").trim().toLowerCase();
+    if (
+      !["role", "payment status", "payment method", "moderation status", "account status"].includes(keyLabel)
+    ) {
+      return attrVal;
+    }
+    const codeMap: Record<string, string> = {
+      COD: "Cash on Delivery",
+      CARD: "Card",
+      BANK_TRANSFER: "Bank Transfer",
+    };
+    const label =
+      codeMap[attrVal.toUpperCase()] ??
+      attrVal
+        .replace(/_/g, " ")
+        .toLowerCase()
+        .replace(/\b\w/g, (c) => c.toUpperCase());
+    const known = new Set([
+      "Super Admin", "Admin", "Manager", "Editor", "Support", "Customer", "Staff",
+      "Pending", "Paid", "Unpaid", "Failed", "Refunded", "Partially Paid",
+      "Processing", "Shipped", "Delivered", "Cancelled", "Active", "Inactive",
+      "Approved", "Rejected", "Spam", "Published", "Draft",
+      "Cash on Delivery", "Card", "Bank Transfer",
+    ]);
+    return known.has(label) ? t(label) : attrVal;
+  };
   const [activeImage, setActiveImage] = useState<string | null>(null);
 
   // Selected item change hone par image reset karein
@@ -153,7 +186,7 @@ export function DetailPanel<T extends DetailPanelData>({
             {/* Header */}
             <div className="flex items-center justify-between pb-2 border-b border-[var(--border)] shrink-0">
               <h3 className="font-bold text-[var(--text)] text-sm">
-                {panelTitle}
+                {t(panelTitle)}
               </h3>
               {onClose && (
                 <button
@@ -221,12 +254,12 @@ export function DetailPanel<T extends DetailPanelData>({
                       {selectedItem.title}
                     </h4>
                     <div className="text-[10px] text-[var(--text-muted)] flex items-center gap-2">
-                      <span>ID: #{selectedItem.code || selectedItem.id}</span>
+                      <span>{t("ID: #{id}").replace("{id}", String(selectedItem.code || selectedItem.id))}</span>
                       {selectedItem.sku && (
                         <>
                           <span>•</span>
                           <span className="truncate" title={selectedItem.sku}>
-                            SKU: {selectedItem.sku}
+                            {t("SKU: {sku}").replace("{sku}", selectedItem.sku as string)}
                           </span>
                         </>
                       )}
@@ -280,7 +313,7 @@ export function DetailPanel<T extends DetailPanelData>({
                 {selectedItem.shortDescription && (
                   <div className="bg-[var(--surface)] p-2 rounded-lg border border-[var(--border)]">
                     <span className="text-[10px] font-bold text-[var(--text-muted)] block mb-0.5 uppercase tracking-wider">
-                      Summary
+                      {t("Summary")}
                     </span>
                     <p
                       className="text-xs text-[var(--text)] line-clamp-2 cursor-help"
@@ -298,7 +331,7 @@ export function DetailPanel<T extends DetailPanelData>({
                   Object.keys(selectedItem.attributes).length > 0 && (
                     <>
                       <span className="text-[10px] font-bold text-[var(--text-muted)] block mb-1 uppercase tracking-wider border-t md:border-transparent lg:border-[var(--border)] border-[var(--border)] pt-2 md:p-0 lg:pt-2">
-                        Basic Info
+                        {t("Basic Info")}
                       </span>
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-x-3 gap-y-2 text-xs">
                         {Object.entries(selectedItem.attributes).map(
@@ -308,7 +341,7 @@ export function DetailPanel<T extends DetailPanelData>({
                               className="flex justify-between gap-3 bg-[var(--background)] p-1.5 rounded border border-[var(--border)]"
                             >
                               <span className="text-[var(--text-muted)] capitalize">
-                                {attrKey.replace(/([A-Z])/g, " $1")}
+                                {t(attrKey.replace(/([A-Z])/g, " $1"))}
                               </span>
                               <span className="flex min-w-0 items-center justify-end gap-1">
                                 <span
@@ -317,9 +350,9 @@ export function DetailPanel<T extends DetailPanelData>({
                                 >
                                   {typeof attrVal === "boolean"
                                     ? attrVal
-                                      ? "Yes"
-                                      : "No"
-                                    : (attrVal ?? "-")}
+                                      ? t("Yes")
+                                      : t("No")
+                                    : displayAttributeValue(attrKey, attrVal)}
                                 </span>
                                 {selectedItem.copyableAttributes?.[attrKey] ? (
                                   <CopyValueButton
@@ -341,7 +374,7 @@ export function DetailPanel<T extends DetailPanelData>({
                 {selectedItem.tags && selectedItem.tags.length > 0 && (
                   <div className="flex justify-between items-start gap-2 pt-1">
                     <span className="text-[var(--text-muted)] shrink-0 text-xs">
-                      Tags
+                      {t("Tags")}
                     </span>
                     <div className="flex flex-wrap gap-1 justify-end max-w-[220px]">
                       {selectedItem.tags.map((tag) => (
@@ -362,7 +395,7 @@ export function DetailPanel<T extends DetailPanelData>({
                   selectedItem.specifications.length > 0 && (
                     <div className="pt-2 border-t border-[var(--border)]">
                       <span className="text-[10px] font-bold text-[var(--text-muted)] block mb-1 uppercase tracking-wider">
-                        Specifications
+                        {t("Specifications")}
                       </span>
                       <div className="space-y-1">
                         {selectedItem.specifications.map((spec, idx) => (
@@ -392,7 +425,7 @@ export function DetailPanel<T extends DetailPanelData>({
                 {selectedItem.description && (
                   <div className="pt-2 border-t border-[var(--border)]">
                     <span className="text-[10px] font-bold text-[var(--text-muted)] block mb-0.5 uppercase tracking-wider">
-                      Description
+                      {t("Description")}
                     </span>
                     <p
                       className="text-[11px] text-[var(--text)] leading-relaxed line-clamp-3 cursor-help bg-[var(--background)] p-2 rounded border border-[var(--border)]"
@@ -423,7 +456,7 @@ export function DetailPanel<T extends DetailPanelData>({
                     fullWidth
                     onClick={() => onEdit(selectedItem)}
                   >
-                    {editLabel}
+                    {t(editLabel)}
                   </Button>
                 )}
 
@@ -435,7 +468,7 @@ export function DetailPanel<T extends DetailPanelData>({
                     fullWidth
                     onClick={() => onDelete(selectedItem.id)}
                   >
-                    {deleteLabel}
+                    {t(deleteLabel)}
                   </Button>
                 )}
               </>
@@ -450,11 +483,11 @@ export function DetailPanel<T extends DetailPanelData>({
           </div>
 
           <h4 className="font-bold text-[var(--text)] text-sm mb-1">
-            {emptyTitle}
+            {t(emptyTitle)}
           </h4>
 
           <p className="text-[var(--text-muted)] text-[11px] max-w-50">
-            {emptyDescription}
+            {t(emptyDescription)}
           </p>
         </div>
       )}

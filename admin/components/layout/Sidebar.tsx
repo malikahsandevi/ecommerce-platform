@@ -75,7 +75,7 @@ function SidebarBody({
               Ecom Store
             </span>
             <span className="block text-[11px] font-medium text-(--text-soft)">
-              Admin Panel
+              {t("Admin Panel")}
             </span>
           </span>
         )}
@@ -156,7 +156,7 @@ function SidebarBody({
           <button
             type="button"
             onClick={onToggle}
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-label={collapsed ? t("Expand sidebar") : t("Collapse sidebar")}
             className={`sb-center mt-0.5 flex items-center gap-3 rounded-xl px-3 py-2 text-sm text-(--text-soft) transition-colors hover:bg-(--background)/60 hover:text-(--text) ${
               collapsed ? "justify-center px-0" : ""
             }`}

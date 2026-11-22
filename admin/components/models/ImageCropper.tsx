@@ -5,6 +5,7 @@ import { Loader2, Pencil, X, ZoomIn } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { mediaService } from "@/services/resourceRegistry";
 import { extractApiError } from "@/services/api";
+import { useLanguage } from "@/services/i18n";
 
 export interface ImageCropperProps {
   isOpen: boolean;
@@ -67,6 +68,7 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({
   onClose,
   onApply,
 }) => {
+  const { t } = useLanguage();
   const frameRef = useRef<HTMLDivElement>(null);
   // Backdrop dismissal (same pattern as FormModal): only a press that
   // starts AND ends on this overlay closes the cropper.
@@ -99,7 +101,7 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({
       imgRef.current = img;
       setNatural({ w: img.naturalWidth, h: img.naturalHeight });
     };
-    img.onerror = () => setLoadError("This image could not be loaded for editing.");
+    img.onerror = () => setLoadError(t("This image could not be loaded for editing."));
     img.src = imageUrl;
   }, [isOpen, imageUrl]);
 
@@ -160,13 +162,13 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({
       canvas.width = OUTPUT_SIZE;
       canvas.height = OUTPUT_SIZE;
       const ctx = canvas.getContext("2d");
-      if (!ctx) throw new Error("Canvas is not available in this browser.");
+      if (!ctx) throw new Error(t("Canvas is not available in this browser."));
       ctx.drawImage(img, sx, sy, side, side, 0, 0, OUTPUT_SIZE, OUTPUT_SIZE);
       const blob = await new Promise<Blob | null>((resolve) =>
         canvas.toBlob(resolve, "image/jpeg", 0.92),
       );
       if (!blob) {
-        throw new Error("The cropped image could not be created.");
+        throw new Error(t("The cropped image could not be created."));
       }
       // Named after the ORIGINAL image + "-croped" — never the old
       // generic "cropped-image.jpg" that filled the library with
@@ -176,13 +178,13 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({
       const name = cropedFileName(sourceName, imageUrl);
       const file = new File([blob], name, { type: "image/jpeg" });
       const record = await mediaService.upload({ file, title: name, purpose: uploadPurpose });
-      if (!record?.url) throw new Error("The upload did not return a URL.");
+      if (!record?.url) throw new Error(t("The upload did not return a URL."));
       onApply({ url: record.url });
     } catch (error) {
       setApplyError(
         error instanceof Error && /taint|security|cross-origin/i.test(error.message)
-          ? "This image cannot be edited because its source blocks editing (CORS)."
-          : extractApiError(error) || "The cropped image could not be saved.",
+          ? t("This image cannot be edited because its source blocks editing (CORS).")
+          : extractApiError(error) || t("The cropped image could not be saved."),
       );
       setApplying(false);
     }
@@ -207,13 +209,13 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({
           <div className="min-w-0">
             <h3 className="font-bold text-[var(--text)] text-base flex items-center gap-2">
               <Pencil className="w-4 h-4 text-[var(--primary)]" />
-              Set Image
+              {t("Set Image")}
             </h3>
             <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
-              Drag the image to centre it — the circle is how it will appear.
+              {t("Drag the image to centre it — the circle is how it will appear.")}
             </p>
           </div>
-          <Button variant="ghost" size="sm" icon={X} onClick={onClose} aria-label="Close editor" className="close-x" />
+          <Button variant="ghost" size="sm" icon={X} onClick={onClose} aria-label={t("Close editor")} className="close-x" />
         </div>
 
         {/* FRAME */}
@@ -248,7 +250,7 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({
                 ) : (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin text-[var(--primary)]" />
-                    Loading image…
+                    {t("Loading image…")}
                   </>
                 )}
               </div>
@@ -266,7 +268,7 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({
               value={zoom}
               disabled={!natural || applying}
               onChange={(e) => setZoom(Number(e.target.value))}
-              aria-label="Zoom"
+              aria-label={t("Zoom")}
               className="flex-1 accent-[var(--primary)]"
             />
             <span className="text-[11px] font-semibold text-[var(--text-muted)] w-10 text-right">
@@ -280,7 +282,7 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({
         {/* ACTIONS */}
         <div className="p-3 sm:p-4 border-t border-[var(--border)] flex items-center justify-end gap-2 sm:gap-3 bg-[var(--surface-muted)] shrink-0">
           <Button variant="outline" size="md" type="button" onClick={onClose} disabled={applying}>
-            Cancel
+            {t("Cancel")}
           </Button>
           <Button
             type="button"
@@ -289,7 +291,7 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({
             disabled={!natural || applying}
             onClick={() => void handleApply()}
           >
-            {applying ? "Uploading…" : "Apply"}
+            {applying ? t("Uploading…") : t("Apply")}
           </Button>
         </div>
       </div>

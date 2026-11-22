@@ -166,6 +166,14 @@ const settingSchema = new mongoose.Schema(
       compactSidebar: { type: Boolean, default: false },
       showBreadcrumbs: { type: Boolean, default: true },
       enableAnimations: { type: Boolean, default: true },
+      // Theme colors (Ahsan's order): two INDEPENDENT hex colors —
+      // adminColor drives the admin panel's primary/accent, and
+      // storefrontColor is reserved for the customer storefront
+      // (served publicly at GET /api/storefront/theme). Empty string
+      // means "the built-in default" (#f97316). Changing one never
+      // touches the other.
+      adminColor: { type: String, default: "" },
+      storefrontColor: { type: String, default: "" },
     },
   },
   {

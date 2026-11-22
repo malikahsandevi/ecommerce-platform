@@ -172,7 +172,7 @@ export const TopBar = <T extends SearchableEntityRecord>({
   ) : (
     <span
       className="w-9 h-9 min-w-9 min-h-9 shrink-0 rounded-full bg-(--primary) text-white flex items-center justify-center text-xs font-bold tracking-wide ring-2 ring-(--primary)"
-      aria-label={`${user.name} profile`}
+      aria-label={t("{name} profile").replace("{name}", user.name)}
     >
       {initialsOf(user.name)}
     </span>
@@ -189,8 +189,8 @@ export const TopBar = <T extends SearchableEntityRecord>({
           yields (and truncates) before the controls are pushed out. */}
       <div className="min-w-0 order-1">
         {showBreadcrumbs && (
-          <nav aria-label="Breadcrumb" className="text-[10px] font-medium text-(--text-muted) leading-tight mb-0.5">
-            Home <span aria-hidden="true" className="mx-0.5">/</span>{" "}
+          <nav aria-label={t("Breadcrumb")} className="text-[10px] font-medium text-(--text-muted) leading-tight mb-0.5">
+            {t("Home")} <span aria-hidden="true" className="mx-0.5">/</span>{" "}
             <span className="text-(--primary)">{title}</span>
           </nav>
         )}
@@ -268,13 +268,13 @@ export const TopBar = <T extends SearchableEntityRecord>({
                   <h4 className="text-sm font-bold text-(--text)">{t("Messages")}</h4>
                   {freshIds.size > 0 && (
                     <span className="text-[10px] bg-(--primary) text-(--primary-text) px-2 py-0.5 rounded-full font-bold">
-                      {freshIds.size} New
+                      {t("{count} New").replace("{count}", String(freshIds.size))}
                     </span>
                   )}
                 </div>
                 {feed.inbox.length === 0 ? (
                   <p className="py-6 text-center text-xs text-(--text-muted)">
-                    No messages
+                    {t("No messages")}
                   </p>
                 ) : (
                   <div className="divide-y divide-(--border) max-h-80 overflow-y-auto">
@@ -337,13 +337,13 @@ export const TopBar = <T extends SearchableEntityRecord>({
                   <h4 className="text-sm font-bold text-(--text)">{t("Notifications")}</h4>
                   {freshIds.size > 0 && (
                     <span className="text-[10px] bg-red-500/10 text-red-500 px-2 py-0.5 rounded-full font-bold">
-                      {freshIds.size} New
+                      {t("{count} New").replace("{count}", String(freshIds.size))}
                     </span>
                   )}
                 </div>
                 {feed.notifications.length === 0 ? (
                   <p className="py-6 text-center text-xs text-(--text-muted)">
-                    No notifications
+                    {t("No notifications")}
                   </p>
                 ) : (
                   <div className="divide-y divide-(--border) max-h-80 overflow-y-auto">
@@ -432,7 +432,7 @@ export const TopBar = <T extends SearchableEntityRecord>({
                 className="mt-1.5 w-full flex items-center gap-2 px-2 py-2 rounded-xl text-xs font-semibold text-red-500 hover:bg-red-500/10 transition-colors"
               >
                 <LogOut className="w-4 h-4" />
-                Sign out
+                {t("Sign out")}
               </button>
             </div>
           )}

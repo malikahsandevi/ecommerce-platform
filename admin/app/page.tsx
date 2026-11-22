@@ -25,9 +25,25 @@ import { getDashboardAllData } from "@/services/dashboardService";
 import { formatMoney, useStoreCurrency } from "@/services/currency";
 import { useAdminAuth } from "@/services/authContext";
 import { useLanguage } from "@/services/i18n";
+import {
+  DEFAULT_ADMIN_COLOR,
+  getDeviceAdminColor,
+  shade,
+  tint,
+  useAdminColor,
+} from "@/services/appearance";
 
-// Orange shades, darkest first — the reference design's donut palette.
-const CATEGORY_COLORS = ["#ea580c", "#f97316", "#fb923c", "#fdba74", "#fed7aa", "#ffedd5"];
+// The donut palette: a shade ramp of the Admin Panel Color (Settings
+// → Appearance), darkest first. With the default color it reproduces
+// the reference design's orange ramp exactly.
+const categoryRamp = (base: string): string[] => [
+  shade(base, 0.08),
+  base,
+  tint(base, 0.27),
+  tint(base, 0.52),
+  tint(base, 0.76),
+  tint(base, 0.89),
+];
 
 interface DashboardStats {
   totalRevenue: number;
@@ -72,6 +88,8 @@ const fmtJoinedDate = (iso: string) =>
 export default function Page() {
   const { user, isAuthenticated, hasPermission } = useAdminAuth();
   const { t } = useLanguage();
+  // Re-map the category donut when the Admin Panel Color changes.
+  const adminColor = useAdminColor();
   // Re-map every figure when the store currency changes.
   const currencyCode = useStoreCurrency();
   const [stats, setStats] = useState<DashboardStats | undefined>(undefined);
@@ -139,7 +157,11 @@ export default function Page() {
           orderId: order.orderNumber || "—",
           customer: customerNameOf(order),
           productName:
-            items.length > 1 ? `${firstName} +${items.length - 1} more` : firstName,
+            items.length > 1
+              ? t("{name} +{count} more")
+                  .replace("{name}", firstName)
+                  .replace("{count}", String(items.length - 1))
+              : firstName,
           qty: items.reduce(
             (sum: number, item: AnyRecord) => sum + (item.quantity || 0),
             0
@@ -231,6 +253,9 @@ export default function Page() {
     // product-count share so the chart is never blank.
     const salesTotal = Number(data.totalSales || 0);
     setTotalSales(salesTotal);
+    // Read the color at map time (like the currency formatters) so a
+    // color change re-maps the donut on the next fetch.
+    const ramp = categoryRamp(getDeviceAdminColor() ?? DEFAULT_ADMIN_COLOR);
     setCategories(
       (data.topCategories || []).map((category: AnyRecord, index: number) => {
         const revenue = Number(category.revenue || 0);
@@ -239,13 +264,16 @@ export default function Page() {
           name: category.name,
           value: salesTotal > 0 ? revenue : productCount,
           formattedValue: fmtWholeMoney(revenue),
-          detailValue: `${productCount} product${productCount === 1 ? "" : "s"}`,
-          color: CATEGORY_COLORS[index % CATEGORY_COLORS.length],
+          detailValue: t(productCount === 1 ? "{count} product" : "{count} products").replace(
+            "{count}",
+            String(productCount),
+          ),
+          color: ramp[index % ramp.length],
         };
       })
     );
 
-  }, []);
+  }, [t]);
 
   // Only fetch once signed in (the dashboard API requires the token), and
   // re-run when the session appears — the shell renders this page behind
@@ -260,10 +288,11 @@ export default function Page() {
     return () => {
       cancelled = true;
     };
-    // currencyCode is a re-map trigger: the formatters read the active
-    // currency at map time, so a currency change must re-run the fetch.
+    // currencyCode / adminColor are re-map triggers: the formatters
+    // and the donut ramp read the active values at map time, so a
+    // change to either must re-run the fetch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchData, reloadToken, isAuthenticated, currencyCode]);
+  }, [fetchData, reloadToken, isAuthenticated, currencyCode, adminColor]);
 
   const statsLoading = stats === undefined;
 
@@ -290,11 +319,12 @@ export default function Page() {
             <ShieldAlert className="h-7 w-7" />
           </span>
           <h2 className="text-base font-bold">
-            You don&apos;t have permission to view the Dashboard
+            {t("You don't have permission to view the Dashboard")}
           </h2>
           <p className="max-w-sm text-xs text-[var(--text-muted)]">
-            Your role ({user?.role || "Staff"}) can&apos;t access this section. Ask a
-            Super Admin to change it in Settings → Users &amp; Roles.
+            {t(
+              "Your role ({role}) can't access this section. Ask a Super Admin to change it in Settings → Users & Roles.",
+            ).replace("{role}", user?.role || "Staff")}
           </p>
         </div>
       </div>
@@ -319,11 +349,10 @@ export default function Page() {
         <div className="rounded-2xl border border-red-500/25 bg-red-500/5 p-6 flex flex-col items-center gap-2 text-center">
           <AlertCircle className="w-8 h-8 text-red-500" />
           <p className="text-sm font-bold text-(--text)">
-            Couldn&apos;t load the dashboard
+            {t("Couldn't load the dashboard")}
           </p>
           <p className="text-xs text-(--text-muted) max-w-90">
-            The server may have been waking up. Your data is safe — try loading
-            it again.
+            {t("The server may have been waking up. Your data is safe — try loading it again.")}
           </p>
           <button
             type="button"
@@ -331,15 +360,14 @@ export default function Page() {
             className="mt-2 inline-flex items-center gap-2 rounded-xl bg-(--primary) px-4 py-2 text-xs font-semibold text-white hover:bg-(--primary-dark) transition-colors"
           >
             <RefreshCcw className="w-3.5 h-3.5" />
-            Retry
+            {t("Retry")}
           </button>
         </div>
       ) : (
         <>
           {slowLoad && statsLoading && (
             <div className="rounded-2xl border border-amber-500/25 bg-amber-500/5 px-4 py-3 text-xs text-(--text-muted)">
-              The server is waking up — the first load after a quiet period can
-              take a little longer. Your numbers will appear in a moment.
+              {t("The server is waking up — the first load after a quiet period can take a little longer. Your numbers will appear in a moment.")}
             </div>
           )}
 

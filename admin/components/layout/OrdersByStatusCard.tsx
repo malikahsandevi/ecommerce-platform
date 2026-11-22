@@ -1,6 +1,7 @@
 import React from "react";
 import { Ellipsis, ReceiptText } from "lucide-react";
 import { useLanguage } from "@/services/i18n";
+import { DEFAULT_ADMIN_COLOR, getDeviceAdminColor, shade, tint } from "@/services/appearance";
 
 export interface OrderStatusCount {
   status: string;
@@ -12,13 +13,29 @@ interface OrdersByStatusCardProps {
   data?: OrderStatusCount[];
 }
 
-const STATUS_META: Record<string, { label: string; color: string }> = {
-  pending: { label: "Pending", color: "#fdba74" },
-  processing: { label: "Processing", color: "#fb923c" },
-  shipped: { label: "Shipped", color: "#f97316" },
-  delivered: { label: "Delivered", color: "#ea580c" },
-  cancelled: { label: "Cancelled", color: "#d1d5db" },
-  refunded: { label: "Refunded", color: "#fca5a5" },
+const STATUS_META: Record<string, { label: string }> = {
+  pending: { label: "Pending" },
+  processing: { label: "Processing" },
+  shipped: { label: "Shipped" },
+  delivered: { label: "Delivered" },
+  cancelled: { label: "Cancelled" },
+  refunded: { label: "Refunded" },
+};
+
+// The progression colors are a ramp of the Admin Panel Color
+// (Settings → Appearance): pending lightest → delivered darkest.
+// Cancelled (grey) and refunded (soft red) are semantic and stay.
+// Read at render time so a color change repaints on the next render.
+const statusColor = (status: string, base: string): string => {
+  switch (status) {
+    case "pending": return tint(base, 0.52);
+    case "processing": return tint(base, 0.27);
+    case "shipped": return base;
+    case "delivered": return shade(base, 0.08);
+    case "cancelled": return "#d1d5db";
+    case "refunded": return "#fca5a5";
+    default: return base;
+  }
 };
 
 /**
@@ -43,10 +60,14 @@ export const OrdersByStatusCard: React.FC<OrdersByStatusCardProps> = ({ data }) 
   }
 
   const total = data.reduce((sum, row) => sum + row.count, 0);
+  const base = getDeviceAdminColor() ?? DEFAULT_ADMIN_COLOR;
   const rows = data
     .map((row) => ({
       ...row,
-      meta: STATUS_META[row.status] || { label: row.status, color: "#f97316" },
+      meta: {
+        label: STATUS_META[row.status]?.label || row.status,
+        color: statusColor(row.status, base),
+      },
       pct: total > 0 ? (row.count / total) * 100 : 0,
     }))
     .sort((a, b) => b.count - a.count);
@@ -82,7 +103,7 @@ export const OrdersByStatusCard: React.FC<OrdersByStatusCardProps> = ({ data }) 
                     flexGrow: row.count,
                     backgroundColor: row.meta.color,
                   }}
-                  title={`${row.meta.label}: ${row.count}`}
+                  title={`${t(row.meta.label)}: ${row.count}`}
                 />
               ))}
           </div>
@@ -96,7 +117,7 @@ export const OrdersByStatusCard: React.FC<OrdersByStatusCardProps> = ({ data }) 
                     style={{ backgroundColor: row.meta.color }}
                   />
                   <span className="font-medium text-(--text-muted) truncate">
-                    {row.meta.label}
+                    {t(row.meta.label)}
                   </span>
                 </span>
                 <span className="shrink-0 ml-2">

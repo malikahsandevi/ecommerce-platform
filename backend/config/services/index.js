@@ -74,11 +74,11 @@ const DEFINITIONS = {
 // Setting schema enum (SMS is stored as SMS_NOTIFICATION).
 const CATEGORIES = [
     { id: 'STORAGE', label: 'Storage', subServices: ['cloudinary', 'aws-s3', 'cloudflare-r2'] },
-    { id: 'PAYMENT', label: 'Payment', subServices: ['stripe', 'paypal', 'razorpay', 'square', 'adyen', 'checkout-com', 'braintree', 'mollie', 'paddle', 'jazzcash', 'easypaisa', 'payfast'] },
+    { id: 'PAYMENT', label: 'Payment', subServices: ['stripe', 'paypal', 'razorpay', 'square', 'adyen', 'checkout-com', 'braintree', 'mollie', 'paddle', 'jazzcash', 'easypaisa', 'payfast', 'custom'] },
     { id: 'EMAIL', label: 'Email', subServices: ['hosting-mail', 'smtp', 'sendgrid', 'resend', 'mailgun'] },
     { id: 'SMS_NOTIFICATION', label: 'SMS', subServices: ['twilio', 'vonage'] },
     { id: 'AUTH', label: 'Auth', subServices: ['google', 'facebook', 'github', 'store-session-jwt'] },
-    { id: 'SHIPPING', label: 'Shipping', subServices: ['easypost', 'shippo', 'fedex', 'ups', 'dhl', 'usps', 'aramex', 'sendcloud', 'aftership', 'leopards', 'postex'] },
+    { id: 'SHIPPING', label: 'Shipping', subServices: ['easypost', 'shippo', 'fedex', 'ups', 'dhl', 'usps', 'aramex', 'sendcloud', 'aftership', 'leopards', 'postex', 'custom'] },
     { id: 'ANALYTICS', label: 'Analytics', subServices: ['google-analytics', 'meta-pixel'] },
     { id: 'MAPS', label: 'Maps', subServices: ['google-maps', 'mapbox'] },
     { id: 'CUSTOM', label: 'Custom', subServices: ['custom'] },

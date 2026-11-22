@@ -1,5 +1,7 @@
 "use client";
 
+import { useLanguage } from "@/services/i18n";
+
 /**
  * Custom number-input steppers (Ahsan: the browser's native spinner
  * arrows are replaced by our own — "custom lagwo"). Two small stacked
@@ -43,6 +45,7 @@ export function StepperButtons({
   onStep: (dir: 1 | -1) => void;
   disabled?: boolean;
 }) {
+  const { t } = useLanguage();
   const btn =
     "flex items-center justify-center w-5 h-[11px] text-[var(--text-muted)] hover:text-[var(--primary)] transition-colors disabled:opacity-40 disabled:hover:text-[var(--text-muted)]";
   return (
@@ -50,7 +53,7 @@ export function StepperButtons({
       <button
         type="button"
         tabIndex={-1}
-        aria-label="Increase value"
+        aria-label={t("Increase value")}
         disabled={disabled}
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => onStep(1)}
@@ -63,7 +66,7 @@ export function StepperButtons({
       <button
         type="button"
         tabIndex={-1}
-        aria-label="Decrease value"
+        aria-label={t("Decrease value")}
         disabled={disabled}
         onMouseDown={(e) => e.preventDefault()}
         onClick={() => onStep(-1)}
