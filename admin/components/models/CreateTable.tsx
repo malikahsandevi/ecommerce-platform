@@ -100,6 +100,34 @@ function statusPillClasses(status: string): string {
   return "bg-[var(--surface)] text-[var(--text-muted)] border-[var(--border)]";
 }
 
+/**
+ * Name-cell thumbnail with a React-managed error fallback. The old
+ * onError handler wrote `parentElement.innerText = "N/A"`, which
+ * ripped the <img> out of the DOM behind React's back — the next
+ * re-render that unmounted the row then died with "Failed to execute
+ * 'removeChild' on 'Node'" and took the whole page down. Any broken
+ * image URL poisoned its row; filtering (which unmounts rows
+ * constantly) made the crash easy to hit.
+ */
+function CellThumb({ src, alt }: { src: string; alt: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    return (
+      <span className="text-[10px] text-[var(--text-muted)] font-bold">
+        N/A
+      </span>
+    );
+  }
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className="w-full h-full object-cover"
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
 export function StatusPill({ status }: { status: unknown }) {
   const label = String(status ?? "")
     .replace(/_/g, " ")
@@ -404,17 +432,10 @@ export function CreateTable<T extends Record<string, any>>({
                             /* Small Square Image Box */
                             <div className="w-8 h-8 rounded-lg border border-[var(--border)] bg-[var(--surface)] flex items-center justify-center overflow-hidden shrink-0">
                               {isUrl ? (
-                                <img
-                                  src={imgUrl}
+                                <CellThumb
+                                  key={imgUrl as string}
+                                  src={imgUrl as string}
                                   alt={String(rawValue || "Product")}
-                                  className="w-full h-full object-cover"
-                                  onError={(e) => {
-                                    const target = e.target as HTMLImageElement;
-                                    target.style.display = "none";
-                                    if (target.parentElement) {
-                                      target.parentElement.innerText = "N/A";
-                                    }
-                                  }}
                                 />
                               ) : (
                                 <span className="text-[10px] text-[var(--text-muted)] font-bold">
