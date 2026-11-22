@@ -561,7 +561,7 @@ export const FormModal: React.FC<FormModalProps> = ({
             <label className="font-bold text-[var(--text)] block mb-1 text-xs">
               {field.label}
             </label>
-            <div className="flex gap-2 mb-2">
+            <div className="flex items-center gap-2 mb-2">
               <input
                 type="text"
                 value={currentTagInput}
@@ -575,13 +575,14 @@ export const FormModal: React.FC<FormModalProps> = ({
                     handleAddTag(field.name);
                   }
                 }}
-                className="flex-1 min-w-0 px-3 py-1.5 bg-[var(--surface-muted)] border border-[var(--border)] rounded-xl outline-none text-xs text-[var(--text)] focus:border-[var(--primary)]"
+                className="flex-1 min-w-0 h-[34px] px-3 bg-[var(--surface-muted)] border border-[var(--border)] rounded-xl outline-none text-xs text-[var(--text)] focus:border-[var(--primary)]"
               />
               <Button
                 variant="secondary"
                 size="sm"
                 type="button"
                 onClick={() => handleAddTag(field.name)}
+                className="h-[34px]"
               >
                 Add
               </Button>
@@ -626,6 +627,11 @@ export const FormModal: React.FC<FormModalProps> = ({
             </div>
             <div className="space-y-2 max-h-36 overflow-y-auto pr-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-[var(--primary)] [&::-webkit-scrollbar-thumb]:rounded-full">
               {rows.map((row, idx) => (
+                // One level line (Ahsan: "box uper nichy q hain —
+                // brabaer karo boxes"): every element is the form's
+                // standard input height (34px, matching the py-2 text
+                // inputs) and the row centres them all on one axis,
+                // with a single muted ":" centred between Key and Value.
                 <div key={idx} className="flex items-center gap-2">
                   <input
                     type="text"
@@ -634,8 +640,14 @@ export const FormModal: React.FC<FormModalProps> = ({
                     onChange={(e) =>
                       handleKeyValueChange(field.name, idx, "key", e.target.value)
                     }
-                    className="flex-1 min-w-0 px-2.5 py-1.5 bg-[var(--surface-muted)] border border-[var(--border)] rounded-lg outline-none text-xs text-[var(--text)]"
+                    className="flex-1 min-w-0 h-[34px] px-2.5 bg-[var(--surface-muted)] border border-[var(--border)] rounded-lg outline-none text-xs text-[var(--text)]"
                   />
+                  <span
+                    aria-hidden="true"
+                    className="text-xs font-bold text-[var(--text-muted)] select-none leading-none"
+                  >
+                    :
+                  </span>
                   <input
                     type="text"
                     placeholder="Value"
@@ -643,7 +655,7 @@ export const FormModal: React.FC<FormModalProps> = ({
                     onChange={(e) =>
                       handleKeyValueChange(field.name, idx, "value", e.target.value)
                     }
-                    className="flex-1 min-w-0 px-2.5 py-1.5 bg-[var(--surface-muted)] border border-[var(--border)] rounded-lg outline-none text-xs text-[var(--text)]"
+                    className="flex-1 min-w-0 h-[34px] px-2.5 bg-[var(--surface-muted)] border border-[var(--border)] rounded-lg outline-none text-xs text-[var(--text)]"
                   />
                   <Button
                     variant="danger"
@@ -652,6 +664,7 @@ export const FormModal: React.FC<FormModalProps> = ({
                     icon={Trash2}
                     onClick={() => handleRemoveKeyValueRow(field.name, idx)}
                     aria-label="Delete row"
+                    className="h-[34px] w-[34px] shrink-0"
                   />
                 </div>
               ))}
