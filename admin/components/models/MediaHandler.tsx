@@ -18,6 +18,7 @@ import {
   FolderTree,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
+import { useBackdropClose } from "@/hooks/useBackdropClose";
 import { mediaService, purposeFromAssetUrl } from "@/services/resourceRegistry";
 
 /** One product in the Edit Media panel's "Used In" list. */
@@ -299,6 +300,11 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
   /** Processed blobs by `${itemId}|${targetMime}`; null = processing failed. */
   const processedBlobsRef = useRef<Map<string, Blob | null>>(new Map());
   const processingKeysRef = useRef<Set<string>>(new Set());
+
+  // Backdrop dismissal (Ahsan's rule: every popup closes on an outside
+  // click) — same press-starts-and-ends-on-the-overlay pattern as the
+  // other modals; closing is a cancel, identical to the X button.
+  const backdrop = useBackdropClose(onClose, isOpen);
 
   useEffect(() => {
     if (isOpen) {
@@ -1977,7 +1983,10 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
   /* ------------------------------ Render ------------------------------ */
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-3">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-3"
+      {...backdrop}
+    >
       <div className="w-full max-w-5xl rounded-xl overflow-hidden flex flex-col h-[95vh] sm:max-h-[90vh] shadow-[0_0_20px_rgba(249,115,22,0.15)] bg-[var(--surface)] text-[var(--text)] border border-[var(--primary)]">
         {/* Header */}
         <div className="flex items-center justify-between p-3 shrink-0 border-b border-[var(--border)]">

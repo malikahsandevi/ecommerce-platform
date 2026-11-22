@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, Info, Loader2 } from "lucide-react";
 import Button from "@/components/ui/Button";
 
@@ -118,6 +118,13 @@ export const ConfirmDialogHost: React.FC = () => {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [current, handleConfirm, handleCancel]);
 
+  // Backdrop dismissal follows the shared press pattern (Ahsan's rule:
+  // every popup closes on an outside click): the press must BOTH start
+  // and end on the backdrop itself, so a drag out of the box never
+  // cancels by accident. A backdrop close is always a CANCEL — in
+  // notice mode it is the single acknowledge action.
+  const backdropPressRef = useRef(false);
+
   if (!current) return null;
 
   const { options } = current;
@@ -131,9 +138,15 @@ export const ConfirmDialogHost: React.FC = () => {
       role="alertdialog"
       aria-modal="true"
       aria-label={title}
-      onClick={() => {
-        if (options.notice) void handleConfirm();
-        else handleCancel();
+      onMouseDown={(event) => {
+        backdropPressRef.current = event.target === event.currentTarget;
+      }}
+      onClick={(event) => {
+        if (backdropPressRef.current && event.target === event.currentTarget) {
+          if (options.notice) void handleConfirm();
+          else handleCancel();
+        }
+        backdropPressRef.current = false;
       }}
     >
       <div

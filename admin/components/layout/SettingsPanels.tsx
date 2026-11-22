@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import { Check, Copy, Eye, EyeOff, Plus, ShieldCheck, Trash2, Code2, Globe } from "lucide-react";
 import Button from "@/components/ui/Button";
+import { useBackdropClose } from "@/hooks/useBackdropClose";
 import MediaPickerModal from "@/components/models/MediaPickerModal";
 import { apiClient, extractApiError } from "@/services/api";
 import {
@@ -261,6 +262,17 @@ function GeneralPanel({ data, saving, onSave }: SectionPanelProps<ObjectData>) {
     monthlyTarget: String(data?.monthlyTarget ?? ""),
   }));
   const [pickerTarget, setPickerTarget] = useState<"logo" | "favicon" | null>(null);
+
+  // The media picker already closes on a backdrop click; Escape closes
+  // it too while it is the open popup on this page.
+  useEffect(() => {
+    if (pickerTarget === null) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setPickerTarget(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [pickerTarget]);
 
   return (
     <SettingsCard title="General Settings" description="Basic information about your store">
@@ -741,6 +753,15 @@ function UsersPanel({
   const [formError, setFormError] = useState("");
   const [creating, setCreating] = useState(false);
 
+  // Backdrop dismissal (Ahsan's rule: every popup closes on an outside
+  // click) — press-starts-and-ends-on-the-overlay pattern; closing is a
+  // cancel, and it stays disabled while a create is in flight (same as
+  // the Cancel button).
+  const addUserBackdrop = useBackdropClose(
+    () => setShowAddForm(false),
+    showAddForm && !creating,
+  );
+
   const openAddForm = () => {
     setForm({ firstName: "", lastName: "", email: "", password: "", role: "Manager", isActive: true });
     setFormError("");
@@ -796,7 +817,10 @@ function UsersPanel({
       )}
 
       {showAddForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3"
+          {...addUserBackdrop}
+        >
           <div className="w-full max-w-md rounded-xl border border-[var(--border)] bg-[var(--background)] p-5 shadow-2xl">
             <h3 className="text-base font-semibold text-[var(--text)]">Add User</h3>
             <p className="mt-1 text-xs text-[var(--text-muted)]">
