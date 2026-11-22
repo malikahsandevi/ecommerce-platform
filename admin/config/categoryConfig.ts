@@ -28,6 +28,10 @@ const parentId = (category: Category): string => {
 export const categoryConfig = {
   routeTitle: "Categories",
 
+  // Static header-strip label (the old first tab's wording). Display
+  // only — status filtering lives in the FilterBar dropdown.
+  allLabel: "All Categories",
+
   // Header Action Buttons
   buttons: [
     {

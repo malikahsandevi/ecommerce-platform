@@ -99,6 +99,10 @@ const dimensionsText = (product: Product): string => {
 export const productConfig = {
   routeTitle: "Products",
 
+  // Static header-strip label (the old first tab's wording). Display
+  // only — status filtering lives in the FilterBar dropdown.
+  allLabel: "All Products",
+
   // Action Buttons
   buttons: [
     {

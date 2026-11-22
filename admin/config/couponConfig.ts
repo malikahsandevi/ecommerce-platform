@@ -42,6 +42,10 @@ const getCouponStatus = (coupon: Coupon) => {
 export const couponConfig = {
   routeTitle: "Coupons",
 
+  // Static header-strip label (the old first tab's wording). Display
+  // only — status filtering lives in the FilterBar dropdown.
+  allLabel: "All Coupons",
+
   // Action Buttons
   buttons: [
     {

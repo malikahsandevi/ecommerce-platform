@@ -35,6 +35,10 @@ const referenceLabel = (reference: ReviewReference): string => {
 export const reviewConfig = {
   routeTitle: "Reviews",
 
+  // Static header-strip label (the old first tab's wording). Display
+  // only — status filtering lives in the FilterBar dropdown.
+  allLabel: "All Reviews",
+
   // Action Buttons
   buttons: [
     {

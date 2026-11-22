@@ -19,6 +19,10 @@ interface TabsBarProps {
   onTabChange: (tab: string) => void;
   btnlist?: HeaderActionButton[];
   onBtnClick?: (btnId: string) => void;
+  /** Static label shown in the tabs' place (the page's "All …" wording),
+   *  styled like the active tab but purely presentational: no click,
+   *  no filtering, no hover state. */
+  label?: string;
 }
 
 const TabsBar: React.FC<TabsBarProps> = ({
@@ -27,11 +31,18 @@ const TabsBar: React.FC<TabsBarProps> = ({
   onTabChange,
   btnlist = [],
   onBtnClick,
+  label,
 }) => {
   return (
     <div className="flex flex-col md:flex-row md:items-center justify-between gap-1 bg-[var(--surface)]">
       {/* Left Tabs Section */}
       <div className="flex items-center gap-3 flex-wrap">
+        {label && (
+          <span className="text-sm sm:text-md whitespace-nowrap relative pb-1 text-[var(--primary)] font-semibold">
+            {label}
+            <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--primary)] rounded-full" />
+          </span>
+        )}
         {tablist.map((tab) => {
           const tabId = typeof tab === "string" ? tab : tab.id;
           const tabLabel = typeof tab === "string" ? tab : tab.label;

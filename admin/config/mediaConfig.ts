@@ -47,6 +47,10 @@ const statusOf = (media: MediaItem): string =>
 export const mediaConfig = {
   routeTitle: "Media",
 
+  // Static header-strip label (the old first tab's wording). Display
+  // only — status filtering lives in the FilterBar dropdown.
+  allLabel: "All Media",
+
   buttons: [
     {
       id: "export",

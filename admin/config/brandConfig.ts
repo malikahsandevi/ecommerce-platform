@@ -20,6 +20,10 @@ export interface Brand {
 export const brandConfig = {
   routeTitle: "Brands",
 
+  // Static header-strip label (the old first tab's wording). Display
+  // only — status filtering lives in the FilterBar dropdown.
+  allLabel: "All Brands",
+
   buttons: [
     {
       id: "export",

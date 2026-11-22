@@ -878,12 +878,15 @@ const PageLayout: React.FC = () => {
           <div className="flex flex-1 flex-col min-h-100 lg:min-h-0 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-sm lg:overflow-hidden">
             <div className="shrink-0 border-b border-[var(--border)] bg-[var(--surface)] px-4 sm:px-3 pt-3 pb-1 overflow-x-auto rounded-t-xl">
               {/* No status tabs: status lives in ONE FilterBar dropdown
-                  below (the tabs duplicated it). This bar now carries
-                  only the header action buttons. */}
+                  below (the tabs duplicated it). In the tabs' place the
+                  strip shows the page's static "All …" label (styled
+                  like the active tab, but not clickable), and the right
+                  side carries the header action buttons. */}
               <TabsBar
                 tablist={[]}
                 activeTab=""
                 onTabChange={() => {}}
+                label={currentConfig.allLabel}
                 btnlist={btnlist}
                 onBtnClick={handleBtnClick}
               />

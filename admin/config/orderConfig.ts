@@ -90,6 +90,10 @@ const PAYMENT_METHOD_OPTIONS = [
 export const orderConfig = {
   routeTitle: "Orders",
 
+  // Static header-strip label (the old first tab's wording). Display
+  // only — status filtering lives in the FilterBar dropdown.
+  allLabel: "All Orders",
+
   // Action Buttons Controls
   buttons: [
     {
