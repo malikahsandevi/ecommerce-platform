@@ -10,6 +10,7 @@ import {
   Images,
   Pencil,
   Trash2,
+  Lock,
 } from "lucide-react";
 import Select, { SelectOption } from "@/components/ui/Select";
 import Button from "@/components/ui/Button";
@@ -50,6 +51,13 @@ export interface FormField {
   colSpan?: 1 | 2 | 3 | 4; // Grid column span in a 4-column layout (1 = 25%, 2 = 50%, 3 = 75%, 4 = 100%)
   section?: string; // Grouping section title (e.g. "Basic Details", "Pricing & Inventory")
   disabled?: boolean;
+  /**
+   * When true, the field renders as a read-only display while EDITING an
+   * existing record (the value is shown, never changeable); on CREATE it
+   * stays a normal editable field. Used for pairings that must not change
+   * after creation — e.g. a review's Product and Customer.
+   */
+  disableOnEdit?: boolean;
   min?: number;
   max?: number;
   step?: number;
@@ -386,6 +394,35 @@ export const FormModal: React.FC<FormModalProps> = ({
         );
 
       case "select":
+        if (field.disableOnEdit && formMode === "edit") {
+          // Read-only display: same footprint as the Select trigger, but
+          // muted, no chevron, no dropdown, not focusable or clickable.
+          // The stored value is left untouched, so saving the form sends
+          // the unchanged original id.
+          const selectedLabel =
+            field.options?.find((o) => o.value === String(rawValue || ""))
+              ?.label || "—";
+          return (
+            <div key={field.name} className={colClass}>
+              <label className="font-bold text-[var(--text)] block mb-1 text-xs">
+                {field.label}{" "}
+                {field.required && <span className="text-red-500">*</span>}
+              </label>
+              <div
+                aria-disabled="true"
+                className="flex h-11 w-full cursor-not-allowed select-none items-center justify-between gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-3 text-sm text-[var(--text-muted)]"
+              >
+                <span className="truncate">{selectedLabel}</span>
+                <Lock className="h-3.5 w-3.5 shrink-0 opacity-60" />
+              </div>
+              {field.helperText && (
+                <span className="text-[10px] text-[var(--text-muted)] mt-0.5 block">
+                  {field.helperText}
+                </span>
+              )}
+            </div>
+          );
+        }
         return (
           <div key={field.name} className={colClass}>
             <label className="font-bold text-[var(--text)] block mb-1 text-xs">

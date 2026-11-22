@@ -164,6 +164,9 @@ export const reviewConfig = {
       colSpan: 2,
       placeholder: "Select a product",
       section: "Review Overview",
+      // A review's product/customer pairing never changes after creation:
+      // shown read-only on edit, a normal select on create.
+      disableOnEdit: true,
     },
     {
       name: "user",
@@ -173,6 +176,7 @@ export const reviewConfig = {
       colSpan: 2,
       placeholder: "Select a customer",
       section: "Review Overview",
+      disableOnEdit: true,
     },
     {
       name: "rating",
