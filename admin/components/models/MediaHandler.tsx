@@ -1497,7 +1497,7 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
                         : `Converting to ${MIME_LABEL[displayEff.type] || "optimized"}…`}
                     </span>
                     {displaySavedPct !== null && displaySavedPct > 0 && (
-                      <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-bold text-green-700">
+                      <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-600">
                         −{displaySavedPct}%
                       </span>
                     )}
@@ -1930,7 +1930,7 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
                           : `Converting to ${MIME_LABEL[eff.type] || "optimized"}…`}
                       </span>
                       {savedPct !== null && savedPct > 0 && (
-                        <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-bold text-green-700">
+                        <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-600">
                           −{savedPct}%
                         </span>
                       )}

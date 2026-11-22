@@ -236,7 +236,7 @@ export const TopBar = <T extends SearchableEntityRecord>({
               <div className="absolute right-0 mt-2 w-80 bg-(--background) rounded-2xl shadow-xl border border-(--border) z-50 p-4">
                 <div className="flex items-center justify-between pb-3 border-b border-(--border)">
                   <h4 className="text-sm font-bold text-(--text)">Notifications</h4>
-                  <span className="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-bold">
+                  <span className="text-[10px] bg-red-500/10 text-red-500 px-2 py-0.5 rounded-full font-bold">
                     {unreadNotifCount} Unread
                   </span>
                 </div>
