@@ -107,23 +107,28 @@ export async function fetchAndApplyAppearance(): Promise<void> {
     const appearance = data?.appearance as AppearanceSettings | undefined;
     if (!appearance) return;
 
-    // Theme precedence — the device store is the single source of truth.
-    // The server-side Appearance theme may only SEED a device that has no
-    // stored theme; it must never overwrite one. And when a device theme
-    // exists, it is actively RE-ASSERTED onto <html> here (not merely
-    // left alone): the pre-paint script paints it, and this fetch is the
-    // last writer in the load sequence, so the attribute ends the load
-    // exactly as the device store says — even if anything earlier in the
-    // load disturbed it.
+    // Device precedence — the device store is the single source of truth,
+    // for the SIDEBAR as well as the theme. The server-side Appearance
+    // values may only SEED a device that has no stored choice of its own;
+    // they must never overwrite one. (The theme had this protection; the
+    // sidebar did not, so a server compactSidebar that disagreed with
+    // the admin's own toggle flipped the sidebar after every login —
+    // the fetch is the last writer in the load sequence.) When a device
+    // theme exists it is also actively RE-ASSERTED onto <html> here:
+    // the pre-paint script paints it, and this fetch ends the load with
+    // the attribute exactly as the device store says.
     const deviceTheme = getDeviceTheme();
-    if (deviceTheme) {
-      const withoutTheme: AppearanceSettings = { ...appearance };
-      delete withoutTheme.theme;
-      applyAppearance(withoutTheme);
-      persistTheme(deviceTheme);
-    } else {
-      applyAppearance(appearance);
+    let deviceSidebar: string | null = null;
+    try {
+      deviceSidebar = localStorage.getItem('admin-sidebar');
+    } catch {
+      /* storage unavailable — the server value may seed */
     }
+    const toApply: AppearanceSettings = { ...appearance };
+    if (deviceTheme) delete toApply.theme;
+    if (deviceSidebar) delete toApply.compactSidebar;
+    applyAppearance(toApply);
+    if (deviceTheme) persistTheme(deviceTheme);
   } catch {
     /* settings may be unreachable — the panel keeps its local defaults */
   }

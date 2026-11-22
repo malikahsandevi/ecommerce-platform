@@ -83,6 +83,26 @@ body {
   display: none;
 }
 
+/* Sidebar collapsed state applied BEFORE first paint: the root layout's
+   inline script sets html[data-sidebar="collapsed"] from localStorage
+   before the body parses, so the server-rendered sidebar — which cannot
+   know the device pref and renders expanded markup — is already
+   collapsed in the very first frame: no expanded→collapsed blink on
+   load, refresh, tab restore or any other fresh document. The Sidebar
+   component initialises from the same attribute and keeps it in sync
+   when toggled. (Added in 5e5b09d, then silently dropped when this
+   file was rewritten for the scrollbar arrows in b2e70cf — losing
+   these rules is what brought the blink back; do not remove them.) */
+html[data-sidebar="collapsed"] .admin-sidebar {
+  width: 68px !important;
+}
+html[data-sidebar="collapsed"] .admin-sidebar .sb-label {
+  display: none !important;
+}
+html[data-sidebar="collapsed"] .admin-sidebar .sb-center {
+  justify-content: center !important;
+}
+
 /* Scrollbar arrow buttons (Chromium): every scrollable area shows
    ONE solid-triangle arrow button at each end of its track — the
    classic scrollbar look — in the primary colour so the glyph reads

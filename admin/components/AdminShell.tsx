@@ -43,20 +43,22 @@ function AdminShellInner({ children }: { children: React.ReactNode }) {
 
   return (
     <main className="flex w-full min-h-screen">
-      <div className="min-w-0 flex-1 flex gap-3">
-        {isAuthenticated ? (
-          <>
-            <Sidebar />
-            <div className="flex-1 min-w-0">{children}</div>
-          </>
-        ) : (
-          // While signed out the panel stays visible but inert, so the admin
-          // can see where they are going to land.
-          <div className="pointer-events-none select-none min-w-0 flex-1 flex gap-3">
-            <Sidebar />
-            <div className="flex-1 min-w-0">{children}</div>
-          </div>
-        )}
+      {/* ONE Sidebar mount at a fixed tree position, whatever the auth
+          state: while signed out the panel stays visible but inert, so
+          the admin can see where they are going to land. Rendering the
+          sidebar in two different branches (fragment vs wrapper div)
+          made React unmount + remount it when the session resolved —
+          the remount restarted its mount effects mid-load and raced
+          the appearance fetch, which could flip the sidebar's width
+          after first paint. The inert styling now toggles on the
+          wrapper instead, so the sidebar never remounts. */}
+      <div
+        className={`min-w-0 flex-1 flex gap-3 ${
+          isAuthenticated ? "" : "pointer-events-none select-none"
+        }`}
+      >
+        <Sidebar />
+        <div className="flex-1 min-w-0">{children}</div>
       </div>
 
       <AdminLoginPopup

@@ -36,9 +36,17 @@ const Sidebar: React.FC = () => {
   // Initialise SYNCHRONOUSLY from the attribute the root layout's inline
   // script set before first paint — the state is correct on the very
   // first render, so the sidebar never flashes expanded-then-collapsed.
+  // Fallback: if the attribute is somehow missing at mount time (a stray
+  // writer removed it), the stored pref itself still answers correctly,
+  // and the mount effect below re-syncs the attribute from it.
   const [collapsed, setCollapsed] = useState<boolean>(() => {
     if (typeof document === "undefined") return false;
-    return document.documentElement.getAttribute("data-sidebar") === "collapsed";
+    if (document.documentElement.getAttribute("data-sidebar") === "collapsed") return true;
+    try {
+      return localStorage.getItem("admin-sidebar") === "collapsed";
+    } catch {
+      return false;
+    }
   });
 
   // Expanded by default on desktop; remember the admin's own choice.
