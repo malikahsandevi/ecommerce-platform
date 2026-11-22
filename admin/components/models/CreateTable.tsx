@@ -167,6 +167,21 @@ export function CreateTable<T extends Record<string, any>>({
       });
       const widths = measured.map((w, i) => Math.max(w, mins[i]));
 
+      // The status pill is a fixed component that must never clip:
+      // if the first row's pill is wider than the column (its cell's
+      // scrollWidth tells the truth even when clipped), raise both
+      // the column's width and its shrink floor to fit the pill.
+      const statusIdx = columns.findIndex(
+        (c) => String(c).toLowerCase() === "status",
+      );
+      if (statusIdx >= 0 && firstRow.cells[statusIdx]) {
+        const pillNeed = firstRow.cells[statusIdx].scrollWidth;
+        if (pillNeed > widths[statusIdx]) {
+          widths[statusIdx] = pillNeed;
+          mins[statusIdx] = Math.max(mins[statusIdx], pillNeed);
+        }
+      }
+
       // Fit the container exactly. Under-full: the leftover is shared
       // out proportionally. Over-full: columns sitting above their
       // header minimum give back space in proportion to their slack,
@@ -287,10 +302,10 @@ export function CreateTable<T extends Record<string, any>>({
                       return (
                         <td
                           key={String(colKey) + idx}
-                          className="px-2.5 py-2.5 align-middle font-mono text-[11px] text-[var(--text-muted)] whitespace-nowrap"
+                          className="px-2.5 py-2.5 align-middle font-mono text-[11px] text-[var(--text-muted)] whitespace-nowrap overflow-hidden"
                           title={displayId}
                         >
-                          {displayId}
+                          <span className="block truncate">{displayId}</span>
                         </td>
                       );
                     }
@@ -298,7 +313,7 @@ export function CreateTable<T extends Record<string, any>>({
                     // 2. Status Column (Pill)
                     if (colKeyStr === "status") {
                       return (
-                        <td key={String(colKey) + idx} className="px-2.5 py-2.5 align-middle">
+                        <td key={String(colKey) + idx} className="px-2.5 py-2.5 align-middle overflow-hidden">
                           <StatusPill status={rawValue} />
                         </td>
                       );
@@ -318,8 +333,12 @@ export function CreateTable<T extends Record<string, any>>({
                           imgUrl.startsWith("data:image"));
 
                       return (
-                        <td key={String(colKey) + idx} className="px-2.5 py-2.5 align-middle">
-                          <div className="flex items-center gap-2.5">
+                        <td
+                          key={String(colKey) + idx}
+                          className="px-2.5 py-2.5 align-middle overflow-hidden"
+                          title={rawValue !== undefined && rawValue !== null ? String(rawValue) : undefined}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
                             {enableAvatarViewer && isUrl ? (
                               <AvatarViewerTrigger
                                 src={imgUrl as string}
@@ -354,7 +373,7 @@ export function CreateTable<T extends Record<string, any>>({
                             )}
 
                             {/* Name Text */}
-                            <span className="font-medium text-[var(--text)] line-clamp-2">
+                            <span className="font-medium text-[var(--text)] line-clamp-2 min-w-0">
                               {rawValue !== undefined && rawValue !== null
                                 ? String(rawValue)
                                 : "-"}
@@ -364,18 +383,32 @@ export function CreateTable<T extends Record<string, any>>({
                       );
                     }
 
-                    // 4. Standard Cells
+                    // 4. Standard Cells — content is contained in its
+                    // own cell: a long unbroken value (phone, email,
+                    // SKU) truncates with an ellipsis instead of
+                    // spilling into the next column; the full value
+                    // stays on the cell's title tooltip.
                     return (
-                      <td key={String(colKey) + idx} className="px-2.5 py-2.5 align-middle">
-                        {rawValue !== undefined && rawValue !== null && rawValue !== ""
-                          ? String(rawValue)
-                          : "-"}
+                      <td
+                        key={String(colKey) + idx}
+                        className="px-2.5 py-2.5 align-middle overflow-hidden"
+                        title={
+                          typeof rawValue === "string" || typeof rawValue === "number"
+                            ? String(rawValue)
+                            : undefined
+                        }
+                      >
+                        <span className="block truncate">
+                          {rawValue !== undefined && rawValue !== null && rawValue !== ""
+                            ? String(rawValue)
+                            : "-"}
+                        </span>
                       </td>
                     );
                   })}
 
                   {showActions && (
-                    <td className="px-2.5 py-2.5 align-middle">
+                    <td className="px-2.5 py-2.5 align-middle overflow-hidden">
                       {/* Row actions are ALWAYS visible: muted gray on
                           rest, full colour on the hovered (or selected)
                           row — edit in the primary tone, delete in full
