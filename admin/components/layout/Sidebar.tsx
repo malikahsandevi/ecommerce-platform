@@ -162,7 +162,7 @@ const Sidebar: React.FC = () => {
             {/* Signed-in admin */}
             {user && (
               <div
-                className={`sb-center mt-1.5 flex items-center p-1.5 ${
+                className={`sb-center mt-1.5 flex items-center rounded-xl bg-(--background)/70 p-1.5 ${
                   collapsed ? "justify-center" : "gap-2.5"
                 }`}
                 title={collapsed ? user.name : undefined}
