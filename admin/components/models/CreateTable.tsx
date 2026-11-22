@@ -431,9 +431,11 @@ export function CreateTable<T extends Record<string, any>>({
                     // SKU) truncates with an ellipsis instead of
                     // spilling into the next column; the full value
                     // stays on the cell's title tooltip. A URL value
-                    // (a website column, or any http(s) string) renders
-                    // as a one-line LINK showing only the host — the
-                    // part after the protocol — never the raw full URL.
+                    // (a website column, or any http(s) string) shows
+                    // ONLY the host — the part after the protocol — as
+                    // PLAIN TEXT (Ahsan: "sirf name show krna tha, link
+                    // bhi nhi bnana tha"), never the raw full URL and
+                    // never a clickable link.
                     const displayText =
                       rawValue !== undefined && rawValue !== null && rawValue !== ""
                         ? String(rawValue)
@@ -444,15 +446,14 @@ export function CreateTable<T extends Record<string, any>>({
                         (colKeyStr === "website" &&
                           rawValue.includes(".") &&
                           !rawValue.includes(" ")));
-                    const urlHref = isUrlCell
-                      ? /^https?:\/\//i.test(displayText)
-                        ? displayText
-                        : `https://${displayText}`
-                      : null;
                     const urlLabel = isUrlCell
                       ? (() => {
                           try {
-                            return new URL(urlHref!).host;
+                            return new URL(
+                              /^https?:\/\//i.test(displayText)
+                                ? displayText
+                                : `https://${displayText}`,
+                            ).host;
                           } catch {
                             return displayText
                               .replace(/^https?:\/\//i, "")
@@ -471,19 +472,7 @@ export function CreateTable<T extends Record<string, any>>({
                         }
                       >
                         <span className="block truncate">
-                          {isUrlCell ? (
-                            <a
-                              href={urlHref!}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={(event) => event.stopPropagation()}
-                              className="text-[var(--primary)] hover:underline"
-                            >
-                              {urlLabel}
-                            </a>
-                          ) : (
-                            displayText
-                          )}
+                          {isUrlCell ? urlLabel : displayText}
                         </span>
                       </td>
                     );
