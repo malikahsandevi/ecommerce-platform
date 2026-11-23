@@ -98,6 +98,14 @@ const userSchema = new mongoose.Schema(
     // waiting for the first code to confirm).
     twoFactorSecret: { type: String, default: null, select: false },
 
+    // Password reset (admin "Forgot password" flow). Only the SHA-256
+    // HASH of the token is stored — the raw token exists solely in the
+    // emailed link. select:false for the hash, same discipline as the
+    // TOTP secret. A new request overwrites the previous token, and a
+    // successful reset clears both fields (single-use).
+    passwordResetTokenHash: { type: String, default: null, select: false },
+    passwordResetExpires: { type: Date, default: null },
+
     // Address (Embedded)
     addresses: [
       {

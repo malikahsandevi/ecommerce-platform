@@ -2,6 +2,7 @@ const Order = require('../models/Order');
 const Product = require('../models/Product');
 const User = require('../models/User');
 const { logActivity } = require('../utils/activity');
+const { sendOrderConfirmationEmail, sendOrderStatusEmail } = require('../utils/emailTemplates');
 
 // Human-readable, unique order numbers: ORD-YYMMDD-XXXX where XXXX is a
 // random block. The admin panel used to invent these in the browser from a
@@ -146,6 +147,19 @@ const createOrder = async (req, res) => {
         );
         await logLowStockAlerts(order.items);
 
+        // Order confirmation email to the customer. Fail-soft: the
+        // helper never throws (no email service configured → logged and
+        // skipped), so the order succeeds identically either way. This
+        // controller is also the storefront's placement path (it invokes
+        // createOrder), so guest checkouts get the same email.
+        if (userDoc?.email) {
+            await sendOrderConfirmationEmail({
+                to: userDoc.email,
+                customerName: customerLabel(userDoc),
+                order,
+            });
+        }
+
         res.status(201).json(order);
     } catch (error) {
         res.status(400).json({ message: error.message });
@@ -184,6 +198,20 @@ const updateOrder = async (req, res) => {
                 `Order ${order.orderNumber} status changed from ${previousStatus} to ${nextStatus}`,
                 { orderId: order._id, customerId: order.user || undefined }
             );
+
+            // Status-update email to the customer (fail-soft, like the
+            // confirmation — see createOrder).
+            const userDoc = order.user
+                ? await User.findById(order.user).select('firstName lastName email').lean()
+                : null;
+            if (userDoc?.email) {
+                await sendOrderStatusEmail({
+                    to: userDoc.email,
+                    customerName: customerLabel(userDoc),
+                    order: updated,
+                    previousStatus,
+                });
+            }
         }
 
         res.json(updated);

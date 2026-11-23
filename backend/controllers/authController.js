@@ -1,5 +1,7 @@
 const User = require('../models/User');
+const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
+const { sendPasswordResetEmail } = require('../utils/emailTemplates');
 const { getEffectivePermissions } = require('../utils/permissions');
 const { getJwtSecret, getJwtSignSecret } = require('../utils/credentials');
 const { authenticator } = require('otplib');
@@ -306,8 +308,96 @@ const disableTwoFactor = async (req, res) => {
     }
 };
 
+// ── Password reset ──────────────────────────────────────────────────
+// The reset token is 32 random bytes, hex-encoded for the link; only
+// its SHA-256 hash is stored on the user, with a 1-hour expiry. A new
+// request overwrites the old token; a successful reset clears both
+// fields, so every link is single-use.
+const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
+const hashResetToken = (token) => crypto.createHash('sha256').update(String(token)).digest('hex');
+const adminAppUrl = () =>
+    (process.env.ADMIN_URL || 'https://ecommerce-admin-teal.vercel.app').replace(/\/+$/, '');
+
+// @desc    Request a password reset email (admin "Forgot password")
+// @route   POST /api/auth/forgot-password
+// @access  Public — ALWAYS answers with the same generic message, so
+//          the endpoint cannot be used to enumerate accounts.
+const forgotPassword = async (req, res) => {
+    const generic = {
+        message: 'If an account with that email exists, a password reset link has been sent.',
+    };
+    try {
+        const email = String(req.body?.email || '').trim().toLowerCase();
+        if (email) {
+            const user = await User.findOne({ email });
+            // Panel accounts only — customer accounts never sign in to
+            // the admin, so they get no reset email from here either.
+            if (user && user.role !== 'Customer' && user.isActive !== false) {
+                const token = crypto.randomBytes(32).toString('hex');
+                user.passwordResetTokenHash = hashResetToken(token);
+                user.passwordResetExpires = new Date(Date.now() + RESET_TOKEN_TTL_MS);
+                await user.save();
+                // Fail-soft: the helper logs and swallows a missing /
+                // failing email service; the response stays generic.
+                await sendPasswordResetEmail({
+                    to: user.email,
+                    resetUrl: `${adminAppUrl()}/reset-password?token=${token}`,
+                });
+            }
+        }
+        res.json(generic);
+    } catch (error) {
+        // Even a server error must not leak whether the account exists.
+        console.error(`[auth] forgot-password failed: ${error.message}`);
+        res.json(generic);
+    }
+};
+
+// @desc    Complete a password reset with the emailed token
+// @route   POST /api/auth/reset-password
+// @access  Public (the token is the credential)
+const resetPassword = async (req, res) => {
+    try {
+        const { token, password } = req.body || {};
+        if (!token || !password) {
+            return res.status(400).json({ message: 'A reset token and a new password are required.' });
+        }
+        if (String(password).length < 6) {
+            return res.status(400).json({ message: 'The new password must be at least 6 characters.' });
+        }
+
+        const user = await User.findOne({
+            passwordResetTokenHash: hashResetToken(token),
+            passwordResetExpires: { $gt: new Date() },
+        }).select('+passwordResetTokenHash');
+        if (!user) {
+            return res.status(400).json({
+                message: 'This reset link is invalid or has expired. Request a new one.',
+            });
+        }
+        if (user.role === 'Customer' || user.isActive === false) {
+            return res.status(400).json({
+                message: 'This reset link is invalid or has expired. Request a new one.',
+            });
+        }
+
+        // The pre-save hook bcrypt-hashes the new password; clearing the
+        // token fields makes the link single-use.
+        user.password = String(password);
+        user.passwordResetTokenHash = null;
+        user.passwordResetExpires = null;
+        await user.save();
+
+        res.json({ message: 'Your password has been reset. You can now sign in with your new password.' });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
 module.exports = {
     loginAdmin,
+    forgotPassword,
+    resetPassword,
     verifyTwoFactorLogin,
     twoFactorStatus,
     setupTwoFactor,

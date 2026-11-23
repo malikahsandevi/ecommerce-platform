@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useLayoutEffect } from "react";
+import { usePathname } from "next/navigation";
 import Sidebar from "@/components/layout/Sidebar";
 import MobileNav from "@/components/layout/MobileNav";
 import AdminLoginPopup from "@/components/Login";
@@ -19,6 +20,14 @@ import { LanguageProvider, fetchAndApplyLanguage } from "@/services/i18n";
 // app/layout.tsx).
 function AdminShellInner({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isRestoring, sessionNotice, clearNotice } = useAdminAuth();
+  const pathname = usePathname();
+
+  // The password-reset page is reached from an emailed link while
+  // signed OUT — it must render bare, without the sidebar, the inert
+  // panel behind it, or the login popup on top of it.
+  if (pathname === "/reset-password") {
+    return <main className="w-full min-h-screen">{children}</main>;
+  }
 
   // The Setting doc is the single source of truth for the theme
   // (universal palette + mode); the device store is only its cache.
