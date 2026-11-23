@@ -25,6 +25,16 @@ const parentId = (category: Category): string => {
     : category.parent._id || "";
 };
 
+// Detail-panel label for the hierarchy row: a subcategory names its
+// parent (the list API populates it); a top-level category reads as a
+// main category in its own right.
+const parentLabel = (category: Category): string => {
+  if (!category.parent) return "Main Category";
+  return typeof category.parent === "string"
+    ? "Main Category"
+    : category.parent.name || "Main Category";
+};
+
 export const categoryConfig = {
   routeTitle: "Categories",
 
@@ -97,6 +107,7 @@ export const categoryConfig = {
     shortDescription: category.description || `Slug: ${category.slug}`,
     attributes: {
       Slug: category.slug,
+      "Parent Category": parentLabel(category),
       "Sort Order": category.sortOrder ?? 0,
       Products: category.productsCount ?? 0,
       "Created Date": category.createdAt

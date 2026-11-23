@@ -11,7 +11,10 @@ const { requirePermission } = require('../middleware/permissions');
 router.get('/', async (req, res) => {
     try {
         const [categories, counts] = await Promise.all([
-            Category.find().lean(),
+            // Populate the parent's name so the panel can show which
+            // category a subcategory belongs to; the populated object
+            // still carries the parent's _id for the edit form.
+            Category.find().populate('parent', 'name').lean(),
             Product.aggregate([{ $group: { _id: '$category', count: { $sum: 1 } } }]),
         ]);
         await Category.withCodes(categories);
