@@ -12,7 +12,7 @@
 import React from "react";
 import { cookies } from "next/headers";
 import AdminShell from "@/components/AdminShell";
-import { adminColorVars, paletteById, paletteVars, scrollbarArrowVars } from "@/services/palettes";
+import { adminColorVars, paletteById, paletteByPrimary, paletteVars, scrollbarArrowVars } from "@/services/palettes";
 import "./globals.css";
 
 export default async function RootLayout({
@@ -76,6 +76,18 @@ export default async function RootLayout({
           ),
         }
       : undefined;
+
+  // The same kept palette, handed to the client shell as the seed
+  // for usePalette's initial state (services/appearance.ts). The CSS
+  // variables above only cover var()-driven elements; elements whose
+  // color is computed in JS (stat-card icons, chart ramps) resolve
+  // their palette through the hook, whose server render cannot read
+  // localStorage and used to fall back to the DEFAULT palette — the
+  // refresh blink on the stat icons. A legacy-hex-only device seeds
+  // the palette its hex migrates to, exactly like the client's own
+  // getDevicePaletteId migration.
+  const ssrPaletteSeedId =
+    ssrPalette?.id ?? paletteByPrimary(ssrLegacyColor)?.id ?? null;
 
   return (
     <html
@@ -197,7 +209,7 @@ export default async function RootLayout({
         className="min-h-full flex flex-col bg-[var(--background)] text-[var(--text)] transition-colors duration-200"
         suppressHydrationWarning
       >
-        <AdminShell>{children}</AdminShell>
+        <AdminShell ssrPaletteId={ssrPaletteSeedId}>{children}</AdminShell>
       </body>
     </html>
   );

@@ -9,7 +9,7 @@ import PaletteDecisionPopup from "@/components/layout/PaletteDecisionPopup";
 import { ConfirmDialogHost } from "@/components/ui/ConfirmDialog";
 import { ToastHost } from "@/components/ui/Toast";
 import { AuthProvider, useAdminAuth } from "@/services/authContext";
-import { fetchAndApplyAppearance, reassertDeviceTheme } from "@/services/appearance";
+import { fetchAndApplyAppearance, PaletteSeedContext, reassertDeviceTheme } from "@/services/appearance";
 import { fetchAndApplyStoreCurrency } from "@/services/currency";
 import { LanguageProvider, fetchAndApplyLanguage } from "@/services/i18n";
 
@@ -110,12 +110,23 @@ function AdminShellInner({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function AdminShell({ children }: { children: React.ReactNode }) {
+export default function AdminShell({
+  children,
+  ssrPaletteId,
+}: {
+  children: React.ReactNode;
+  /** The kept palette id the server read from the cookie — seeds
+   *  usePalette so JS-coloured elements render in the kept palette
+   *  from the very first frame, server and client alike. */
+  ssrPaletteId?: string | null;
+}) {
   return (
-    <AuthProvider>
-      <LanguageProvider>
-        <AdminShellInner>{children}</AdminShellInner>
-      </LanguageProvider>
-    </AuthProvider>
+    <PaletteSeedContext.Provider value={ssrPaletteId ?? null}>
+      <AuthProvider>
+        <LanguageProvider>
+          <AdminShellInner>{children}</AdminShellInner>
+        </LanguageProvider>
+      </AuthProvider>
+    </PaletteSeedContext.Provider>
   );
 }

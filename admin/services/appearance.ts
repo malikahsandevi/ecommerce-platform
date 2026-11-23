@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import { apiClient } from './api';
 import {
   DEFAULT_PALETTE_ID,
@@ -323,6 +323,18 @@ export function usePalettePreview(): PalettePreviewState | null {
 
 const defaultPalette = (): PaletteDef => paletteById(DEFAULT_PALETTE_ID) as PaletteDef;
 
+/** The kept palette id as the SERVER read it from the admin-palette
+ *  cookie, handed down by the root layout through AdminShell. The
+ *  server render cannot read localStorage, so without this seed
+ *  usePalette's initial state fell back to the DEFAULT palette on
+ *  the server: every JS-coloured element (stat-card icons and dots,
+ *  the chart ramps) painted Sunset Orange for the first frame and
+ *  snapped to the kept palette on hydration — Ahsan's refresh blink.
+ *  Seeding the initial state from the same cookie the layout paints
+ *  the CSS variables from makes the server render, the hydration
+ *  render and the first painted frame all carry the kept palette. */
+export const PaletteSeedContext = createContext<string | null>(null);
+
 /** The panel's CURRENT palette: the PREVIEWED one while a preview
  *  runs, otherwise the kept one (or the default). Resolved through
  *  this one function everywhere — initial state included — because
@@ -338,7 +350,10 @@ function resolveCurrentPalette(): PaletteDef {
 }
 
 export function usePalette(): PaletteDef {
-  const [palette, setPalette] = useState<PaletteDef>(() => resolveCurrentPalette());
+  const seedId = useContext(PaletteSeedContext);
+  const [palette, setPalette] = useState<PaletteDef>(
+    () => paletteById(seedId) ?? resolveCurrentPalette(),
+  );
   useEffect(() => {
     const sync = () => setPalette(resolveCurrentPalette());
     sync();
