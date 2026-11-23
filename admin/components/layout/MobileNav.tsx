@@ -21,15 +21,15 @@ function initialsOf(name: string): string {
  * Top-bar navigation below md ONLY (Ahsan's final sidebar model):
  * under md the nav lives at the TOP of the screen — a normal static
  * bar with the brand, the signed-in admin's chip and a menu button
- * that opens the full nav (every item, permission-filtered exactly
- * like the desktop Sidebar). From md up the docked desktop sidebar
+ * that opens the full nav (every item, exactly like the desktop
+ * Sidebar — nothing is permission-filtered out). From md up the docked desktop sidebar
  * (Sidebar.tsx) takes over — same style as large devices — and this
  * bar is hidden.
  */
 const MobileNav: React.FC = () => {
   const pathname = usePathname();
   const { t } = useLanguage();
-  const { user, hasPermission } = useAdminAuth();
+  const { user } = useAdminAuth();
   const [open, setOpen] = useState(false);
   const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null);
   // The bar + its dropdown live inside this one container, so a press
@@ -68,15 +68,11 @@ const MobileNav: React.FC = () => {
   const avatarSrc = user?.avatar?.trim();
   const showUserImage = Boolean(avatarSrc && failedAvatarUrl !== avatarSrc);
 
-  // Settings stays visible for every staff user (same rule as the
-  // Sidebar): the page itself shows the permission notice when the
-  // role has no Settings view, and the API refuses the data.
-  const canView = (module: string): boolean =>
-    module === "Settings"
-      ? true
-      : typeof hasPermission === "function" ? hasPermission(module, "view") : true;
-  const topItems = TOP_NAV_ITEMS.filter((item) => canView(item.module));
-  const bottomItems = BOTTOM_NAV_ITEMS.filter((item) => canView(item.module));
+  // Every item stays visible for every staff user (same rule as the
+  // Sidebar): a section without view permission shows the shared
+  // permission notice on its page, and the API refuses the data.
+  const topItems = TOP_NAV_ITEMS;
+  const bottomItems = BOTTOM_NAV_ITEMS;
 
   const isActive = (link: string) =>
     link === "/" ? pathname === "/" : pathname.startsWith(link);

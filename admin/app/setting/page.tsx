@@ -9,13 +9,13 @@ import {
   Link2,
   Palette,
   Settings,
-  ShieldAlert,
   ShieldCheck,
   Store,
   Truck,
   Users,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
+import PermissionNotice from "@/components/ui/PermissionNotice";
 import TopBar from "@/components/ui/TopBar";
 import { confirmDialog } from "@/components/ui/ConfirmDialog";
 import { settingsService } from "@/services/settingsService";
@@ -68,15 +68,15 @@ export default function SettingsPage() {
     avatar: user?.avatar || "",
   };
 
-  // The Users & Roles section is account management — roles without
-  // Users view don't see the menu entry at all. Every service —
+  // Every menu entry stays visible for every staff user (Ahsan's
+  // order: a section a role cannot access is SHOWN with the
+  // permission notice, never removed) — Users & Roles included:
+  // selecting it without Users view renders the shared notice in
+  // place of the panel, and no users data is fetched. Every service —
   // including the store's own storage and session auth — is a normal
   // entry in the integrations builder, gated by the Settings
   // permissions, so no menu rule is needed here.
-  const visibleMenus = settingMenus.filter((menu) => {
-    if (menu.name === "Users & Roles") return canViewUsers;
-    return true;
-  });
+  const visibleMenus = settingMenus;
   const [activeMenu, setActiveMenu] = useState<SettingMenu>("General");
   const [settings, setSettings] = useState<SettingsDocument>({});
   const [users, setUsers] = useState<SettingsUser[]>([]);
@@ -111,7 +111,7 @@ export default function SettingsPage() {
   }, [isAuthenticated, canViewSettings]);
 
   useEffect(() => {
-    if (activeMenu !== "Users & Roles" || !isAuthenticated || !canViewSettings) return;
+    if (activeMenu !== "Users & Roles" || !isAuthenticated || !canViewSettings || !canViewUsers) return;
     let cancelled = false;
 
     settingsService.getUsers()
@@ -125,7 +125,7 @@ export default function SettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeMenu, isAuthenticated, canViewSettings]);
+  }, [activeMenu, isAuthenticated, canViewSettings, canViewUsers]);
 
   const saveSection = async (section: SettingsSection, value: unknown) => {
     setSaving(true);
@@ -224,17 +224,10 @@ export default function SettingsPage() {
             notifications={[]}
           />
         </header>
-        <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
-          <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--primary-soft)] text-[var(--primary)]">
-            <ShieldAlert className="h-7 w-7" />
-          </span>
-          <h2 className="text-base font-bold text-[var(--text)]">
-            {t("You don't have permission to view Settings")}
-          </h2>
-          <p className="max-w-sm text-xs text-[var(--text-muted)]">
-            {t("Your role ({role}) can't access this section. Ask a Super Admin to change it in Settings → Users & Roles.").replace("{role}", user?.role || "Staff")}
-          </p>
-        </div>
+        <PermissionNotice
+          section="Settings"
+          heading={t("You don't have permission to view Settings")}
+        />
       </main>
     );
   }
@@ -339,6 +332,9 @@ export default function SettingsPage() {
         </nav>
 
         <section className="min-w-0">
+          {activeMenu === "Users & Roles" && !canViewUsers ? (
+            <PermissionNotice section="Users & Roles" />
+          ) : (
           <SettingsPanel
             activeMenu={activeMenu}
             settings={settings}
@@ -352,6 +348,7 @@ export default function SettingsPage() {
               setSettings((current) => ({ ...current, integrations }))
             }
           />
+          )}
         </section>
       </div>
     </main>

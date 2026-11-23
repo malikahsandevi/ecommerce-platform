@@ -3,8 +3,9 @@
 
 import React, { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Loader2, RotateCcw, ShieldAlert } from "lucide-react";
+import { Loader2, RotateCcw } from "lucide-react";
 
+import PermissionNotice from "@/components/ui/PermissionNotice";
 import TopBar from "@/components/ui/TopBar";
 import StatsGrid from "@/components/models/StatsGrid";
 import MediaStats from "@/components/models/MediaStats";
@@ -251,7 +252,10 @@ const PageLayout: React.FC = () => {
 
   // --- fetch the list -----------------------------------------------------
   useEffect(() => {
-    if (!service || !isAuthenticated) return;
+    // No view permission → the page renders the permission notice and
+    // no module data is requested at all (the API would 403 anyway,
+    // and its error toast must not fire over the notice).
+    if (!service || !isAuthenticated || !canView) return;
 
     let cancelled = false;
     setIsLoading(true);
@@ -291,7 +295,7 @@ const PageLayout: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [service, isAuthenticated, reloadToken]);
+  }, [service, isAuthenticated, reloadToken, canView]);
 
   // --- fetch dropdown options --------------------------------------------
   useEffect(() => {
@@ -299,7 +303,7 @@ const PageLayout: React.FC = () => {
     // can't masquerade as this page's (or claim a list is empty early).
     setOptions({});
     setOptionsLoaded(false);
-    if (!service?.loadOptions || !isAuthenticated) {
+    if (!service?.loadOptions || !isAuthenticated || !canView) {
       setOptionsLoaded(true);
       return;
     }
@@ -321,7 +325,7 @@ const PageLayout: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [service, isAuthenticated]);
+  }, [service, isAuthenticated, canView]);
 
   // Reset the view whenever the route changes.
   useEffect(() => {
@@ -925,25 +929,35 @@ const PageLayout: React.FC = () => {
     );
   }, [isTruncated, meta, items.length, Route]);
 
-  // Direct access to a module the role cannot view: a clean notice
-  // instead of a broken page (the API would 403 the data anyway).
+  // Direct access to a module the role cannot view: the page's own
+  // header shell with the shared permission notice below it — the
+  // same presentation as Settings (Ahsan's order: a section without
+  // access is SHOWN this way, never removed or left broken). No data
+  // was fetched for this render (the fetch effects above are gated
+  // on canView, and the API would 403 the data anyway).
   if (isAuthenticated && moduleName && !canView) {
     return (
-      <div className="flex min-h-screen w-full flex-col items-center justify-center gap-2 bg-[var(--background)] p-6 text-center text-[var(--text)]">
-        <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--primary-soft)] text-[var(--primary)]">
-          <ShieldAlert className="h-7 w-7" />
-        </span>
-        <h2 className="text-base font-bold">
-          {t("You don't have permission to view {module}").replace(
-            "{module}",
-            t(moduleName),
-          )}
-        </h2>
-        <p className="max-w-sm text-xs text-[var(--text-muted)]">
-          {t(
-            "Your role ({role}) can't access this section. Ask a Super Admin to change it in Settings → Users & Roles.",
-          ).replace("{role}", user?.role || t("Staff"))}
-        </p>
+      <div className="flex gap-3 p-3 min-h-screen w-full flex-col text-[var(--text)] bg-[var(--background)] transition-colors duration-200 antialiased">
+        <header className="flex shrink-0 w-full items-center justify-between">
+          <TopBar
+            title={t(Route)}
+            subtitle={t("Manage and organize all your {route}").replace(
+              "{route}",
+              t(Route).toLowerCase(),
+            )}
+            user={{
+              name: user?.name || t("Admin"),
+              role: user?.role
+                ? t(user.role.charAt(0).toUpperCase() + user.role.slice(1))
+                : t("Admin"),
+              email: user?.email,
+              avatar: user?.avatar || "",
+            }}
+            messages={[]}
+            notifications={[]}
+          />
+        </header>
+        <PermissionNotice section={moduleName} />
       </div>
     );
   }

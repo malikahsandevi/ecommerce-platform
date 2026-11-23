@@ -176,7 +176,7 @@ function SidebarBody({
 
 const Sidebar: React.FC = () => {
   const pathname = usePathname();
-  const { user, hasPermission } = useAdminAuth();
+  const { user } = useAdminAuth();
   // Initialise SYNCHRONOUSLY from the attribute the root layout's inline
   // script set before first paint — the state is correct on the very
   // first render, so the sidebar never flashes expanded-then-collapsed.
@@ -240,18 +240,13 @@ const Sidebar: React.FC = () => {
   const avatarSrc = user?.avatar?.trim();
   const showUserImage = Boolean(avatarSrc && failedAvatarUrl !== avatarSrc);
 
-  // Modules the signed-in role cannot view are hidden. While permissions
-  // are still loading, hasPermission answers "yes" so nothing flickers.
-  // EXCEPTION (Ahsan's order): Settings stays visible for EVERY staff
-  // user — opening it without Settings view shows the permission
-  // notice (the same one the Dashboard uses), and the settings API
-  // refuses the data, so nothing sensitive is exposed by the entry.
-  const canView = (module: string): boolean =>
-    module === "Settings"
-      ? true
-      : typeof hasPermission === "function" ? hasPermission(module, "view") : true;
-  const topItems = TOP_NAV_ITEMS.filter((item) => canView(item.module));
-  const bottomItems = BOTTOM_NAV_ITEMS.filter((item) => canView(item.module));
+  // EVERY nav item stays visible for every staff user (Ahsan's
+  // order: a section a role cannot access is SHOWN, never removed) —
+  // opening one without view permission renders the shared
+  // permission notice on the page itself, and the APIs refuse the
+  // data (403), so nothing sensitive is exposed by the entry.
+  const topItems = TOP_NAV_ITEMS;
+  const bottomItems = BOTTOM_NAV_ITEMS;
 
   const isActive = (link: string) =>
     link === "/" ? pathname === "/" : pathname.startsWith(link);

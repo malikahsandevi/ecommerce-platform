@@ -1,7 +1,7 @@
 // /app/page.tsx
 "use client";
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { AlertCircle, CircleDollarSign, RefreshCcw, ShieldAlert, ShoppingBag, Users } from "lucide-react";
+import { AlertCircle, CircleDollarSign, RefreshCcw, ShoppingBag, Users } from "lucide-react";
 import DashboardStatCard from "@/components/layout/DashboardStatCard";
 import RevenueAnalytics, {
   DailyPoint,
@@ -20,6 +20,7 @@ import OrdersByStatusCard, {
 } from "@/components/layout/OrdersByStatusCard";
 import RecentOrdersCard, { DashboardOrder } from "@/components/layout/RecentOrdersCard";
 import ActivityCard, { ActivityLogItem } from "@/components/layout/ActivityCard";
+import PermissionNotice from "@/components/ui/PermissionNotice";
 import TopBar from "@/components/ui/TopBar";
 import {
   DashboardLoadError,
@@ -353,19 +354,10 @@ export default function Page() {
             avatar: user?.avatar || "",
           }}
         />
-        <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
-          <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--primary-soft)] text-[var(--primary)]">
-            <ShieldAlert className="h-7 w-7" />
-          </span>
-          <h2 className="text-base font-bold">
-            {t("You don't have permission to view the Dashboard")}
-          </h2>
-          <p className="max-w-sm text-xs text-[var(--text-muted)]">
-            {t(
-              "Your role ({role}) can't access this section. Ask a Super Admin to change it in Settings → Users & Roles.",
-            ).replace("{role}", user?.role || "Staff")}
-          </p>
-        </div>
+        <PermissionNotice
+          section="Dashboard"
+          heading={t("You don't have permission to view the Dashboard")}
+        />
       </div>
     );
   }
