@@ -72,6 +72,16 @@ function customerNameOf(order: AnyRecord): string {
   );
 }
 
+// The buyer's uploaded profile photo, when the account has one — the
+// stored placeholder value ("default-avatar.png") is not a photo.
+function customerAvatarOf(order: AnyRecord): string | undefined {
+  const user = order.user;
+  if (!user || typeof user === "string") return undefined;
+  return user.avatar && user.avatar !== "default-avatar.png"
+    ? user.avatar
+    : undefined;
+}
+
 // Money follows the store currency setting (Settings → General).
 const fmtWholeMoney = (value: number) => formatMoney(value);
 
@@ -178,6 +188,7 @@ export default function Page() {
           id: order._id,
           orderId: order.orderNumber || "—",
           customer: customerNameOf(order),
+          avatar: customerAvatarOf(order),
           productName:
             items.length > 1
               ? t("{name} +{count} more")
@@ -255,6 +266,7 @@ export default function Page() {
           customer.email ||
           "—",
         email: customer.email || "",
+        avatar: customer.avatar || undefined,
         joined: customer.createdAt ? fmtJoinedDate(customer.createdAt) : "",
       }))
     );

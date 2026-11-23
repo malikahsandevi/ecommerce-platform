@@ -84,7 +84,7 @@ const getDashboardData = async (req, res) => {
                 { $match: nonCancelled },
                 { $group: { _id: null, total: { $sum: '$total' } } },
             ]),
-            Order.find().sort({ createdAt: -1 }).limit(5).populate('user', 'firstName lastName email'),
+            Order.find().sort({ createdAt: -1 }).limit(5).populate('user', 'firstName lastName email avatar'),
             ActivityLog.find().sort({ createdAt: -1 }).limit(10),
             Category.find().select('name').lean(),
             Product.aggregate([
@@ -170,7 +170,7 @@ const getDashboardData = async (req, res) => {
             User.find()
                 .sort({ createdAt: -1 })
                 .limit(30)
-                .select('firstName lastName email createdAt')
+                .select('firstName lastName email createdAt avatar')
                 .lean(),
             Setting.findOne().sort({ createdAt: 1 }).select('general.monthlyTarget').lean(),
         ]);

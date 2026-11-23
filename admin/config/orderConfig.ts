@@ -7,6 +7,7 @@ export interface OrderUser {
   firstName?: string;
   lastName?: string;
   email?: string;
+  avatar?: string;
 }
 
 export interface OrderLineItem {
@@ -55,6 +56,16 @@ const customerName = (order: Order): string => {
 
 const customerEmail = (order: Order): string =>
   order.user && typeof order.user !== "string" ? order.user.email || "" : "";
+
+// The buyer's uploaded profile photo, when the account has one — the
+// stored placeholder value ("default-avatar.png") is not a photo.
+const customerAvatar = (order: Order): string | undefined =>
+  order.user &&
+  typeof order.user !== "string" &&
+  order.user.avatar &&
+  order.user.avatar !== "default-avatar.png"
+    ? order.user.avatar
+    : undefined;
 
 const userId = (order: Order): string =>
   typeof order.user === "string" ? order.user : order.user?._id || "";
@@ -151,6 +162,7 @@ export const orderConfig = {
     code: order.code,
     orderNumber: order.orderNumber || "—",
     customer: customerName(order),
+    userImage: customerAvatar(order),
     totalAmount: formatMoney(order.total ?? 0, 2),
     paymentStatus: (order.paymentStatus || "pending").toUpperCase(),
     carrier: order.shippingCarrier || "—",
@@ -162,6 +174,11 @@ export const orderConfig = {
     id: order._id,
     code: order.code,
     title: `Order ${order.orderNumber || ""}`.trim(),
+    // The buyer's photo as the panel's round avatar when the account
+    // has one uploaded (no photo → the header stays exactly as it was).
+    ...(customerAvatar(order)
+      ? { image: customerAvatar(order), imageVariant: "avatar" as const }
+      : {}),
     status: order.status,
     shortDescription: `Customer: ${customerName(order)}${customerEmail(order) ? ` (${customerEmail(order)})` : ""}`,
     attributes: {

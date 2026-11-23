@@ -21,7 +21,7 @@ const syncProductRating = async (productId) => {
 
 const populateReview = (query) => query
     .populate('product', 'name')
-    .populate('user', 'firstName lastName username email');
+    .populate('user', 'firstName lastName username email avatar');
 
 // @desc    List reviews (with product + author populated for the panel)
 // @route   GET /api/reviews

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import { UserRound } from "lucide-react";
 import { useLanguage } from "@/services/i18n";
@@ -7,8 +7,38 @@ export interface NewCustomer {
   id: string;
   name: string;
   email: string;
+  avatar?: string;
   joined: string;
 }
+
+/**
+ * The customer's profile photo in the exact box the initials circle
+ * occupies (w-9 h-9, round). The stored placeholder value is not a
+ * photo, and a photo that fails to load falls back to the initials —
+ * the same pattern the TopBar avatar uses.
+ */
+const CustomerAvatar: React.FC<{ customer: NewCustomer }> = ({ customer }) => {
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const src = customer.avatar?.trim();
+  const showImage = Boolean(
+    src && src !== "default-avatar.png" && failedSrc !== src,
+  );
+  if (showImage) {
+    return (
+      <img
+        src={src}
+        alt={customer.name}
+        className="w-9 h-9 rounded-full object-cover shrink-0"
+        onError={() => setFailedSrc(src ?? null)}
+      />
+    );
+  }
+  return (
+    <span className="w-9 h-9 rounded-full bg-(--primary-soft) text-(--primary-dark) flex items-center justify-center text-[11px] font-bold shrink-0">
+      {initialsOf(customer.name, customer.email)}
+    </span>
+  );
+};
 
 interface NewCustomersCardProps {
   /** Undefined while the dashboard request is still in flight. */
@@ -88,9 +118,8 @@ export const NewCustomersCard: React.FC<NewCustomersCardProps> = ({ customers })
         >
           {customers.map((customer) => (
             <li key={customer.id} className="flex h-14 shrink-0 items-center gap-3">
-              <span className="w-9 h-9 rounded-full bg-(--primary-soft) text-(--primary-dark) flex items-center justify-center text-[11px] font-bold shrink-0">
-                {initialsOf(customer.name, customer.email)}
-              </span>
+              <CustomerAvatar customer={customer} />
+
               <div className="min-w-0 flex-1">
                 <p className="text-[13px] font-semibold text-(--text) truncate">
                   {customer.name}

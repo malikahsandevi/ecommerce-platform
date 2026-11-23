@@ -6,7 +6,7 @@ export interface ProductReview {
   _id?: string;
   id?: number;
   product?: string | { _id?: string; name?: string };
-  user?: string | { _id?: string; firstName?: string; lastName?: string; username?: string; email?: string };
+  user?: string | { _id?: string; firstName?: string; lastName?: string; username?: string; email?: string; avatar?: string };
   productId?: string;
   productName?: string;
   customerName?: string;
@@ -31,6 +31,16 @@ const referenceLabel = (reference: ReviewReference): string => {
     .filter(Boolean)
     .join(" ") || ("username" in reference ? reference.username : "") || ("email" in reference ? reference.email : "") || "";
 };
+
+// The reviewer's uploaded profile photo, when the account has one —
+// the stored placeholder value ("default-avatar.png") is not a photo.
+const userAvatar = (review: ProductReview): string | undefined =>
+  review.user &&
+  typeof review.user !== "string" &&
+  review.user.avatar &&
+  review.user.avatar !== "default-avatar.png"
+    ? review.user.avatar
+    : undefined;
 
 export const reviewConfig = {
   routeTitle: "Reviews",
@@ -99,6 +109,7 @@ export const reviewConfig = {
     code: review.code,
     productName: referenceLabel(review.product) || review.productName || "",
     customerName: referenceLabel(review.user) || review.customerName || "",
+    userImage: userAvatar(review),
     rating: `${review.rating} ★`,
     content: review.content || review.comment || "",
     status: review.status,
@@ -109,6 +120,11 @@ export const reviewConfig = {
     id: review._id || String(review.id),
     code: review.code,
     title: review.title || `${review.rating} Star Review`,
+    // The reviewer's photo as the panel's round avatar when the
+    // account has one uploaded (no photo → header stays as it was).
+    ...(userAvatar(review)
+      ? { image: userAvatar(review), imageVariant: "avatar" as const }
+      : {}),
     status: review.status,
     shortDescription: `By ${referenceLabel(review.user) || review.customerName || "Unknown customer"}`,
     attributes: {

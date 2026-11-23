@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import { ArrowRight, ShoppingBag } from "lucide-react";
 import { StatusPill } from "@/components/models/CreateTable";
@@ -11,11 +11,31 @@ export interface DashboardOrder {
   id: string;
   orderId: string;
   customer: string;
+  avatar?: string;
   productName: string;
   qty: number;
   total: number;
   status: string;
 }
+
+/**
+ * The buyer's profile photo (round, beside the name) when the account
+ * has one uploaded. No photo — or one that fails to load — renders
+ * nothing, leaving the name exactly as it was.
+ */
+const BuyerAvatar: React.FC<{ order: DashboardOrder }> = ({ order }) => {
+  const [failed, setFailed] = useState(false);
+  const src = order.avatar?.trim();
+  if (!src || failed) return null;
+  return (
+    <img
+      src={src}
+      alt={order.customer}
+      className="w-7 h-7 rounded-full object-cover shrink-0"
+      onError={() => setFailed(true)}
+    />
+  );
+};
 
 interface RecentOrdersProps {
   orders?: DashboardOrder[];
@@ -81,7 +101,10 @@ export const RecentOrdersCard: React.FC<RecentOrdersProps> = ({ orders }) => {
                     {order.orderId}
                   </td>
                   <td className="py-2.5 pr-3 font-medium text-(--text) whitespace-nowrap">
-                    {order.customer}
+                    <span className="flex items-center gap-2">
+                      <BuyerAvatar order={order} />
+                      {order.customer}
+                    </span>
                   </td>
                   <td className="py-2.5 pr-3 text-(--text-soft) max-w-45 truncate">
                     {order.productName}

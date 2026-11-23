@@ -130,6 +130,25 @@ function CellThumb({ src, alt }: { src: string; alt: string }) {
   );
 }
 
+/**
+ * Round user photo for the name-bearing text columns (Orders'
+ * Customer, Reviews' Customer): rendered only when the row carries a
+ * real uploaded avatar (`userImage`); a photo that fails to load
+ * removes just itself and leaves the name exactly as it was.
+ */
+function UserCellPhoto({ src, alt }: { src: string; alt: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) return null;
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className="w-8 h-8 rounded-full object-cover shrink-0 border border-[var(--border)]"
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
 export function StatusPill({ status }: { status: unknown }) {
   const { t } = useLanguage();
   const label = String(status ?? "")
@@ -446,6 +465,7 @@ export function CreateTable<T extends Record<string, any>>({
                           <div className="flex items-center gap-2.5 min-w-0">
                             {enableAvatarViewer && isUrl ? (
                               <AvatarViewerTrigger
+                                key={imgUrl as string}
                                 src={imgUrl as string}
                                 alt={String(rawValue || t("User"))}
                                 sizeClass="w-8 h-8"
@@ -536,6 +556,19 @@ export function CreateTable<T extends Record<string, any>>({
                       !isUrlCell && charCap && displayText.length > charCap
                         ? `${displayText.slice(0, charCap).trimEnd()}…`
                         : displayText;
+                    // User-name columns (Orders' Customer, Reviews'
+                    // Customer): the person's uploaded photo rides
+                    // beside the name when the row carries one
+                    // (`userImage`) — the name alone otherwise, exactly
+                    // as before.
+                    const userPhotoSrc =
+                      (colKeyStr === "customer" || colKeyStr === "customername") &&
+                      typeof item.userImage === "string" &&
+                      (item.userImage.startsWith("http") ||
+                        item.userImage.startsWith("/") ||
+                        item.userImage.startsWith("data:image"))
+                        ? (item.userImage as string)
+                        : null;
                     return (
                       <td
                         key={String(colKey) + idx}
@@ -546,9 +579,16 @@ export function CreateTable<T extends Record<string, any>>({
                             : undefined
                         }
                       >
-                        <span className="block truncate">
-                          {isUrlCell ? urlLabel : previewText}
-                        </span>
+                        {userPhotoSrc ? (
+                          <span className="flex items-center gap-2.5 min-w-0">
+                            <UserCellPhoto key={userPhotoSrc} src={userPhotoSrc} alt={displayText} />
+                            <span className="truncate">{previewText}</span>
+                          </span>
+                        ) : (
+                          <span className="block truncate">
+                            {isUrlCell ? urlLabel : previewText}
+                          </span>
+                        )}
                       </td>
                     );
                   })}
