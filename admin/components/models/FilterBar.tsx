@@ -1,7 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { RotateCcw } from "lucide-react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import SearchBar, { SearchableEntityRecord } from "@/components/ui/SearchBar";
 import Select, {
   SelectOption,
@@ -9,7 +8,6 @@ import Select, {
   SelectSize,
   DropdownDirection,
 } from "@/components/ui/Select";
-import Button from "@/components/ui/Button";
 import { useLanguage } from "@/services/i18n";
 
 export interface FilterConfigItem {
@@ -47,7 +45,16 @@ export interface FilterBarProps<TSearchData extends SearchableEntityRecord> {
   // Consolidated Emission Callback
   onDataChange: (filteredData: TSearchData[]) => void;
 
-  clearButtonText?: string;
+  /**
+   * The Clear button itself lives in the page header row (Ahsan's
+   * order: "har page me clear btn uper ly jao") — the header renders
+   * the button, FilterBar exposes the two ends of the wire: it reports
+   * whether clearing is currently meaningful (any search/filter
+   * applied) through `onClearActiveChange`, and it performs the reset
+   * when `clearSignal` increments.
+   */
+  clearSignal?: number;
+  onClearActiveChange?: (active: boolean) => void;
 
   /**
    * One-shot search hand-off (notification click-through): when the
@@ -66,7 +73,8 @@ export const FilterBar = <TSearchData extends SearchableEntityRecord>({
   showShortcut = true,
   filtersData,
   onDataChange,
-  clearButtonText = "Clear",
+  clearSignal = 0,
+  onClearActiveChange,
   searchHandoff = null,
 }: FilterBarProps<TSearchData>) => {
   const { t } = useLanguage();
@@ -94,13 +102,14 @@ export const FilterBar = <TSearchData extends SearchableEntityRecord>({
     }));
   };
 
-  // Handle Clear All
-  const handleClearFilters = () => {
+  // Handle Clear All (triggered from the header's Clear button through
+  // the clearSignal wire below — same reset as the old in-bar button).
+  const handleClearFilters = useCallback(() => {
     const resetValues: Record<string, string> = {};
     filtersData.forEach((f) => (resetValues[f.id] = "all"));
     setFilterValues(resetValues);
     setSearchedData(sourceData);
-  };
+  }, [filtersData, sourceData]);
 
   // Main Combined Filter Logic
   useEffect(() => {
@@ -132,6 +141,22 @@ export const FilterBar = <TSearchData extends SearchableEntityRecord>({
 
   // Clear button is active only when search or filter is applied
   const isClearActive = isDropdownFilterActive || isSearchActive;
+
+  // Report clear availability to the page header (on mount and on every
+  // change) so its Clear button enables/disables in step with this bar.
+  useEffect(() => {
+    onClearActiveChange?.(isClearActive);
+  }, [isClearActive, onClearActiveChange]);
+
+  // Perform the reset when the header button bumps the signal. The ref
+  // keeps the mount render (and re-renders where only the handler's
+  // identity changed) from clearing on their own.
+  const lastClearSignalRef = useRef(clearSignal);
+  useEffect(() => {
+    if (lastClearSignalRef.current === clearSignal) return;
+    lastClearSignalRef.current = clearSignal;
+    handleClearFilters();
+  }, [clearSignal, handleClearFilters]);
 
   return (
     <div className="flex flex-wrap items-center flex-col md:flex-row gap-3 w-full md:w-auto bg-[var(--surface)] text-[var(--text)]">
@@ -171,18 +196,8 @@ export const FilterBar = <TSearchData extends SearchableEntityRecord>({
             direction={item.direction || "bottom"}
           />
         ))}
-
-        {/* Always Visible Clear Button */}
-        <Button
-          variant={`${!isClearActive ? 'ghost': 'primary'}`}
-          // className="md:ml-auto flex-1 md:flex-none disabled:bg-[var(--surface)] disabled:text-[var(--text-muted)] disabled:border-[var(--border)]"
-          size="md"
-          icon={RotateCcw}
-          onClick={handleClearFilters}
-          disabled={!isClearActive}
-        >
-          {t(clearButtonText)}
-        </Button>
+        {/* The Clear button moved up into the page header row — this
+            row now ends with the last dropdown, nothing in its place. */}
       </div>
     </div>
   );

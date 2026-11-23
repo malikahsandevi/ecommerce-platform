@@ -11,7 +11,8 @@ export interface HeaderActionButton {
   id: string;
   label: string;
   icon?: React.ElementType;
-  variant?: "primary" | "secondary";
+  variant?: "primary" | "secondary" | "ghost";
+  disabled?: boolean;
 }
 
 interface TabsBarProps {
@@ -79,6 +80,7 @@ const TabsBar: React.FC<TabsBarProps> = ({
               variant={btn.variant || "secondary"}
               size="md"
               icon={btn.icon}
+              disabled={btn.disabled}
               className="flex-1 px-[8.2px] md:flex-none whitespace-nowrap"
               onClick={() => onBtnClick && onBtnClick(btn.id)}
             >

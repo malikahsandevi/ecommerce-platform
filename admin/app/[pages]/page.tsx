@@ -3,7 +3,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Loader2, ShieldAlert } from "lucide-react";
+import { Loader2, RotateCcw, ShieldAlert } from "lucide-react";
 
 import TopBar from "@/components/ui/TopBar";
 import StatsGrid from "@/components/models/StatsGrid";
@@ -233,6 +233,13 @@ const PageLayout: React.FC = () => {
       setSearchHandoff(null);
     }
   }, [pathname, searchHandoff]);
+  // Clear button (Ahsan's order: "har page me clear btn uper ly jao"):
+  // the button lives up here in the header action row; the FilterBar
+  // below owns the search/filter state, so the two ends meet through
+  // this wire — FilterBar reports whether clearing is meaningful
+  // (clearActive) and performs the reset when clearSignal increments.
+  const [clearActive, setClearActive] = useState(false);
+  const [clearSignal, setClearSignal] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(DEFAULT_PAGE_SIZE);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -400,6 +407,24 @@ const PageLayout: React.FC = () => {
       }));
   }, [currentConfig, capabilities, isMediaPage, canCreate]);
 
+  // The header row = the config's action buttons + Clear at the end
+  // (after Refresh Data). It mirrors the FilterBar's old in-bar button
+  // exactly: RotateCcw icon, primary while a search/filter is applied,
+  // ghost + disabled otherwise — only its place moved, up here.
+  const headerButtons: HeaderActionButton[] = useMemo(
+    () => [
+      ...btnlist,
+      {
+        id: "clear-filters",
+        label: t("Clear"),
+        icon: RotateCcw,
+        variant: clearActive ? ("primary" as const) : ("ghost" as const),
+        disabled: !clearActive,
+      },
+    ],
+    [btnlist, clearActive, t],
+  );
+
   const formFields = useMemo(() => {
     // Not every route config declares form fields (media uses its own modal).
     const base = (currentConfig as { formFields?: FormField[] }).formFields || [];
@@ -477,6 +502,9 @@ const PageLayout: React.FC = () => {
         reload();
       } else if (btnId === "export") {
         handleExport();
+      } else if (btnId === "clear-filters") {
+        // Bump the signal — the FilterBar performs the actual reset.
+        setClearSignal((n) => n + 1);
       }
     },
     [buildInitialFormValues, reload, handleExport],
@@ -968,7 +996,7 @@ const PageLayout: React.FC = () => {
                 activeTab=""
                 onTabChange={() => {}}
                 label={currentConfig.allLabel ? t(currentConfig.allLabel) : currentConfig.allLabel}
-                btnlist={btnlist}
+                btnlist={headerButtons}
                 onBtnClick={handleBtnClick}
               />
             </div>
@@ -982,6 +1010,8 @@ const PageLayout: React.FC = () => {
                 filtersData={filtersData}
                 onDataChange={setDisplayItems}
                 searchHandoff={searchHandoff}
+                clearSignal={clearSignal}
+                onClearActiveChange={setClearActive}
               />
             </div>
 
