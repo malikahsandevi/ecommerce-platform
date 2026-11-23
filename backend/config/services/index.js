@@ -118,6 +118,7 @@ const catalogueView = () => ({
                 id: def.id,
                 name: def.name,
                 hasFixedBase: Boolean(def.baseUrl),
+                singleton: Boolean(def.singleton),
                 fields: def.fields,
                 endpoints: def.endpoints,
             };

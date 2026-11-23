@@ -1999,6 +1999,19 @@ function ServiceBuilderPanel({
     .map((entry, index) => ({ entry, index }))
     .filter(({ entry }) => categoryIds.includes(entryCategory(entry)));
 
+  // Singleton sub-services (definition.singleton — e.g. Store Session
+  // (JWT)) may exist exactly ONCE: the system reads exactly one entry
+  // for them, so once any other card uses one, it is no longer offered
+  // as a choice anywhere (picker, defaults, or the save-guard clone).
+  const singletonTakenByOther = (subId: string, exceptIndex: number): boolean => {
+    if (!subServiceById(subId)?.singleton) return false;
+    return entries.some((entry, idx) => idx !== exceptIndex && entry.subService === subId);
+  };
+  const firstAvailableSub = (
+    category: NonNullable<ReturnType<typeof categoryById>>,
+    exceptIndex: number,
+  ) => category.subServices.find((sub) => !singletonTakenByOther(sub.id, exceptIndex)) ?? category.subServices[0];
+
   const updateEntry = (index: number, patch: Partial<ServiceEntryState>) =>
     setEntries((current) => current.map((item, itemIndex) => (itemIndex === index ? { ...item, ...patch } : item)));
 
@@ -2007,7 +2020,7 @@ function ServiceBuilderPanel({
 
   const changeService = (index: number, categoryId: string) => {
     const category = categoryById(categoryId);
-    const firstSub = category?.subServices[0];
+    const firstSub = category ? firstAvailableSub(category, index) : undefined;
     if (!firstSub) return;
     const fields: Record<string, string> = {};
     for (const field of firstSub.fields) {
@@ -2083,6 +2096,9 @@ function ServiceBuilderPanel({
       return t("{label}: the slug \"{slug}\" is already used by another service — slugs must be unique.").replace("{label}", label).replace("{slug}", item.serviceSlug);
     }
     const def = subServiceById(item.subService);
+    if (def?.singleton && entries.some((other) => other !== item && other.subService === item.subService)) {
+      return t("{label}: {name} is a single-configuration service — only one entry can exist.").replace("{label}", label).replace("{name}", def.name);
+    }
     const isPreset = Boolean(def && def.id !== "custom");
     if (!isPreset) {
       if (!item.baseUrl.trim()) return t("{label}: a base API URL is required for custom services.").replace("{label}", label);
@@ -2223,6 +2239,19 @@ function ServiceBuilderPanel({
       toast.error(problem);
       return;
     }
+    // Singleton sub-services (e.g. Store Session (JWT)) can never be
+    // cloned — a second entry could never be used — so the guard asks
+    // only "Change this one" vs Cancel, with no "Make new one".
+    if (subServiceById(item.subService)?.singleton) {
+      const confirmed = await confirmDialog({
+        title: t("Already configured"),
+        message: t("{title} is already configured. This service can only have one configuration — changing this one replaces the saved configuration everywhere it is used.").replace("{title}", item.title),
+        confirmLabel: t("Change this one"),
+        cancelLabel: t("Cancel"),
+      });
+      if (confirmed) await saveEntry(index);
+      return;
+    }
     const choice = await choiceDialog({
       title: t("Already configured"),
       message: t("{title} is already configured. It's better to create a new one — changing this one replaces the saved configuration everywhere it is used.").replace("{title}", item.title),
@@ -2322,7 +2351,7 @@ function ServiceBuilderPanel({
     let fresh = base;
     if (!categoryIds.includes("CUSTOM") && allowedCategories.length > 0) {
       const firstCategory = allowedCategories[0];
-      const firstSub = firstCategory.subServices[0];
+      const firstSub = firstAvailableSub(firstCategory, -1);
       const fields: Record<string, string> = {};
       if (firstSub) {
         for (const field of firstSub.fields) {
@@ -2442,7 +2471,9 @@ function ServiceBuilderPanel({
                 <SettingsSelect
                   label="Sub-Service"
                   value={item.subService || "custom"}
-                  options={(categoryDef?.subServices ?? []).map((sub) => ({ label: sub.name, value: sub.id }))}
+                  options={(categoryDef?.subServices ?? [])
+                    .filter((sub) => sub.id === item.subService || !singletonTakenByOther(sub.id, index))
+                    .map((sub) => ({ label: sub.name, value: sub.id }))}
                   onChange={(value) => changeSubService(index, value)}
                 />
               </div>

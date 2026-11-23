@@ -327,7 +327,7 @@ const normalizeSection = (section, value, currentValue) => {
                 }),
             );
             const seen = new Set();
-            return value.map((item) => {
+            const normalizedItems = value.map((item) => {
                 const normalized = normalizeIntegration(item, existingBySlug);
                 if (seen.has(normalized.serviceSlug)) {
                     throw new Error(`Integration slug "${normalized.serviceSlug}" is used more than once — slugs must be unique.`);
@@ -335,6 +335,21 @@ const normalizeSection = (section, value, currentValue) => {
                 seen.add(normalized.serviceSlug);
                 return normalized;
             });
+            // Singleton sub-services (definition.singleton — e.g. Store
+            // Session (JWT), whose secret the runtime reads from the
+            // FIRST matching entry only) can exist exactly once: a
+            // second entry could never be used, so the save is refused
+            // instead of storing dead, conflicting configuration.
+            const singletonSeen = new Set();
+            for (const item of normalizedItems) {
+                const definition = item.subService ? getDefinition(item.subService) : null;
+                if (!definition?.singleton) continue;
+                if (singletonSeen.has(definition.id)) {
+                    throw new Error(`"${definition.name}" is a single-configuration service — only one entry can exist, because the system reads exactly one. Remove the duplicate "${definition.name}" entry and change the existing one instead.`);
+                }
+                singletonSeen.add(definition.id);
+            }
+            return normalizedItems;
         }
         return value;
     }
@@ -555,6 +570,21 @@ const saveIntegrationEntry = async (req, res) => {
             existingBySlug.set(serviceSlug, cloneSource);
         }
         const normalized = normalizeIntegration(item, existingBySlug);
+        // Singleton sub-services (definition.singleton — e.g. Store
+        // Session (JWT)): exactly one entry may exist, because the
+        // runtime resolver reads the first matching entry only. This
+        // refuses both a fresh duplicate AND the save-guard popup's
+        // "Make new one" clone (fresh slug, same sub-service) — while
+        // saving the existing entry itself (same slug) stays allowed.
+        const normalizedDefinition = normalized.subService ? getDefinition(normalized.subService) : null;
+        if (normalizedDefinition?.singleton) {
+            const clash = current.find(
+                (entry) => entry.serviceSlug !== serviceSlug && entry.subService === normalizedDefinition.id,
+            );
+            if (clash) {
+                throw new Error(`"${normalizedDefinition.name}" is a single-configuration service — an entry already exists ("${clash.title}") and a second one can never be used. Change the existing entry instead.`);
+            }
+        }
         const index = current.findIndex((entry) => entry.serviceSlug === serviceSlug);
         const next = [...current];
         if (index >= 0) next[index] = normalized;

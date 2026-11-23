@@ -7,8 +7,14 @@
 // secret is the `jwtSecret` field of its integrations entry. The
 // "verify" endpoint is internal — the runner answers it by signing a
 // probe token with the saved secret and verifying it (no HTTP call).
+//
+// SINGLETON: session signing/verification resolves exactly ONE entry
+// (utils/credentials.js finds the first store-session-jwt entry), so
+// a second entry could never be used. The flag makes the settings
+// API reject a duplicate and the panel stop offering one.
 module.exports = {
     "id": "store-session-jwt",
+    "singleton": true,
     "service": "AUTH",
     "name": "Store Session (JWT)",
     "baseUrl": null,

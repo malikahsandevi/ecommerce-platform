@@ -24,6 +24,10 @@ export interface SubServiceDef {
   id: string;
   name: string;
   hasFixedBase: boolean;
+  /** Single-configuration sub-service (e.g. Store Session (JWT)):
+   *  the system reads exactly one entry for it, so the panel never
+   *  offers a second entry and the backend refuses to store one. */
+  singleton?: boolean;
   fields: ServiceFieldDef[];
   endpoints: { name: string; path: string; method: string }[];
 }
@@ -309,7 +313,7 @@ export const SERVICE_CATALOGUE: ServiceCategoryDef[] = [
         endpoints: [],
       },
       {
-        id: "store-session-jwt", name: "Store Session (JWT)", hasFixedBase: false,
+        id: "store-session-jwt", name: "Store Session (JWT)", hasFixedBase: false, singleton: true,
         fields: [F("jwtSecret", "JWT Secret", true)],
         endpoints: [{ name: "verify", path: "/", method: "GET" }],
       },
