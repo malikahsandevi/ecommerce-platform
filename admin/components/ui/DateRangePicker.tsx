@@ -22,12 +22,23 @@ import { useLanguage } from "@/services/i18n";
  *    continues from there. A typed To earlier than From behaves the
  *    same way (it restarts From) instead of erroring.
  *
- * Dates travel as ISO day strings ("2026-11-12"); inputs display the
- * admin's long form ("12 Nov 2026", the same shape the dashboard uses
- * for joined dates). The calendar is fully custom-rendered (no
- * <input type="date">, no library widget) and themed from the palette
- * variables: endpoints solid primary with white text, in-range days
- * on the primary-soft wash.
+ * Dates travel as ISO day strings ("2026-11-12"); the inputs show
+ * NUMBERS ONLY in dd mm yyyy form ("12 11 2026" — his order: no
+ * month names). Typed input is accepted with spaces, dashes or
+ * slashes between the parts ("12 11 2026", "12-11-2026",
+ * "12/11/2026"; 1–2 digit day/month), and the selection follows
+ * LIVE while typing: a valid day on its own selects that day in the
+ * shown month, day+month navigates the calendar to that month
+ * (typing "8" selects the 8th; continuing "8 11" selects 8 Nov).
+ *
+ * The calendar NEVER goes beyond today: future days render muted
+ * and are inert, the next-month navigation stops at the current
+ * month, and a typed future date is not accepted as a selection.
+ *
+ * The calendar is fully custom-rendered (no <input type="date">, no
+ * library widget) and themed from the palette variables: endpoints
+ * solid primary with white text, in-range days on the primary-soft
+ * wash.
  *
  * Dismissal follows the house rule: backdrop press (start + end on
  * the overlay) or Escape = Cancel — the previously active range is
@@ -69,11 +80,11 @@ export const fromIsoDay = (iso: string): Date | null => {
   return toIsoDay(d) === iso ? d : null;
 };
 
-/** "12 Nov 2026" — the input display form. */
+/** "12 11 2026" — the input display form: numbers only, dd mm yyyy. */
 export const formatRangeDay = (iso: string): string => {
   const d = fromIsoDay(iso);
   if (!d) return "";
-  return `${d.getDate()} ${MONTH_SHORT[d.getMonth()]} ${d.getFullYear()}`;
+  return `${pad2(d.getDate())} ${pad2(d.getMonth() + 1)} ${d.getFullYear()}`;
 };
 
 /** "12 Nov" — the short form used on the closed dropdown trigger. */
@@ -84,9 +95,11 @@ export const formatRangeDayShort = (iso: string): string => {
 };
 
 /**
- * Parse typed input: the display form ("12 Nov 2026", full month names
- * also accepted) or an ISO day ("2026-11-12"). Returns the ISO day or
- * null for anything that is not a real calendar date.
+ * Parse a COMPLETE typed date: dd mm yyyy with spaces, dashes or
+ * slashes between the parts ("12 11 2026", "12-11-2026",
+ * "12/11/2026"; day and month may be 1–2 digits), or an ISO day
+ * ("2026-11-12"). Returns the ISO day or null for anything that is
+ * not a real calendar date.
  */
 export const parseRangeDay = (text: string): string | null => {
   const trimmed = (text || "").trim();
@@ -94,14 +107,52 @@ export const parseRangeDay = (text: string): string | null => {
   if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
     return fromIsoDay(trimmed) ? trimmed : null;
   }
-  const m = /^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})$/.exec(trimmed);
+  const m = /^(\d{1,2})[\s\/-](\d{1,2})[\s\/-](\d{4})$/.exec(trimmed);
   if (!m) return null;
-  const month = MONTH_SHORT.findIndex((name) =>
-    name.toLowerCase().startsWith(m[2].slice(0, 3).toLowerCase())
-  );
-  if (month < 0) return null;
-  const d = new Date(Number(m[3]), month, Number(m[1]));
-  if (d.getDate() !== Number(m[1])) return null;
+  const d = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+  if (d.getDate() !== Number(m[1]) || d.getMonth() !== Number(m[2]) - 1) {
+    return null;
+  }
+  return toIsoDay(d);
+};
+
+/**
+ * Parse a PARTIALLY typed date for the live selection that follows
+ * the typing: the parts typed so far (same separators as
+ * parseRangeDay) resolve against the calendar's currently shown
+ * month — a day alone selects that day in the shown month, day +
+ * month selects that day in that month of the shown year, and a
+ * fully typed year wins when present. Returns null while the parts
+ * cannot form a real date yet (the selection simply stays put).
+ */
+export const parsePartialRangeDay = (
+  text: string,
+  anchorYear: number,
+  anchorMonth: number,
+): string | null => {
+  const groups = (text || "")
+    .trim()
+    .split(/[\s\/-]+/)
+    .filter((g) => g.length > 0);
+  if (groups.length === 0 || groups.length > 3) return null;
+  if (!groups.every((g) => /^\d+$/.test(g))) return null;
+  const day = Number(groups[0]);
+  if (day < 1 || day > 31) return null;
+  let month = anchorMonth;
+  let year = anchorYear;
+  if (groups.length >= 2) {
+    const m = Number(groups[1]);
+    if (m < 1 || m > 12) return null;
+    month = m - 1;
+  }
+  if (groups.length === 3) {
+    if (groups[2].length > 4) return null;
+    // A year still being typed (fewer than 4 digits) does not move
+    // the candidate yet — day + month already selected live.
+    if (groups[2].length === 4) year = Number(groups[2]);
+  }
+  const d = new Date(year, month, day);
+  if (d.getDate() !== day || d.getMonth() !== month) return null;
   return toIsoDay(d);
 };
 
@@ -128,12 +179,20 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
     setFromText(value ? formatRangeDay(value.from) : "");
     setToText(value ? formatRangeDay(value.to) : "");
     const anchor = value?.from ? fromIsoDay(value.from) : new Date();
-    setViewMonth(startOfMonth(anchor ?? new Date()));
+    const anchorMonth = startOfMonth(anchor ?? new Date());
+    const currentMonth = startOfMonth(new Date());
+    // The calendar never opens beyond the current month.
+    setViewMonth(anchorMonth > currentMonth ? currentMonth : anchorMonth);
   }, [open, value]);
 
   const backdrop = useBackdropClose(onClose, open);
 
   const pickingTo = Boolean(selFrom && !selTo);
+
+  // The calendar's hard ceiling: today. Future days are inert, the
+  // month navigation stops at the current month, and typed future
+  // dates never become a selection.
+  const todayIso = toIsoDay(new Date());
 
   const syncTexts = (from: string | null, to: string | null) => {
     setFromText(from ? formatRangeDay(from) : "");
@@ -141,6 +200,7 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
   };
 
   const handleDayClick = (iso: string) => {
+    if (iso > todayIso) return; // future day — inert
     if (!selFrom || (selFrom && selTo)) {
       // Fresh selection: this day becomes From, To picking restarts.
       setSelFrom(iso);
@@ -159,10 +219,8 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
     }
   };
 
-  const handleFromText = (text: string) => {
-    setFromText(text);
-    const iso = parseRangeDay(text);
-    if (!iso) return;
+  /** A typed date lands in the From field (complete or live-partial). */
+  const applyTypedFrom = (iso: string) => {
     setSelFrom(iso);
     // A From moved past the current To restarts To picking.
     if (selTo && selTo < iso) {
@@ -173,10 +231,8 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
     if (d) setViewMonth(startOfMonth(d));
   };
 
-  const handleToText = (text: string) => {
-    setToText(text);
-    const iso = parseRangeDay(text);
-    if (!iso) return;
+  /** A typed date lands in the To field (complete or live-partial). */
+  const applyTypedTo = (iso: string) => {
     if (!selFrom) {
       setSelFrom(iso);
       setFromText(formatRangeDay(iso));
@@ -192,6 +248,32 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
     }
     const d = fromIsoDay(iso);
     if (d) setViewMonth(startOfMonth(d));
+  };
+
+  /**
+   * The candidate a field's current text resolves to on THIS
+   * keystroke: a complete date wins; otherwise the live partial
+   * (day alone, then day + month) against the shown month. Future
+   * candidates are rejected — the selection stays where it was.
+   */
+  const typedCandidate = (text: string): string | null => {
+    const iso =
+      parseRangeDay(text) ??
+      parsePartialRangeDay(text, viewMonth.getFullYear(), viewMonth.getMonth());
+    if (!iso || iso > todayIso) return null;
+    return iso;
+  };
+
+  const handleFromText = (text: string) => {
+    setFromText(text);
+    const iso = typedCandidate(text);
+    if (iso) applyTypedFrom(iso);
+  };
+
+  const handleToText = (text: string) => {
+    setToText(text);
+    const iso = typedCandidate(text);
+    if (iso) applyTypedTo(iso);
   };
 
   // Weekday header letters from Intl (locale-aware, no dict strings):
@@ -227,10 +309,17 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
     year: "numeric",
   });
 
+  // The next-month navigation stops at the current month — the
+  // calendar table never goes beyond today.
+  const atCurrentMonth =
+    viewMonth.getFullYear() === new Date().getFullYear() &&
+    viewMonth.getMonth() === new Date().getMonth();
+
   const moveMonth = (delta: number) =>
-    setViewMonth(
-      (prev) => new Date(prev.getFullYear(), prev.getMonth() + delta, 1)
-    );
+    setViewMonth((prev) => {
+      const next = new Date(prev.getFullYear(), prev.getMonth() + delta, 1);
+      return next > startOfMonth(new Date()) ? prev : next;
+    });
 
   return (
     <div
@@ -262,7 +351,7 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
               value={fromText}
               onChange={(e) => handleFromText(e.target.value)}
               onBlur={() => setFromText(selFrom ? formatRangeDay(selFrom) : "")}
-              placeholder="1 Jan 2026"
+              placeholder="01 01 2026"
               autoComplete="off"
               spellCheck={false}
               className="h-9 w-full rounded-lg border border-(--border) bg-(--surface-muted) px-2.5 text-sm text-(--text) outline-none transition focus:border-(--primary)"
@@ -283,7 +372,7 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
               value={toText}
               onChange={(e) => handleToText(e.target.value)}
               onBlur={() => setToText(selTo ? formatRangeDay(selTo) : "")}
-              placeholder="8 Jan 2026"
+              placeholder="08 01 2026"
               autoComplete="off"
               spellCheck={false}
               className="h-9 w-full rounded-lg border border-(--border) bg-(--surface-muted) px-2.5 text-sm text-(--text) outline-none transition focus:border-(--primary)"
@@ -314,7 +403,8 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
               data-testid="drp-next-month"
               aria-label="Next month"
               onClick={() => moveMonth(1)}
-              className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-(--border) text-(--text-muted) transition hover:bg-(--surface-muted)"
+              disabled={atCurrentMonth}
+              className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-(--border) text-(--text-muted) transition hover:bg-(--surface-muted) disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent"
             >
               <ChevronRight className="h-4 w-4" />
             </button>
@@ -339,21 +429,27 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
                 cell.iso > selFrom &&
                 cell.iso < selTo;
               const mutedBefore = pickingTo && selFrom !== null && cell.iso < selFrom;
+              const isFuture = cell.iso > todayIso;
               return (
                 <button
                   key={cell.iso}
                   type="button"
                   data-testid={`drp-day-${cell.iso}`}
                   data-iso={cell.iso}
+                  aria-disabled={isFuture || undefined}
                   onClick={() => handleDayClick(cell.iso)}
-                  className={`drp-day flex h-9 cursor-pointer items-center justify-center rounded-lg text-sm transition-colors ${
-                    isEndpoint
-                      ? "drp-day-endpoint font-bold"
-                      : inRange
-                        ? "drp-day-inrange text-(--text)"
-                        : mutedBefore
-                          ? "drp-day-muted text-(--text-muted) hover:bg-(--surface-muted)"
-                          : "text-(--text) hover:bg-(--surface-muted)"
+                  className={`drp-day flex h-9 items-center justify-center rounded-lg text-sm transition-colors ${
+                    isFuture
+                      ? "drp-day-future cursor-default text-(--text-muted) opacity-40"
+                      : `cursor-pointer ${
+                          isEndpoint
+                            ? "drp-day-endpoint font-bold"
+                            : inRange
+                              ? "drp-day-inrange text-(--text)"
+                              : mutedBefore
+                                ? "drp-day-muted text-(--text-muted) hover:bg-(--surface-muted)"
+                                : "text-(--text) hover:bg-(--surface-muted)"
+                        }`
                   }`}
                   style={
                     isEndpoint

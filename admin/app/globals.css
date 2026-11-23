@@ -33,6 +33,10 @@
   --text-soft: #4b5563;
   --text-muted: #6b7280;
 
+  /* Sidebar nav labels: dark and readable on the light sidebar
+     (pure white is reserved for the dark sidebar below). */
+  --nav-label: #111827;
+
   /* Border */
   --border: #e5e7eb;
 }
@@ -68,6 +72,10 @@
   --text: #f3f4f6;
   --text-soft: #cbd5e1;
   --text-muted: #94a3b8;
+
+  /* Sidebar nav labels: pure white on the dark sidebar (Ahsan's
+     order); the light theme overrides this above. */
+  --nav-label: #ffffff;
 
   /* Border (Subtle dark borders) */
   --border: #1e293b;

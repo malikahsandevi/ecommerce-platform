@@ -60,9 +60,12 @@ export function persistTheme(theme: DeviceTheme): void {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('theme', theme);
     document.cookie = `theme=${theme}; path=/; max-age=31536000; SameSite=Lax`;
-    // The palette's derived shades depend on the theme (light tints
-    // vs dark shades) — re-apply them for the new theme.
-    applyPalette(getDevicePaletteId());
+    // The palette's color SET depends on the theme (each palette
+    // carries a dark set and a light set) — re-apply for the new
+    // theme. A running palette PREVIEW wins over the kept palette:
+    // toggling the theme mid-preview shows the previewed palette's
+    // variant for the new mode, not the kept palette.
+    applyPalette(getPalettePreview()?.previewId ?? getDevicePaletteId());
   } catch {
     /* theme is cosmetic — never let it break the panel */
   }
@@ -114,7 +117,7 @@ export function getDevicePaletteId(): string | null {
  *  which read a single base color imperatively. */
 export function getDeviceAdminColor(): string | null {
   const palette = paletteById(getDevicePaletteId());
-  if (palette) return palette.colors.primary;
+  if (palette) return palette.dark.primary;
   try {
     const stored = localStorage.getItem(ADMIN_COLOR_KEY);
     return stored && isValidHexColor(stored) ? stored : null;
@@ -145,19 +148,20 @@ export function applyPalette(paletteId: string | null): void {
 }
 
 /** Writes a kept palette to every device store at once (inline vars,
- *  localStorage id + colors for the pre-paint script, the cookie) and
- *  notifies consumers. The legacy admin-color store is kept in sync
- *  with the palette's primary so older readers stay consistent. */
+ *  localStorage id + BOTH color sets for the pre-paint script, the
+ *  cookie) and notifies consumers. The legacy admin-color store is
+ *  kept in sync with the palette's primary (the same hex in both
+ *  sets) so older readers stay consistent. */
 export function persistPalette(paletteId: string): void {
   if (typeof window === 'undefined') return;
   try {
     const palette = paletteById(paletteId);
     if (!palette) return;
     localStorage.setItem(PALETTE_KEY, palette.id);
-    localStorage.setItem(PALETTE_COLORS_KEY, JSON.stringify(palette.colors));
-    localStorage.setItem(ADMIN_COLOR_KEY, palette.colors.primary);
+    localStorage.setItem(PALETTE_COLORS_KEY, JSON.stringify({ dark: palette.dark, light: palette.light }));
+    localStorage.setItem(ADMIN_COLOR_KEY, palette.dark.primary);
     document.cookie = `${PALETTE_KEY}=${encodeURIComponent(palette.id)}; path=/; max-age=31536000; SameSite=Lax`;
-    document.cookie = `${ADMIN_COLOR_KEY}=${encodeURIComponent(palette.colors.primary)}; path=/; max-age=31536000; SameSite=Lax`;
+    document.cookie = `${ADMIN_COLOR_KEY}=${encodeURIComponent(palette.dark.primary)}; path=/; max-age=31536000; SameSite=Lax`;
     applyPalette(palette.id);
     window.dispatchEvent(new CustomEvent(PALETTE_EVENT, { detail: palette.id }));
   } catch {
@@ -309,7 +313,7 @@ export function usePalette(): PaletteDef {
  *  the default) — reactive: chart accents and ramps re-derive when
  *  the palette changes. */
 export function useAdminColor(): string {
-  return usePalette().colors.primary;
+  return usePalette().dark.primary;
 }
 
 /**

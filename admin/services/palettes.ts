@@ -11,6 +11,19 @@
 // backend keeps the identical ids/hexes in backend/config/palettes.js
 // for validation and the public /api/storefront/theme endpoint —
 // the two must never drift.
+//
+// EVERY palette carries TWO complete color sets: `dark` and `light`.
+// The first palette round shipped dark-only sets, so in light mode
+// the panel derived its surfaces from the dark background/text and
+// the white theme broke (a coloured wash over the sidebar/content —
+// Ahsan's Ruby screenshot). The light sets keep the white theme
+// clean like the pre-palette light theme (globals.css :root:
+// background #ffffff, text #111827, neutral surfaces): the palette's
+// identity rides on its primary (the SAME hex in both sets — every
+// one of the eight reads on white) and a secondary darkened enough
+// to read on white; text is a near-black tint of the palette hue
+// and the background is pure white, so the derived surface/border
+// shades come out neutral greys with NO coloured wash.
 
 export interface PaletteColors {
   primary: string;
@@ -23,18 +36,37 @@ export interface PaletteDef {
   id: string;
   /** English display name — rendered through t() like every UI string. */
   name: string;
-  colors: PaletteColors;
+  /** The color set applied while the panel is in dark mode. */
+  dark: PaletteColors;
+  /** The color set applied while the panel is in light mode. */
+  light: PaletteColors;
 }
 
 export const PALETTES: PaletteDef[] = [
-  { id: "sunset-orange", name: "Sunset Orange", colors: { primary: "#f97316", secondary: "#334155", text: "#f3f4f6", background: "#0b0f19" } },
-  { id: "indigo-night", name: "Indigo Night", colors: { primary: "#4f46e5", secondary: "#818cf8", text: "#eef2ff", background: "#0d0d1d" } },
-  { id: "royal-blue", name: "Royal Blue", colors: { primary: "#2563eb", secondary: "#38bdf8", text: "#eff6ff", background: "#0a1120" } },
-  { id: "emerald-grove", name: "Emerald Grove", colors: { primary: "#059669", secondary: "#34d399", text: "#ecfdf5", background: "#0a1512" } },
-  { id: "teal-lagoon", name: "Teal Lagoon", colors: { primary: "#0d9488", secondary: "#2dd4bf", text: "#f0fdfa", background: "#0a1414" } },
-  { id: "violet-dream", name: "Violet Dream", colors: { primary: "#7c3aed", secondary: "#c084fc", text: "#f5f3ff", background: "#130e20" } },
-  { id: "ruby-red", name: "Ruby Red", colors: { primary: "#e11d48", secondary: "#fb7185", text: "#fff1f2", background: "#180a11" } },
-  { id: "slate-mono", name: "Slate Mono", colors: { primary: "#64748b", secondary: "#94a3b8", text: "#f1f5f9", background: "#0d1117" } },
+  { id: "sunset-orange", name: "Sunset Orange",
+    dark: { primary: "#f97316", secondary: "#334155", text: "#f3f4f6", background: "#0b0f19" },
+    light: { primary: "#f97316", secondary: "#334155", text: "#111827", background: "#ffffff" } },
+  { id: "indigo-night", name: "Indigo Night",
+    dark: { primary: "#4f46e5", secondary: "#818cf8", text: "#eef2ff", background: "#0d0d1d" },
+    light: { primary: "#4f46e5", secondary: "#6366f1", text: "#1e1b4b", background: "#ffffff" } },
+  { id: "royal-blue", name: "Royal Blue",
+    dark: { primary: "#2563eb", secondary: "#38bdf8", text: "#eff6ff", background: "#0a1120" },
+    light: { primary: "#2563eb", secondary: "#0284c7", text: "#172554", background: "#ffffff" } },
+  { id: "emerald-grove", name: "Emerald Grove",
+    dark: { primary: "#059669", secondary: "#34d399", text: "#ecfdf5", background: "#0a1512" },
+    light: { primary: "#059669", secondary: "#047857", text: "#022c22", background: "#ffffff" } },
+  { id: "teal-lagoon", name: "Teal Lagoon",
+    dark: { primary: "#0d9488", secondary: "#2dd4bf", text: "#f0fdfa", background: "#0a1414" },
+    light: { primary: "#0d9488", secondary: "#0f766e", text: "#042f2e", background: "#ffffff" } },
+  { id: "violet-dream", name: "Violet Dream",
+    dark: { primary: "#7c3aed", secondary: "#c084fc", text: "#f5f3ff", background: "#130e20" },
+    light: { primary: "#7c3aed", secondary: "#9333ea", text: "#2e1065", background: "#ffffff" } },
+  { id: "ruby-red", name: "Ruby Red",
+    dark: { primary: "#e11d48", secondary: "#fb7185", text: "#fff1f2", background: "#180a11" },
+    light: { primary: "#e11d48", secondary: "#be123c", text: "#4c0519", background: "#ffffff" } },
+  { id: "slate-mono", name: "Slate Mono",
+    dark: { primary: "#64748b", secondary: "#94a3b8", text: "#f1f5f9", background: "#0d1117" },
+    light: { primary: "#64748b", secondary: "#475569", text: "#0f172a", background: "#ffffff" } },
 ];
 
 /** The default palette — the panel's current look (orange). */
@@ -43,6 +75,21 @@ export const DEFAULT_PALETTE_ID = "sunset-orange";
 /** The four color roles, in table-row order. */
 export const PALETTE_ROLES = ["primary", "secondary", "text", "background"] as const;
 export type PaletteRole = (typeof PALETTE_ROLES)[number];
+
+/** The two theme modes a palette carries a color set for, in
+ *  table-row order (the Dark rows first, then the Light rows). */
+export const PALETTE_MODES = ["dark", "light"] as const;
+export type PaletteMode = (typeof PALETTE_MODES)[number];
+
+export const PALETTE_MODE_LABELS: Record<PaletteMode, string> = {
+  dark: "Dark",
+  light: "Light",
+};
+
+/** The color set a palette applies under a theme mode. */
+export function paletteSet(palette: PaletteDef, theme: PaletteTheme): PaletteColors {
+  return theme === "dark" ? palette.dark : palette.light;
+}
 
 export const PALETTE_ROLE_LABELS: Record<PaletteRole, string> = {
   primary: "Primary",
@@ -59,7 +106,7 @@ export function paletteById(id: string | null | undefined): PaletteDef | null {
 export function paletteByPrimary(hex: string | null | undefined): PaletteDef | null {
   if (!hex || !/^#[0-9a-fA-F]{6}$/.test(hex)) return null;
   const needle = hex.toLowerCase();
-  return PALETTES.find((palette) => palette.colors.primary === needle) ?? null;
+  return PALETTES.find((palette) => palette.dark.primary === needle) ?? null;
 }
 
 /**
@@ -181,7 +228,7 @@ export function scrollbarArrowVars(primary: string, primaryDark: string): Record
  *  these with the same math from the stored colors, so the first
  *  paint and the runtime application always agree. */
 export function paletteVars(palette: PaletteDef, theme: PaletteTheme): Record<string, string> {
-  const { primary, secondary, text, background } = palette.colors;
+  const { primary, secondary, text, background } = paletteSet(palette, theme);
   const primaryVars = adminColorVars(primary, theme);
   return {
     ...primaryVars,

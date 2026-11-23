@@ -16,7 +16,7 @@ router.get('/theme', async (req, res) => {
     try {
         const settings = await Setting.findOne().sort({ createdAt: 1 }).select('appearance').lean();
         const palette = paletteById(resolvePaletteId(settings?.appearance));
-        res.json({ palette: palette.id, colors: { ...palette.colors } });
+        res.json({ palette: palette.id, colors: { ...palette.dark }, colorsLight: { ...palette.light } });
     } catch (error) {
         res.status(500).json({ message: error.message });
     }

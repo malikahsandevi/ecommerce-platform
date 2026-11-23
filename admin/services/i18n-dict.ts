@@ -1287,6 +1287,16 @@ export const T_PALETTE: Dict = {
   "Violet Dream": { ur: "وائلٹ ڈریم", ar: "حلم البنفسج", hi: "वायलेट ड्रीम", bn: "ভায়োলেট ড্রিম", es: "Sueño violeta", fr: "Rêve violet", de: "Violetter Traum", tr: "Menekşe Rüyası", zh: "紫罗兰之梦" },
   "Ruby Red": { ur: "روبی ریڈ", ar: "الأحمر الياقوتي", hi: "रूबी रेड", bn: "রুবি রেড", es: "Rojo rubí", fr: "Rouge rubis", de: "Rubinrot", tr: "Yakut Kırmızısı", zh: "红宝石" },
   "Slate Mono": { ur: "سلیٹ مونو", ar: "أردواز أحادي", hi: "स्लेट मोनो", bn: "স্লেট মনো", es: "Pizarra mono", fr: "Ardoise mono", de: "Schiefer Mono", tr: "Arduvaz Mono", zh: "石板灰" },
+  "Dark": { ur: "تاریک", ar: "داكن", hi: "डार्क", bn: "ডার্ক", es: "Oscuro", fr: "Sombre", de: "Dunkel", tr: "Koyu", zh: "深色" },
+  "Light": { ur: "روشن", ar: "فاتح", hi: "लाइट", bn: "লাইট", es: "Claro", fr: "Clair", de: "Hell", tr: "Açık", zh: "浅色" },
+  "Dark Primary": { ur: "تاریک بنیادی", ar: "الأساسي الداكن", hi: "डार्क प्राइमरी", bn: "ডার্ক প্রাইমারি", es: "Primario oscuro", fr: "Primaire sombre", de: "Dunkles Primär", tr: "Koyu Birincil", zh: "深色主色" },
+  "Dark Secondary": { ur: "تاریک ثانوی", ar: "الثانوي الداكن", hi: "डार्क सेकेंडरी", bn: "ডার্ক সেকেন্ডারি", es: "Secundario oscuro", fr: "Secondaire sombre", de: "Dunkles Sekundär", tr: "Koyu İkincil", zh: "深色辅色" },
+  "Dark Text": { ur: "تاریک متن", ar: "النص الداكن", hi: "डार्क टेक्स्ट", bn: "ডার্ক টেক্সট", es: "Texto oscuro", fr: "Texte sombre", de: "Dunkler Text", tr: "Koyu Metin", zh: "深色文本" },
+  "Dark Background": { ur: "تاریک پس منظر", ar: "الخلفية الداكنة", hi: "डार्क बैकग्राउंड", bn: "ডার্ক ব্যাকগ্রাউন্ড", es: "Fondo oscuro", fr: "Arrière-plan sombre", de: "Dunkler Hintergrund", tr: "Koyu Arka Plan", zh: "深色背景" },
+  "Light Primary": { ur: "روشن بنیادی", ar: "الأساسي الفاتح", hi: "लाइट प्राइमरी", bn: "লাইট প্রাইমারি", es: "Primario claro", fr: "Primaire clair", de: "Helles Primär", tr: "Açık Birincil", zh: "浅色主色" },
+  "Light Secondary": { ur: "روشن ثانوی", ar: "الثانوي الفاتح", hi: "लाइट सेकेंडरी", bn: "লাইট সেকেন্ডারি", es: "Secundario claro", fr: "Secondaire clair", de: "Helles Sekundär", tr: "Açık İkincil", zh: "浅色辅色" },
+  "Light Text": { ur: "روشن متن", ar: "النص الفاتح", hi: "लाइट टेक्स्ट", bn: "লাইট টেক্সট", es: "Texto claro", fr: "Texte clair", de: "Heller Text", tr: "Açık Metin", zh: "浅色文本" },
+  "Light Background": { ur: "روشن پس منظر", ar: "الخلفية الفاتحة", hi: "लाइट बैकग्राउंड", bn: "লাইট ব্যাকগ্রাউন্ড", es: "Fondo claro", fr: "Arrière-plan clair", de: "Heller Hintergrund", tr: "Açık Arka Plan", zh: "浅色背景" },
 };
 
 export const T_UROLE: Dict = {

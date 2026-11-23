@@ -8,6 +8,8 @@ import { useLanguage } from "@/services/i18n";
 import {
   DEFAULT_PALETTE_ID,
   PALETTES,
+  PALETTE_MODES,
+  PALETTE_MODE_LABELS,
   PALETTE_ROLES,
   PALETTE_ROLE_LABELS,
   paletteById,
@@ -45,12 +47,13 @@ function confirmSeconds(): number {
 /**
  * Settings → Appearance → Theme Colors (Ahsan's redesign).
  *
- * ONE table: rows are the four color roles (Primary / Secondary /
- * Text / Background), columns are ready-made palettes. Selecting a
- * column only previews it in the dummy cards on the right — the
- * selected column carries a light border. There is no per-color
- * editing. The single palette colours the admin panel AND the
- * storefront together.
+ * ONE table: rows are the eight color roles — each palette's DARK
+ * set (Primary / Secondary / Text / Background) followed by its
+ * LIGHT set — columns are ready-made palettes. Selecting a column
+ * only previews it in the dummy cards on the right (one dark card
+ * and one light card, both recoloring live) — the selected column
+ * carries a light border. There is no per-color editing. The single
+ * palette colours the admin panel AND the storefront together.
  *
  * Apply puts the palette on the WHOLE panel as a temporary preview
  * and starts a 30-second countdown beside the Apply button — no
@@ -220,7 +223,7 @@ export default function ThemePalettePicker({
                     ? "ring-2 ring-[var(--text)] ring-offset-2 ring-offset-[var(--background)]"
                     : "hover:scale-110"
                 }`}
-                style={{ backgroundColor: palette.colors.primary }}
+                style={{ backgroundColor: palette.dark.primary }}
               />
             );
           })}
@@ -266,30 +269,32 @@ export default function ThemePalettePicker({
                 </tr>
               </thead>
               <tbody>
-                {PALETTE_ROLES.map((role) => (
-                  <tr key={role}>
-                    <th className="px-1 text-left text-sm font-medium text-[var(--text)]">
-                      {t(PALETTE_ROLE_LABELS[role])}
-                    </th>
-                    {PALETTES.map((palette) => (
-                      <td
-                        key={palette.id}
-                        onClick={() => select(palette.id)}
-                        data-palette-cell={`${palette.id}:${role}`}
-                        className="cursor-pointer rounded-lg p-1.5 transition"
-                        style={columnStyle(palette.id)}
-                      >
-                        <div
-                          className="h-9 rounded-md border border-black/20"
-                          style={{ backgroundColor: palette.colors[role] }}
-                        />
-                        <div className="mt-1 truncate text-center text-[10px] text-[var(--text-muted)]">
-                          {palette.colors[role]}
-                        </div>
-                      </td>
-                    ))}
-                  </tr>
-                ))}
+                {PALETTE_MODES.map((mode) =>
+                  PALETTE_ROLES.map((role) => (
+                    <tr key={`${mode}-${role}`}>
+                      <th className="px-1 text-left text-sm font-medium text-[var(--text)]">
+                        {t(`${PALETTE_MODE_LABELS[mode]} ${PALETTE_ROLE_LABELS[role]}`)}
+                      </th>
+                      {PALETTES.map((palette) => (
+                        <td
+                          key={palette.id}
+                          onClick={() => select(palette.id)}
+                          data-palette-cell={`${palette.id}:${mode}:${role}`}
+                          className="cursor-pointer rounded-lg p-1.5 transition"
+                          style={columnStyle(palette.id)}
+                        >
+                          <div
+                            className="h-9 rounded-md border border-black/20"
+                            style={{ backgroundColor: palette[mode][role] }}
+                          />
+                          <div className="mt-1 truncate text-center text-[10px] text-[var(--text-muted)]">
+                            {palette[mode][role]}
+                          </div>
+                        </td>
+                      ))}
+                    </tr>
+                  )),
+                )}
               </tbody>
             </table>
           </div>
@@ -332,59 +337,70 @@ export default function ThemePalettePicker({
 
         <div className="w-full shrink-0 xl:w-72" data-testid="palette-preview">
           <h4 className="text-xs font-medium text-[var(--text-muted)]">{t("Preview")}</h4>
-          <div
-            className="mt-2 rounded-xl border p-4 transition-colors duration-200"
-            data-testid="preview-stage"
-            style={{
-              backgroundColor: selected.colors.background,
-              borderColor: mix(selected.colors.background, selected.colors.text, 0.18),
-            }}
-          >
-            <div
-              className="rounded-lg p-4"
-              data-testid="preview-card"
-              style={{ backgroundColor: mix(selected.colors.background, selected.colors.text, 0.07) }}
-            >
-              <h5
-                className="text-sm font-semibold"
-                data-testid="preview-heading"
-                style={{ color: selected.colors.text }}
-              >
-                {t("Dashboard")}
-              </h5>
-              <p
-                className="mt-1 text-xs"
-                style={{ color: mix(selected.colors.text, selected.colors.background, 0.45) }}
-              >
-                {t("Buttons, text and surfaces follow the selected palette.")}
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <span
-                  className="rounded-lg px-3 py-1.5 text-xs font-medium text-white"
-                  data-testid="preview-primary"
-                  style={{ backgroundColor: selected.colors.primary }}
-                >
-                  {t("Primary")}
-                </span>
-                <span
-                  className="rounded-lg px-3 py-1.5 text-xs font-medium text-white"
-                  data-testid="preview-secondary"
-                  style={{ backgroundColor: selected.colors.secondary }}
-                >
-                  {t("Secondary")}
-                </span>
-              </div>
-              <div
-                className="mt-4 h-2 rounded-full"
-                style={{ backgroundColor: mix(selected.colors.background, selected.colors.text, 0.12) }}
-              >
+          {PALETTE_MODES.map((mode) => {
+            const set = selected[mode];
+            const suffix = mode === "dark" ? "" : "-light";
+            return (
+              <div key={mode} className="mt-3">
+                <p className="text-[11px] font-medium text-[var(--text-muted)]">
+                  {t(PALETTE_MODE_LABELS[mode])}
+                </p>
                 <div
-                  className="h-2 w-2/3 rounded-full transition-colors duration-200"
-                  style={{ backgroundColor: selected.colors.primary }}
-                />
+                  className="mt-1 rounded-xl border p-4 transition-colors duration-200"
+                  data-testid={`preview-stage${suffix}`}
+                  style={{
+                    backgroundColor: set.background,
+                    borderColor: mix(set.background, set.text, 0.18),
+                  }}
+                >
+                  <div
+                    className="rounded-lg p-4"
+                    data-testid={`preview-card${suffix}`}
+                    style={{ backgroundColor: mix(set.background, set.text, 0.07) }}
+                  >
+                    <h5
+                      className="text-sm font-semibold"
+                      data-testid={`preview-heading${suffix}`}
+                      style={{ color: set.text }}
+                    >
+                      {t("Dashboard")}
+                    </h5>
+                    <p
+                      className="mt-1 text-xs"
+                      style={{ color: mix(set.text, set.background, 0.45) }}
+                    >
+                      {t("Buttons, text and surfaces follow the selected palette.")}
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <span
+                        className="rounded-lg px-3 py-1.5 text-xs font-medium text-white"
+                        data-testid={`preview-primary${suffix}`}
+                        style={{ backgroundColor: set.primary }}
+                      >
+                        {t("Primary")}
+                      </span>
+                      <span
+                        className="rounded-lg px-3 py-1.5 text-xs font-medium text-white"
+                        data-testid={`preview-secondary${suffix}`}
+                        style={{ backgroundColor: set.secondary }}
+                      >
+                        {t("Secondary")}
+                      </span>
+                    </div>
+                    <div
+                      className="mt-4 h-2 rounded-full"
+                      style={{ backgroundColor: mix(set.background, set.text, 0.12) }}
+                    >
+                      <div
+                        className="h-2 w-2/3 rounded-full transition-colors duration-200"
+                        style={{ backgroundColor: set.primary }}
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+            );
+          })}
         </div>
       </div>
 

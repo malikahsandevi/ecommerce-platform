@@ -122,23 +122,30 @@ export default async function RootLayout({
                 let paletteColors = null;
                 let paletteApplied = false;
                 try { paletteColors = JSON.parse(localStorage.getItem("admin-palette-colors") || "null"); } catch (e) {}
-                if (paletteColors && /^#[0-9a-fA-F]{6}$/.test(paletteColors.primary || "")) {
+                // The stored shape is { dark, light } — each palette
+                // carries a set per theme mode; paint the RESOLVED
+                // theme's set. A legacy flat object (the old dark
+                // set stored by earlier versions) is used as stored.
+                const setP = paletteColors && paletteColors.dark
+                  ? (resolved === "dark" ? paletteColors.dark : paletteColors.light)
+                  : paletteColors;
+                if (setP && /^#[0-9a-fA-F]{6}$/.test(setP.primary || "")) {
                   paletteApplied = true;
                   document.cookie = "admin-palette=" + (localStorage.getItem("admin-palette") || "") + "; path=/; max-age=31536000; SameSite=Lax";
                   const rgbOf = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
                   const mixRgb = (a, b, amt) => a.map((v, i) => v + (b[i] - v) * amt);
                   const toHexC = (a) => "#" + a.map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, "0")).join("");
-                  const P = rgbOf(paletteColors.primary), T = rgbOf(paletteColors.text), B = rgbOf(paletteColors.background);
+                  const P = rgbOf(setP.primary), T = rgbOf(setP.text), B = rgbOf(setP.background);
                   const BLACK = [0, 0, 0], WHITE = [255, 255, 255];
                   const darkP = resolved === "dark";
                   const styleP = document.documentElement.style;
-                  styleP.setProperty("--primary", paletteColors.primary);
+                  styleP.setProperty("--primary", setP.primary);
                   styleP.setProperty("--primary-dark", toHexC(mixRgb(P, BLACK, darkP ? 0.15 : 0.12)));
                   styleP.setProperty("--primary-light", darkP ? toHexC(mixRgb(P, BLACK, 0.12)) : toHexC(mixRgb(P, WHITE, 0.76)));
                   styleP.setProperty("--primary-soft", darkP ? toHexC(mixRgb(P, BLACK, 0.8)) : toHexC(mixRgb(P, WHITE, 0.93)));
-                  styleP.setProperty("--secondary", paletteColors.secondary);
-                  styleP.setProperty("--text", paletteColors.text);
-                  styleP.setProperty("--background", paletteColors.background);
+                  styleP.setProperty("--secondary", setP.secondary);
+                  styleP.setProperty("--text", setP.text);
+                  styleP.setProperty("--background", setP.background);
                   styleP.setProperty("--surface", toHexC(mixRgb(B, T, 0.07)));
                   styleP.setProperty("--surface-muted", toHexC(mixRgb(B, T, 0.12)));
                   styleP.setProperty("--border", toHexC(mixRgb(B, T, 0.18)));
@@ -146,10 +153,10 @@ export default async function RootLayout({
                   styleP.setProperty("--text-muted", toHexC(mixRgb(T, B, 0.45)));
                   const arrowUriP = (d, fill) => "url(\\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='" + d + "' fill='" + fill.replace("#", "%23") + "'/%3E%3C/svg%3E\\")";
                   const darkHexP = toHexC(mixRgb(P, BLACK, darkP ? 0.15 : 0.12));
-                  styleP.setProperty("--sb-arrow-up", arrowUriP("M5 2 9 8 H1 Z", paletteColors.primary));
-                  styleP.setProperty("--sb-arrow-down", arrowUriP("M5 8 1 2 H9 Z", paletteColors.primary));
-                  styleP.setProperty("--sb-arrow-left", arrowUriP("M2 5 8 1 V9 Z", paletteColors.primary));
-                  styleP.setProperty("--sb-arrow-right", arrowUriP("M8 5 2 9 V1 Z", paletteColors.primary));
+                  styleP.setProperty("--sb-arrow-up", arrowUriP("M5 2 9 8 H1 Z", setP.primary));
+                  styleP.setProperty("--sb-arrow-down", arrowUriP("M5 8 1 2 H9 Z", setP.primary));
+                  styleP.setProperty("--sb-arrow-left", arrowUriP("M2 5 8 1 V9 Z", setP.primary));
+                  styleP.setProperty("--sb-arrow-right", arrowUriP("M8 5 2 9 V1 Z", setP.primary));
                   styleP.setProperty("--sb-arrow-up-hover", arrowUriP("M5 2 9 8 H1 Z", darkHexP));
                   styleP.setProperty("--sb-arrow-down-hover", arrowUriP("M5 8 1 2 H9 Z", darkHexP));
                   styleP.setProperty("--sb-arrow-left-hover", arrowUriP("M2 5 8 1 V9 Z", darkHexP));
