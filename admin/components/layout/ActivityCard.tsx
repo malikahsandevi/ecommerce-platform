@@ -27,6 +27,10 @@ const TYPE_ICONS: Record<string, LucideIcon> = {
   STATUS_CHANGE: RefreshCcw,
 };
 
+/** Same thin styled scrollbar as the media panel's scroll areas. */
+const SCROLLBAR_CLASSES =
+  "[&::-webkit-scrollbar]:w-[6px] [&::-webkit-scrollbar]:h-[6px] [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[var(--primary)] [&::-webkit-scrollbar-thumb]:rounded-[4px] [scrollbar-width:thin] [scrollbar-color:var(--primary)_transparent]";
+
 type Translate = (key: string) => string;
 
 const titleCase = (value: string): string =>
@@ -124,16 +128,28 @@ export const ActivityCard: React.FC<{ logs?: ActivityLogItem[] }> = ({ logs }) =
           </p>
         </div>
       ) : (
-        // The list flexes to the card's full height and each entry
-        // becomes an equal band (flex-1, vertically centred): beside
-        // Recent Orders this card is stretched by the grid row, and
-        // with only a few log entries the bottom half used to stand
-        // empty (measured 88–121px of dead space at lg widths).
-        <ul className="flex-1 flex flex-col divide-y divide-(--border)">
+        // Ahsan's cap: at most 3 entries are visible — the rest
+        // scroll inside the panel (the dashboard hands this card up
+        // to 10 entries and the panel used to grow with every one).
+        // Each max-height is the measured height of the first 3
+        // entries in that breakpoint band (an entry's height follows
+        // how far its description wraps; the first entry loses its
+        // top padding to first:pt-0): ~76.5px per entry where the
+        // panel is narrow (mobile, xl — 2-line descriptions) →
+        // 64.5+76.5+76.5 ≈ 218; ~60px where it is wide (md span —
+        // 1 line) → 48+60+60 = 168; ~109.5px at the lg lower bound
+        // (the ~221px column wraps descriptions to 4 lines) →
+        // 97.5+109.5+109.5 ≈ 316. max-height, not height: with 3 or
+        // fewer entries the list takes its natural height and no
+        // scrollbar appears. pr-2 keeps row text clear of the bar,
+        // the same clearance the New Customers list uses.
+        <ul
+          className={`flex flex-col divide-y divide-(--border) overflow-y-auto pr-2 max-h-[218px] md:max-h-[168px] lg:max-h-[316px] xl:max-h-[218px] ${SCROLLBAR_CLASSES}`}
+        >
           {logs.map((log) => {
             const Icon = TYPE_ICONS[log.type] || Activity;
             return (
-              <li key={log.id} className="flex-1 flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+              <li key={log.id} className="flex shrink-0 items-center gap-3 py-3 first:pt-0 last:pb-0">
                 <span className="w-8 h-8 shrink-0 rounded-full bg-(--primary-soft) text-(--primary) flex items-center justify-center">
                   <Icon className="w-4 h-4" />
                 </span>
