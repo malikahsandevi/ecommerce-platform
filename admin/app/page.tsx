@@ -21,7 +21,10 @@ import OrdersByStatusCard, {
 import RecentOrdersCard, { DashboardOrder } from "@/components/layout/RecentOrdersCard";
 import ActivityCard, { ActivityLogItem } from "@/components/layout/ActivityCard";
 import TopBar from "@/components/ui/TopBar";
-import { getDashboardAllData } from "@/services/dashboardService";
+import {
+  DashboardLoadError,
+  getDashboardAllData,
+} from "@/services/dashboardService";
 import { formatMoney, useStoreCurrency } from "@/services/currency";
 import { useAdminAuth } from "@/services/authContext";
 import { useLanguage } from "@/services/i18n";
@@ -105,11 +108,13 @@ export default function Page() {
   const [inventory, setInventory] = useState<InventoryData | undefined>(undefined);
   const [newestCustomers, setNewestCustomers] = useState<NewCustomer[] | undefined>(undefined);
   const [loadError, setLoadError] = useState(false);
+  const [loadForbidden, setLoadForbidden] = useState(false);
   const [slowLoad, setSlowLoad] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
 
   const fetchData = useCallback(async () => {
     setLoadError(false);
+    setLoadForbidden(false);
     setSlowLoad(false);
     setStats(undefined);
     setComparisons(undefined);
@@ -130,7 +135,24 @@ export default function Page() {
     // call was slower on a cold start.
     const slowTimer = setTimeout(() => setSlowLoad(true), 6000);
 
-    const data = await getDashboardAllData();
+    let data;
+    try {
+      data = await getDashboardAllData();
+    } catch (error) {
+      clearTimeout(slowTimer);
+      setSlowLoad(false);
+      // A 403 is not a load failure: the role has no Dashboard
+      // permission (e.g. it was revoked after this session signed in,
+      // so the client-side gate below could not know). It gets the
+      // permission notice — never the "server waking up" error screen,
+      // and no Retry button, because retrying cannot grant access.
+      if (error instanceof DashboardLoadError && error.status === 403) {
+        setLoadForbidden(true);
+      } else {
+        setLoadError(true);
+      }
+      return;
+    }
     clearTimeout(slowTimer);
     setSlowLoad(false);
 
@@ -298,10 +320,13 @@ export default function Page() {
 
   // Role gate: every shipped default grants Dashboard view, but a matrix
   // edit can remove it — then show a clean notice instead of empty cards
-  // (the dashboard API answers 403 in that case anyway).
+  // (the dashboard API answers 403 in that case anyway). The same notice
+  // covers a 403 the fetch itself reported (loadForbidden): the session's
+  // stored permissions can be older than a matrix edit, so the API's
+  // answer outranks the gate.
   const canViewDashboard =
     typeof hasPermission !== "function" || hasPermission("Dashboard", "view");
-  if (isAuthenticated && !canViewDashboard) {
+  if (isAuthenticated && (!canViewDashboard || loadForbidden)) {
     return (
       <div className="flex-1 min-w-0 p-3 bg-[var(--background)] text-[var(--text)] transition-colors duration-200 flex flex-col gap-3">
         <TopBar
