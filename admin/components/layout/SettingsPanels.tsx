@@ -10,6 +10,7 @@ import {
   subServiceById,
 } from "@/services/serviceCatalogue";
 import Button from "@/components/ui/Button";
+import PermissionNotice from "@/components/ui/PermissionNotice";
 import Select from "@/components/ui/Select";
 import { useBackdropClose } from "@/hooks/useBackdropClose";
 import MediaPickerModal from "@/components/models/MediaPickerModal";
@@ -121,6 +122,8 @@ export function SettingsPanel({
   onCreateUser: (values: NewUserValues) => Promise<void>;
   onResetUserTwoFactor: (id: string) => void;
 }) {
+  const { user } = useAdminAuth();
+  const { t } = useLanguage();
   switch (activeMenu) {
     case "General":
       return (
@@ -139,6 +142,22 @@ export function SettingsPanel({
         />
       );
     case "Payment Methods":
+      // Payment methods are Super-Admin-only (Ahsan's order): the tab
+      // stays visible for every role — shown, never removed — but a
+      // non-Super-Admin gets the lock notice instead of the builder:
+      // no entry cards, no Add button. There is no payment data on
+      // this client to show anyway — the settings API omits payment
+      // entries entirely for non-Super-Admin callers, and their saves
+      // are refused server-side; this is only the presentation of it.
+      if (user?.role !== "Super Admin") {
+        return (
+          <PermissionNotice
+            section="Payment Methods"
+            heading={t("Payment methods are managed by Super Admin only")}
+            message="Your role ({role}) can't view or change payment methods. Payment gateways and their credentials are managed by a Super Admin only."
+          />
+        );
+      }
       return (
         <ServiceBuilderPanel
           data={settings.integrations}

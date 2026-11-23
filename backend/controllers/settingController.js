@@ -133,10 +133,56 @@ const maskSettingsDocument = (doc) => {
     return obj;
 };
 
+// ── Payment methods are Super-Admin-only (Ahsan's order) ────────────
+// The Payment category of the integrations store (Stripe, PayPal,
+// JazzCash, Easypaisa, … — the provider entries AND their credentials)
+// belongs to the Super Admin alone. For every other role the entries
+// never leave this API at all (reads omit them entirely — not even
+// their masked metadata), and any attempt to create, update, delete,
+// clone or test one is refused below. This sits ON TOP of the
+// permission matrix and the Settings Lock, never instead of them: a
+// Super Admin passes those exactly as before, and a non-Super-Admin
+// gains nothing here from either. An entry IS a payment entry by its
+// stored usageType — the same field the runtime gate groups by. The
+// role test mirrors the codebase's other Super-Admin-only operations
+// (user management, the media migrations).
+const PAYMENT_USAGE_TYPE = 'PAYMENT';
+const PAYMENT_SA_ONLY_MESSAGE = 'Only Super Admin can manage payment methods.';
+const isPaymentEntry = (entry) => entry?.usageType === PAYMENT_USAGE_TYPE;
+const isSuperAdminCaller = (req) => req.user?.role === 'Super Admin';
+
+/** The masked settings document as THIS caller may receive it:
+ *  payment entries are omitted entirely for non-Super-Admin callers. */
+const maskSettingsDocumentForCaller = (req, doc) => {
+    const masked = maskSettingsDocument(doc);
+    if (!masked || isSuperAdminCaller(req) || !Array.isArray(masked.integrations)) {
+        return masked;
+    }
+    masked.integrations = masked.integrations.filter((entry) => !isPaymentEntry(entry));
+    return masked;
+};
+
+/** Whole-array integrations saves: a non-Super-Admin's array can
+ *  never touch the stored payment entries — whatever the payload says
+ *  about them (edited, dropped, or a foreign entry squatting on a
+ *  payment slug), the stored payment entries carry over verbatim. */
+const preserveStoredPaymentEntries = (submitted, currentValue) => {
+    const stored = (currentValue || []).map((entry) =>
+        entry?.toObject ? entry.toObject() : entry,
+    );
+    const kept = stored.filter(isPaymentEntry);
+    if (kept.length === 0) return submitted;
+    const keptSlugs = new Set(kept.map((entry) => entry.serviceSlug));
+    const rest = (submitted || []).filter(
+        (entry) => !isPaymentEntry(entry) && !keptSlugs.has(entry.serviceSlug),
+    );
+    return [...rest, ...kept];
+};
+
 const getSettings = async (req, res) => {
     try {
         const settings = await Setting.findOne().sort({ createdAt: 1 });
-        res.json(settings ? maskSettingsDocument(settings) : {});
+        res.json(settings ? maskSettingsDocumentForCaller(req, settings) : {});
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
@@ -187,7 +233,7 @@ const updateSettingsAppearance = async (req, res) => {
         if (!settings) settings = new Setting();
         settings.set('appearance', normalizeSection('appearance', appearance, settings.get('appearance')));
         const savedSettings = await settings.save();
-        res.json(maskSettingsDocument(savedSettings));
+        res.json(maskSettingsDocumentForCaller(req, savedSettings));
     } catch (error) {
         res.status(400).json({ message: error.message });
     }
@@ -502,7 +548,15 @@ const updateSettings = async (req, res) => {
         if (!settings) settings = new Setting();
 
         for (const [section, value] of sections) {
-            settings.set(section, normalizeSection(section, value, settings.get(section)));
+            const currentValue = settings.get(section);
+            let normalized = normalizeSection(section, value, currentValue);
+            // Payment entries are Super-Admin-only: a whole-array
+            // integrations save by anyone else leaves the stored
+            // payment entries exactly as they are.
+            if (section === 'integrations' && !isSuperAdminCaller(req)) {
+                normalized = preserveStoredPaymentEntries(normalized, currentValue);
+            }
+            settings.set(section, normalized);
         }
 
         const savedSettings = await settings.save();
@@ -510,7 +564,7 @@ const updateSettings = async (req, res) => {
         // integrations save may have moved them, so refresh the
         // credentials resolver's snapshot on this instance right away.
         if (req.body.integrations) await refreshCredentials(true);
-        res.json(maskSettingsDocument(savedSettings));
+        res.json(maskSettingsDocumentForCaller(req, savedSettings));
     } catch (error) {
         res.status(400).json({ message: error.message });
     }
@@ -527,6 +581,14 @@ const executeIntegration = async (req, res) => {
         const { entry } = await findEntry(serviceSlug);
         if (!entry) {
             return res.status(404).json({ message: `Integration '${serviceSlug}' not found or disabled.` });
+        }
+        // Testing / running a payment entry is managing a payment
+        // method — Super Admin only, like every other payment write.
+        if (isPaymentEntry(entry) && !isSuperAdminCaller(req)) {
+            return res.status(403).json({
+                success: false,
+                message: PAYMENT_SA_ONLY_MESSAGE,
+            });
         }
         const definition = getDefinition(entry.subService) || DEFINITIONS.custom;
         if (entry.subService && entry.subService !== 'custom' && !isConfigured(definition, entry.values)) {
@@ -562,7 +624,7 @@ const getSettingById = async (req, res) => {
         }
         const doc = await Setting.findById(req.params.id);
         if (!doc) return res.status(404).json({ message: 'Setting not found' });
-        res.json(maskSettingsDocument(doc));
+        res.json(maskSettingsDocumentForCaller(req, doc));
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
@@ -577,11 +639,17 @@ const updateSettingById = async (req, res) => {
         if (!doc) return res.status(404).json({ message: 'Setting not found' });
         const sections = Object.entries(req.body || {}).filter(([section]) => settingSections.has(section));
         for (const [section, value] of sections) {
-            doc.set(section, normalizeSection(section, value, doc.get(section)));
+            const currentValue = doc.get(section);
+            let normalized = normalizeSection(section, value, currentValue);
+            // Same Super-Admin-only payment rule as the section save.
+            if (section === 'integrations' && !isSuperAdminCaller(req)) {
+                normalized = preserveStoredPaymentEntries(normalized, currentValue);
+            }
+            doc.set(section, normalized);
         }
         const saved = await doc.save();
         if (req.body?.integrations) await refreshCredentials(true);
-        res.json(maskSettingsDocument(saved));
+        res.json(maskSettingsDocumentForCaller(req, saved));
     } catch (error) {
         res.status(400).json({ message: error.message });
     }
@@ -626,6 +694,18 @@ const saveIntegrationEntry = async (req, res) => {
             existingBySlug.set(serviceSlug, cloneSource);
         }
         const normalized = normalizeIntegration(item, existingBySlug);
+        // Payment methods are Super-Admin-only: refuse a
+        // non-Super-Admin whose save touches the Payment category in
+        // ANY direction — the stored entry at this slug is a payment
+        // entry, the clone source is one (the clone's masks resolve
+        // against its stored values), or the entry being saved lands
+        // in the Payment category.
+        if (!isSuperAdminCaller(req)) {
+            const storedEntry = current.find((entry) => entry.serviceSlug === serviceSlug);
+            if (isPaymentEntry(storedEntry) || isPaymentEntry(cloneSource) || isPaymentEntry(normalized)) {
+                return res.status(403).json({ message: PAYMENT_SA_ONLY_MESSAGE });
+            }
+        }
         // Singleton sub-services (definition.singleton — e.g. Store
         // Session (JWT)): exactly one entry may exist, because the
         // runtime resolver reads the first matching entry only. This
@@ -648,7 +728,7 @@ const saveIntegrationEntry = async (req, res) => {
         settings.set('integrations', next);
         const saved = await settings.save();
         await refreshCredentials(true);
-        const masked = maskSettingsDocument(saved);
+        const masked = maskSettingsDocumentForCaller(req, saved);
         const integration = (masked.integrations || []).find((entry) => entry.serviceSlug === serviceSlug) || null;
         res.json({ integration, integrations: masked.integrations || [] });
     } catch (error) {
@@ -664,13 +744,19 @@ const deleteIntegrationEntry = async (req, res) => {
         let settings = await Setting.findOne().sort({ createdAt: 1 });
         if (!settings) return res.status(404).json({ message: 'Integration not found' });
         const current = settings.get('integrations') || [];
-        if (!current.some((entry) => entry.serviceSlug === serviceSlug)) {
+        const target = current.find((entry) => entry.serviceSlug === serviceSlug);
+        if (!target) {
             return res.status(404).json({ message: 'Integration not found' });
+        }
+        // Payment methods are Super-Admin-only — removing one is
+        // managing payment methods.
+        if (isPaymentEntry(target) && !isSuperAdminCaller(req)) {
+            return res.status(403).json({ message: PAYMENT_SA_ONLY_MESSAGE });
         }
         settings.set('integrations', current.filter((entry) => entry.serviceSlug !== serviceSlug));
         const saved = await settings.save();
         await refreshCredentials(true);
-        const masked = maskSettingsDocument(saved);
+        const masked = maskSettingsDocumentForCaller(req, saved);
         res.json({ integrations: masked.integrations || [] });
     } catch (error) {
         res.status(400).json({ message: error.message });

@@ -18,6 +18,7 @@ import { useLanguage } from "@/services/i18n";
 export default function PermissionNotice({
   section,
   heading,
+  message,
 }: {
   /** Module/section name, translated here for the default heading. */
   section: string;
@@ -26,6 +27,14 @@ export default function PermissionNotice({
    * their long-standing dedicated strings so their text never changes.
    */
   heading?: string;
+  /**
+   * Overrides the body line (translated here; {role} is replaced with
+   * the caller's role, exactly like the default line). For refusals
+   * that are NOT the permission matrix's call — a hard Super-Admin-only
+   * surface the matrix cannot grant, e.g. Payment Methods — where the
+   * default "change it in Users & Roles" line would be wrong.
+   */
+  message?: string;
 }) {
   const { user } = useAdminAuth();
   const { t } = useLanguage();
@@ -35,17 +44,17 @@ export default function PermissionNotice({
       "{module}",
       t(section),
     );
+  const body = t(
+    message ??
+      "Your role ({role}) can't access this section. Ask a Super Admin to change it in Settings → Users & Roles.",
+  ).replace("{role}", user?.role || "Staff");
   return (
     <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
       <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--primary-soft)] text-[var(--primary)]">
         <ShieldAlert className="h-7 w-7" />
       </span>
       <h2 className="text-base font-bold text-[var(--text)]">{title}</h2>
-      <p className="max-w-sm text-xs text-[var(--text-muted)]">
-        {t(
-          "Your role ({role}) can't access this section. Ask a Super Admin to change it in Settings → Users & Roles.",
-        ).replace("{role}", user?.role || "Staff")}
-      </p>
+      <p className="max-w-sm text-xs text-[var(--text-muted)]">{body}</p>
     </div>
   );
 }
