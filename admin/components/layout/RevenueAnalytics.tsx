@@ -2,8 +2,9 @@
 
 import React, { useEffect, useState } from "react";
 import {
-  Area,
-  AreaChart,
+  CartesianGrid,
+  Line,
+  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -44,7 +45,7 @@ interface RevenueAnalyticsProps {
 type RangeKey = "8days" | "6months" | "custom";
 
 // Chart accents derive from the Admin Panel Color (Settings →
-// Appearance): the revenue area IS the primary color, the orders line
+// Appearance): the revenue line IS the primary color, the orders line
 // its mid tint. With the default color these are the original
 // #f97316 / #fdba74.
 
@@ -54,73 +55,38 @@ interface ChartPoint {
   orders: number;
 }
 
-/**
- * The revenue series' active dot carries the values itself (Ahsan's
- * design: NO separate tooltip box — the chart's Tooltip renders
- * nothing). The box content is the old ChartTooltip's: the point's
- * label, the currency-formatted revenue and the order count. The box
- * sits above the dot (below it when the point rides the top edge) and
- * is clamped inside the chart's width so the first/last points never
- * clip it.
- */
-function RevenueActiveDot(props: {
-  cx?: number;
-  cy?: number;
-  payload?: ChartPoint;
-  index?: number;
-  color?: string;
-  chartWidth?: number;
-  dataLength?: number;
+function ChartTooltip({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+  payload?: Array<{ payload: ChartPoint }>;
+  label?: string;
 }) {
   // Revenue figures follow the store currency setting.
   useStoreCurrency();
-  const { cx, cy, payload, index, color, chartWidth = 0, dataLength = 0 } = props;
-  if (cx == null || cy == null || !payload) return null;
-  const W = 176;
-  const H = 66;
-  let x = cx - W / 2;
-  if (chartWidth > 0) {
-    x = Math.max(0, Math.min(x, chartWidth - W));
-  } else if (dataLength > 0 && index === dataLength - 1) {
-    // Width not measured yet: right-anchor the box on the last point.
-    x = Math.max(0, cx - W + 24);
-  } else {
-    x = Math.max(0, x);
-  }
-  const y = cy - H - 10 >= 0 ? cy - H - 10 : cy + 14;
+  if (!active || !payload?.length) return null;
+  const point = payload[0].payload;
   return (
-    <g>
-      <circle cx={cx} cy={cy} r={4.5} fill={color} stroke="#fff" strokeWidth={2} />
-      <foreignObject x={x} y={y} width={W} height={H}>
-        <div className="rounded-xl border border-(--border) bg-(--background) px-3 py-2 shadow-lg">
-          <p className="text-[10px] font-medium text-(--text-muted)">{payload.label}</p>
-          <p className="text-sm font-bold text-(--text)">
-            Revenue {formatMoney(payload.revenue, 2)}
-          </p>
-          <p className="text-[11px] font-medium text-(--text-muted)">
-            {payload.orders.toLocaleString()} order{payload.orders === 1 ? "" : "s"}
-          </p>
-        </div>
-      </foreignObject>
-    </g>
+    <div className="rounded-xl border border-(--border) bg-(--background) px-3 py-2 shadow-lg">
+      <p className="text-[10px] font-medium text-(--text-muted)">{label}</p>
+      <p className="text-sm font-bold text-(--text)">
+        Revenue {formatMoney(point.revenue, 2)}
+      </p>
+      <p className="text-[11px] font-medium text-(--text-muted)">
+        {point.orders.toLocaleString()} order{point.orders === 1 ? "" : "s"}
+      </p>
+    </div>
   );
 }
 
 /**
- * Revenue Analytics in AHSAN'S OWN chart design (ported 2026-11-23
- * from his component at his order — "ye mera chart tha... iski values
- * se update karo"): an AREA chart — revenue filled with the primary
- * gradient (0.4 → 0), orders a thin dashed line over it, values shown
- * by the revenue active dot (no tooltip box), horizontal 9px axis
- * labels, NO grid and NO axis lines. This design supersedes three
- * earlier admin-specific orders: the -35° diagonal date labels, the
- * y-axis border line and the dashed Cartesian grid.
- *
- * The data flow is unchanged: Revenue (solid) and Orders (dashed)
- * series over a range the admin picks — "Last 8 Days" (daily), "Last
- * 6 Months" (monthly) or "Custom" (the shared DateRangePicker's
- * From/To span, fetched daily + zero-filled from
- * /dashboard/revenue-range). All series come from the real Order
+ * Revenue Analytics in the EzMart reference style: Revenue (solid orange)
+ * and Orders (dashed light orange) lines over a range the admin picks —
+ * "Last 8 Days" (daily), "Last 6 Months" (monthly) or "Custom" (the
+ * shared DateRangePicker's From/To span, fetched daily + zero-filled
+ * from /dashboard/revenue-range). All series come from the real Order
  * collection; cancelled orders are excluded.
  */
 export const RevenueAnalytics: React.FC<RevenueAnalyticsProps> = ({
@@ -132,9 +98,6 @@ export const RevenueAnalytics: React.FC<RevenueAnalyticsProps> = ({
   const REVENUE_COLOR = useAdminColor();
   const ORDERS_COLOR = tint(REVENUE_COLOR, 0.52);
   const [range, setRange] = useState<RangeKey>("8days");
-  // Measured chart width (ResponsiveContainer reports it) — the
-  // active dot clamps its value box inside it.
-  const [chartWidth, setChartWidth] = useState(0);
   // Custom range (Ahsan's Filters-by-Date round): the shared
   // DateRangePicker collects From/To; Apply fetches the zero-filled
   // daily series for exactly that span from the dashboard API.
@@ -169,18 +132,16 @@ export const RevenueAnalytics: React.FC<RevenueAnalyticsProps> = ({
   }, [range, customRange]);
 
   if (dailyData === undefined || monthlyData === undefined) {
-    // Skeleton mirrors the loaded card's geometry (padding, fixed
-    // 272px height below md, shadow) so nothing jumps when data lands.
     return (
-      <div className="p-5 md:p-3 lg:p-5 w-full h-68 md:h-full bg-(--background) rounded-2xl shadow-xl border border-(--border) animate-pulse flex flex-col select-none">
-        <div className="flex items-center justify-between mb-2">
+      <div className="p-4 w-full h-full bg-(--background) rounded-2xl shadow-sm border border-(--border) animate-pulse flex flex-col">
+        <div className="flex items-center justify-between mb-4">
           <div className="h-5 bg-(--primary-soft) rounded w-40"></div>
-          <div className="h-8 bg-(--primary-soft) rounded-lg w-32"></div>
+          <div className="h-8 bg-(--primary-soft) rounded-lg w-36"></div>
         </div>
-        <div className="h-3 bg-(--primary-soft) rounded w-48 mb-1"></div>
+        <div className="h-3 bg-(--primary-soft) rounded w-48 mb-5"></div>
         {/* Chart placeholder flexes to fill the card, mirroring the
             loaded card's flex-1 chart area. */}
-        <div className="flex-1 min-h-0 bg-(--primary-soft) rounded-xl"></div>
+        <div className="flex-1 min-h-40 bg-(--primary-soft) rounded-xl"></div>
       </div>
     );
   }
@@ -206,14 +167,16 @@ export const RevenueAnalytics: React.FC<RevenueAnalyticsProps> = ({
 
   const { t } = useLanguage();
   return (
-    <div className="p-5 md:p-3 lg:p-5 bg-(--background) rounded-2xl shadow-xl border border-(--border) flex flex-col h-68 md:h-full w-full select-none">
+    <div className="p-4 w-full h-full bg-(--background) rounded-2xl shadow-sm border border-(--border) flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-base font-bold text-(--text)">{t("Revenue Analytics")}</h3>
         {/* The shared Select (same component as the list-page filters):
             orange pill trigger, light menu, selected row highlighted —
             the old native <select> opened the browser's blue menu.
-            Fixed 128px wide (Ahsan's design values). */}
+            Sized like the list-page filter triggers (size md) and the
+            trigger spans the wrapper (triggerFullWidth) so it is exactly
+            as wide as the open menu below it. */}
         <Select
           variant="primary"
           size="md"
@@ -240,7 +203,7 @@ export const RevenueAnalytics: React.FC<RevenueAnalyticsProps> = ({
               : undefined
           }
           aria-label={t("Chart range")}
-          className="w-32 shrink-0"
+          className="min-w-36"
         />
         <DateRangePicker
           open={pickerOpen}
@@ -254,113 +217,95 @@ export const RevenueAnalytics: React.FC<RevenueAnalyticsProps> = ({
         />
       </div>
 
-      {/* Legend (Ahsan's design): a solid 12px bar for Revenue, three
-          small dashes for Order, both in the series colors. */}
-      <div className="flex items-center gap-3 mb-1 text-xs font-medium text-(--text-muted)">
-        <div className="flex items-center gap-1.5">
+      {/* Legend — mirrors the reference (solid = Revenue, dashed = Order) */}
+      <div className="flex items-center gap-5 mt-2 mb-1 text-[11px] font-medium text-(--text-muted)">
+        <span className="inline-flex items-center gap-2">
           <span
-            className="w-3 h-0.5 rounded-full"
-            style={{ backgroundColor: REVENUE_COLOR }}
+            className="inline-block w-5 border-t-[2.5px] rounded"
+            style={{ borderColor: REVENUE_COLOR }}
           />
-          <span>{t("Revenue")}</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <div className="flex flex-row gap-0.5">
-            <span
-              className="w-1 h-0.5 rounded-full"
-              style={{ backgroundColor: ORDERS_COLOR }}
-            />
-            <span
-              className="w-1 h-0.5 rounded-full"
-              style={{ backgroundColor: ORDERS_COLOR }}
-            />
-            <span
-              className="w-1 h-0.5 rounded-full"
-              style={{ backgroundColor: ORDERS_COLOR }}
-            />
-          </div>
-          <span>{t("Order")}</span>
-        </div>
+          {t("Revenue")}
+        </span>
+        <span className="inline-flex items-center gap-2">
+          <span
+            className="inline-block w-5 border-t-[2.5px] border-dashed rounded"
+            style={{ borderColor: ORDERS_COLOR }}
+          />
+          {t("Order")}
+        </span>
       </div>
 
-      {/* Chart */}
-      <div className="w-full flex-1 h-full min-h-0">
-        <ResponsiveContainer
-          width="100%"
-          height="100%"
-          onResize={(w) => setChartWidth(w)}
-        >
-          <AreaChart
-            data={data}
-            margin={{ top: 35, right: 0, left: 0, bottom: -17 }}
-          >
-            <defs>
-              <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={REVENUE_COLOR} stopOpacity={0.4} />
-                <stop offset="100%" stopColor={REVENUE_COLOR} stopOpacity={0} />
-              </linearGradient>
-            </defs>
-
+      <div className="w-full flex-1 min-h-40">
+        <ResponsiveContainer width="100%" height="100%">
+          {/* Left margin + axis width + tick margin are sized together
+              so the y-axis money labels always sit fully INSIDE the
+              chart box with air on both sides — with left: 0 the labels
+              started flush at the box edge and read as clipped/cramped
+              at narrower card widths (Ahsan's mark on the $ labels). */}
+          <LineChart data={data} margin={{ top: 10, right: 6, left: 8, bottom: 4 }}>
+            <CartesianGrid
+              strokeDasharray="4 4"
+              stroke="rgba(148,163,184,0.22)"
+              vertical={false}
+            />
+            {/* X labels run DIAGONAL (Ahsan's order): rotated -35°,
+                anchored at their end and given a taller axis band so
+                every date shows, fully inside the card — horizontal
+                labels crowded and clipped at narrow widths. */}
             <XAxis
               dataKey="label"
+              tick={{ fontSize: 11, fill: "#9ca3af" }}
               axisLine={false}
               tickLine={false}
-              tick={{ fill: "var(--text-muted)", fontSize: 9 }}
-              dy={-5}
+              dy={4}
+              tickMargin={4}
+              interval={data.length > 31 ? "preserveStartEnd" : 0}
+              angle={-35}
+              textAnchor="end"
+              height={52}
             />
-
-            {/* No axis line (Ahsan's design); the lowest tick (0) is
-                blanked, the rest compact currency. */}
+            {/* The amounts sit WITH a border (Ahsan's order): a visible
+                vertical axis line beside the y labels. */}
             <YAxis
-              axisLine={false}
+              yAxisId="revenue"
+              tick={{ fontSize: 11, fill: "#9ca3af" }}
+              axisLine={{ stroke: "rgba(148,163,184,0.55)", strokeWidth: 1 }}
               tickLine={false}
-              tick={{ fill: "var(--text-muted)", fontSize: 9 }}
-              tickFormatter={(value: number, index: number) => {
-                if (index === 0) return "";
-                return formatMoneyCompact(value);
-              }}
-              width={40}
-              dx={5}
+              width={54}
+              tickMargin={6}
+              tickFormatter={(value: number) => formatMoneyCompact(value)}
             />
-
-            {/* No tooltip box and no cursor (Ahsan's design): the
-                revenue active dot carries the values. The Tooltip
-                still drives the hover/active state. */}
-            <Tooltip
-              content={() => null}
-              cursor={false}
-              wrapperStyle={{ display: "none" }}
+            {/* Orders ride on a hidden axis so both lines stay readable
+                even though revenue and order counts differ in scale.
+                The padded domain keeps the dashed line off the top edge
+                when daily counts are small and flat. */}
+            <YAxis
+              yAxisId="orders"
+              orientation="right"
+              hide
+              domain={[0, (dataMax: number) => Math.max(2, Math.ceil(dataMax * 1.8))]}
             />
-
-            <Area
-              type="monotone"
-              dataKey="orders"
-              stroke={ORDERS_COLOR}
-              strokeDasharray="4 4"
-              strokeWidth={1.5}
-              fill="none"
-              activeDot={false}
-              isAnimationActive={true}
-            />
-
-            <Area
+            <Tooltip content={<ChartTooltip />} cursor={{ stroke: `color-mix(in srgb, ${REVENUE_COLOR} 25%, transparent)` }} />
+            <Line
+              yAxisId="revenue"
               type="monotone"
               dataKey="revenue"
               stroke={REVENUE_COLOR}
-              strokeWidth={2}
-              fillOpacity={1}
-              fill="url(#revenueGradient)"
-              activeDot={(dotProps) => (
-                <RevenueActiveDot
-                  {...dotProps}
-                  color={REVENUE_COLOR}
-                  chartWidth={chartWidth}
-                  dataLength={data.length}
-                />
-              )}
-              isAnimationActive={true}
+              strokeWidth={2.5}
+              dot={false}
+              activeDot={{ r: 4.5, fill: REVENUE_COLOR, stroke: "#fff", strokeWidth: 2 }}
             />
-          </AreaChart>
+            <Line
+              yAxisId="orders"
+              type="monotone"
+              dataKey="orders"
+              stroke={ORDERS_COLOR}
+              strokeWidth={2}
+              strokeDasharray="6 6"
+              dot={false}
+              activeDot={{ r: 4, fill: ORDERS_COLOR, stroke: "#fff", strokeWidth: 2 }}
+            />
+          </LineChart>
         </ResponsiveContainer>
       </div>
     </div>
