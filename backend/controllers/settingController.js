@@ -462,6 +462,21 @@ const saveIntegrationEntry = async (req, res) => {
                 return [obj.serviceSlug, obj];
             }),
         );
+        // "Make new one" (the panel's save-guard popup): the clone is
+        // submitted under a FRESH slug but still carries the source
+        // entry's MASKED values — the client never holds the real
+        // credentials. When the payload names a clone source and the
+        // target slug is new, the mask-keep logic resolves those masks
+        // against the SOURCE entry's stored values, so the clone is
+        // stored with the real credentials while the original entry is
+        // left byte-identical. A genuinely new typed value in the
+        // clone still wins over the source's stored value.
+        const cloneSource = typeof item.cloneFromSlug === 'string'
+            ? existingBySlug.get(item.cloneFromSlug)
+            : undefined;
+        if (cloneSource && !existingBySlug.has(serviceSlug)) {
+            existingBySlug.set(serviceSlug, cloneSource);
+        }
         const normalized = normalizeIntegration(item, existingBySlug);
         const index = current.findIndex((entry) => entry.serviceSlug === serviceSlug);
         const next = [...current];

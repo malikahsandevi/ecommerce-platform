@@ -49,6 +49,40 @@ export function confirmDialog(options: ConfirmDialogOptions): Promise<boolean> {
   });
 }
 
+/**
+ * Three-way variant of the same dialog (same host, same styling, same
+ * backdrop/Escape = Cancel rule): Cancel vs. a primary action vs. an
+ * alternative action. Used by the service builder's save-guard popup
+ * ("Change this one" vs. "Make new one"). Without a host it resolves
+ * "cancel" — the safe, nothing-happens answer.
+ */
+export interface ChoiceDialogOptions {
+  title?: string;
+  message: string;
+  confirmLabel: string;
+  altLabel: string;
+  cancelLabel?: string;
+}
+
+export type ChoiceDialogResult = "cancel" | "confirm" | "alt";
+
+interface PendingChoice {
+  options: ChoiceDialogOptions;
+  resolve: (value: ChoiceDialogResult) => void;
+}
+
+let enqueueChoice: ((request: PendingChoice) => void) | null = null;
+
+export function choiceDialog(options: ChoiceDialogOptions): Promise<ChoiceDialogResult> {
+  return new Promise((resolve) => {
+    if (enqueueChoice) {
+      enqueueChoice({ options, resolve });
+    } else {
+      resolve("cancel");
+    }
+  });
+}
+
 export function noticeDialog(
   options: Omit<ConfirmDialogOptions, "notice" | "onConfirm">,
 ): Promise<void> {
@@ -58,18 +92,43 @@ export function noticeDialog(
 export const ConfirmDialogHost: React.FC = () => {
   const { t } = useLanguage();
   const [queue, setQueue] = useState<PendingRequest[]>([]);
+  const [choiceQueue, setChoiceQueue] = useState<PendingChoice[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
     enqueueRequest = (request) =>
       setQueue((current) => [...current, request]);
+    enqueueChoice = (request) =>
+      setChoiceQueue((current) => [...current, request]);
     return () => {
       enqueueRequest = null;
+      enqueueChoice = null;
     };
   }, []);
 
   const current = queue[0] ?? null;
+  const currentChoice = current ? null : (choiceQueue[0] ?? null);
+
+  const finishChoice = useCallback((value: ChoiceDialogResult) => {
+    setChoiceQueue((pending) => {
+      const [head, ...rest] = pending;
+      head?.resolve(value);
+      return rest;
+    });
+  }, []);
+
+  // Escape cancels a choice dialog, and a backdrop press (start AND
+  // end on the backdrop, the shared pattern) is always a Cancel.
+  const choiceBackdropPressRef = useRef(false);
+  useEffect(() => {
+    if (!currentChoice) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") finishChoice("cancel");
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [currentChoice, finishChoice]);
 
   const finish = useCallback((value: boolean) => {
     setQueue((pending) => {
@@ -126,6 +185,61 @@ export const ConfirmDialogHost: React.FC = () => {
   // cancels by accident. A backdrop close is always a CANCEL — in
   // notice mode it is the single acknowledge action.
   const backdropPressRef = useRef(false);
+
+  if (!current && !currentChoice) return null;
+
+  // Three-way choice dialog — rendered only after every hook above
+  // has run (an early return before the hooks would break them).
+  if (currentChoice) {
+    const choice = currentChoice.options;
+    const choiceTitle = choice.title ?? t("Confirm");
+    return (
+      <div
+        className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 p-3 backdrop-blur-sm animate-in fade-in duration-150"
+        role="alertdialog"
+        aria-modal="true"
+        aria-label={choiceTitle}
+        onMouseDown={(event) => {
+          choiceBackdropPressRef.current = event.target === event.currentTarget;
+        }}
+        onClick={(event) => {
+          if (choiceBackdropPressRef.current && event.target === event.currentTarget) {
+            finishChoice("cancel");
+          }
+          choiceBackdropPressRef.current = false;
+        }}
+      >
+        <div
+          className="w-full max-w-sm rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-2xl"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <div className="flex items-start gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--primary-soft)] text-[var(--primary)]">
+              <Info className="h-5 w-5" />
+            </span>
+            <div className="min-w-0">
+              <h3 className="text-sm font-bold text-[var(--text)]">{choiceTitle}</h3>
+              <p className="mt-1 text-xs leading-relaxed text-[var(--text-soft)]">
+                {choice.message}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
+            <Button variant="ghost" size="md" onClick={() => finishChoice("cancel")}>
+              {choice.cancelLabel ?? t("Cancel")}
+            </Button>
+            <Button variant="primary" size="md" onClick={() => finishChoice("confirm")}>
+              {choice.confirmLabel}
+            </Button>
+            <Button variant="outline" size="md" onClick={() => finishChoice("alt")}>
+              {choice.altLabel}
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!current) return null;
 

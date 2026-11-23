@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import Image from "next/image";
-import { Check, Copy, Eye, EyeOff, KeyRound, LoaderCircle, Play, Plus, Save, ShieldCheck, Trash2, Code2, Globe } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Copy, Eye, EyeOff, KeyRound, LoaderCircle, Play, Plus, Save, ShieldCheck, Trash2, Code2, Globe } from "lucide-react";
 import {
   SERVICE_CATALOGUE,
   categoryById,
@@ -38,7 +38,7 @@ import type {
   SettingsSection,
   SettingsUser,
 } from "@/services/settingsService";
-import { confirmDialog } from "@/components/ui/ConfirmDialog";
+import { choiceDialog, confirmDialog } from "@/components/ui/ConfirmDialog";
 import { LANGUAGE_OPTIONS, applyLanguage, useLanguage } from "@/services/i18n";
 import { DEFAULT_ADMIN_COLOR, isValidHexColor } from "@/services/appearance";
 
@@ -1290,7 +1290,60 @@ interface ServiceEntryState {
    *  it), so a per-entry save always updates THAT entry and can never
    *  fork a duplicate under a fresh slug. */
   persistedSlug: string;
+  /** Stable client-side identity for the card's open/closed state —
+   *  assigned once when the card is created and preserved across
+   *  saves, so collapsing never jumps between cards. */
+  uiId: string;
+  /** Canonical JSON of the entry's comparable state as last loaded
+   *  from / saved to the server. The save-guard popup keys off the
+   *  form differing from this snapshot. Empty for unsaved entries. */
+  savedJson: string;
+  /** The entry's full state as last loaded/saved — "Make new one"
+   *  reverts the original card's form to this once its edits have
+   *  been moved into the clone. Null for unsaved entries. */
+  savedState: ServiceEntryState | null;
 }
+
+let uiIdCounter = 0;
+const nextUiId = (): string => `svc-new-${++uiIdCounter}`;
+
+/** The comparable projection of an entry for the save-guard dirty
+ *  check: everything the form can change EXCEPT the Active toggle
+ *  (the toggle has its own behaviour and never triggers the popup)
+ *  and bookkeeping fields. Credential fields hold their displayed
+ *  (masked) strings — an untouched field therefore compares EQUAL to
+ *  its snapshot, while any typed change differs. */
+const comparableEntryJson = (entry: ServiceEntryState): string =>
+  JSON.stringify({
+    title: entry.title,
+    usageType: entry.usageType,
+    subService: entry.subService,
+    serviceSlug: entry.serviceSlug,
+    baseUrl: entry.baseUrl,
+    authType: entry.authType,
+    authApiKey: entry.authApiKey,
+    authHeaderKey: entry.authHeaderKey,
+    authUsername: entry.authUsername,
+    authPassword: entry.authPassword,
+    fields: Object.fromEntries(
+      Object.entries(entry.fields).sort(([a], [b]) => a.localeCompare(b)),
+    ),
+    customFields: entry.customFields.map((pair) => ({
+      key: pair.key,
+      value: pair.value,
+      secret: pair.secret,
+      isActive: pair.isActive,
+    })),
+    endpoints: entry.endpoints.map((endpoint) => ({
+      name: endpoint.name,
+      path: endpoint.path,
+      method: endpoint.method,
+    })),
+  });
+
+/** True when a SAVED entry's form differs from its last-saved state. */
+const entryIsDirty = (entry: ServiceEntryState): boolean =>
+  entry.persisted && entry.savedJson !== "" && comparableEntryJson(entry) !== entry.savedJson;
 
 const entryCategory = (entry: ServiceEntryState): string => {
   const def = subServiceById(entry.subService);
@@ -1325,7 +1378,7 @@ const entryFromApi = (item: Record<string, unknown>): ServiceEntryState => {
   }
   const apiKeyRaw = String(auth.apiKey ?? "");
   const passwordRaw = String(auth.password ?? "");
-  return {
+  const entry: ServiceEntryState = {
     usageType: String(item.usageType ?? "API"),
     subService: String(item.subService ?? ""),
     serviceSlug: String(item.serviceSlug ?? ""),
@@ -1355,7 +1408,16 @@ const entryFromApi = (item: Record<string, unknown>): ServiceEntryState => {
     isConnected: item.isConnected !== false,
     persisted: true,
     persistedSlug: String(item.serviceSlug ?? ""),
+    uiId: `svc-${String(item.serviceSlug ?? "")}`,
+    savedJson: "",
+    savedState: null,
   };
+  // The freshly loaded state IS the last-saved state — snapshot it so
+  // the save-guard dirty check compares later edits against exactly
+  // what the server holds.
+  entry.savedJson = comparableEntryJson(entry);
+  entry.savedState = { ...entry, savedState: null };
+  return entry;
 };
 
 const entryToApi = (entry: ServiceEntryState): Record<string, unknown> => {
@@ -1435,6 +1497,16 @@ function ServiceBuilderPanel({
   const { t } = useLanguage();
   const [entries, setEntries] = useState<ServiceEntryState[]>(() => (data ?? []).map(entryFromApi));
   const [busy, setBusy] = useState<Record<number, "save" | "test" | "delete">>({});
+  // Collapsible cards: saved entries start CLOSED (a single header
+  // bar); only cards whose uiId is in this set render their form.
+  const [openIds, setOpenIds] = useState<ReadonlySet<string>>(new Set());
+  const toggleOpen = (uiId: string) =>
+    setOpenIds((current) => {
+      const next = new Set(current);
+      if (next.has(uiId)) next.delete(uiId);
+      else next.add(uiId);
+      return next;
+    });
 
   const allowedCategories = SERVICE_CATALOGUE.filter((category) => categoryIds.includes(category.id));
   // A tab bound to exactly ONE category (Payment Methods, Shipping):
@@ -1558,9 +1630,17 @@ function ServiceBuilderPanel({
       );
       if (result.integration) {
         const saved = entryFromApi(result.integration);
+        // The card keeps its client identity (and open/closed state)
+        // across the save — only its data is refreshed.
+        saved.uiId = item.uiId;
         setEntries((current) => current.map((entry, idx) => (idx === index ? saved : entry)));
       } else {
-        updateEntry(index, { persisted: true });
+        updateEntry(index, {
+          persisted: true,
+          persistedSlug: item.serviceSlug,
+          savedJson: comparableEntryJson(item),
+          savedState: { ...item, savedState: null },
+        });
       }
       onSync(result.integrations);
       toast.success(t("{title} saved.").replace("{title}", item.title));
@@ -1575,6 +1655,101 @@ function ServiceBuilderPanel({
         return next;
       });
     }
+  };
+
+  /** "Make new one" from the save-guard popup: a NEW entry is created
+   *  from the form's CURRENT state (the saved data plus the pending
+   *  edits); the original entry is not written at all. The clone goes
+   *  through the normal create path under a fresh unique slug, and
+   *  the payload names the source via `cloneFromSlug` so the backend
+   *  resolves the clone's masked values against the SOURCE's stored
+   *  values — the clone is stored with the real credentials and the
+   *  original stays byte-identical. */
+  const makeNewEntry = async (index: number): Promise<boolean> => {
+    const item = entries[index];
+    const usedSlugs = new Set(entries.map((entry) => entry.serviceSlug.trim()));
+    let suffix = 2;
+    let cloneSlug = `${item.persistedSlug}-${suffix}`;
+    while (usedSlugs.has(cloneSlug)) {
+      suffix += 1;
+      cloneSlug = `${item.persistedSlug}-${suffix}`;
+    }
+    const clone: ServiceEntryState = {
+      ...item,
+      serviceSlug: cloneSlug,
+      persisted: false,
+      persistedSlug: "",
+      uiId: nextUiId(),
+      savedJson: "",
+      savedState: null,
+    };
+    const problem = validateEntry(clone);
+    if (problem) {
+      toast.error(problem);
+      return false;
+    }
+    setBusy((current) => ({ ...current, [index]: "save" }));
+    try {
+      const payload = { ...entryToApi(clone), cloneFromSlug: item.persistedSlug };
+      const result = await settingsService.saveIntegration(payload, undefined);
+      if (result.integration) {
+        const savedClone = entryFromApi(result.integration);
+        savedClone.uiId = clone.uiId;
+        setEntries((current) => {
+          // The edits now live in the clone — the original card's
+          // form reverts to its last-saved state (its saved data was
+          // never written), keeping its uiId and open state.
+          const reverted = current.map((entry, idx) =>
+            idx === index && entry.savedState
+              ? { ...entry.savedState, uiId: entry.uiId, savedState: entry.savedState }
+              : entry,
+          );
+          return [...reverted, savedClone];
+        });
+        // The clone opens; the original keeps its own open state.
+        setOpenIds((current) => new Set(current).add(clone.uiId));
+      }
+      onSync(result.integrations);
+      toast.success(t("{title} saved.").replace("{title}", clone.title));
+      return true;
+    } catch (saveError) {
+      toast.error(extractApiError(saveError));
+      return false;
+    } finally {
+      setBusy((current) => {
+        const next = { ...current };
+        delete next[index];
+        return next;
+      });
+    }
+  };
+
+  /** The Save button's guard (Ahsan's order): saving a CHANGED entry
+   *  that is already configured first asks — Cancel (keep editing,
+   *  nothing saved), "Change this one" (save onto this entry), or
+   *  "Make new one" (clone the form into a new entry). An unchanged
+   *  saved entry and a brand-new entry save directly, no popup. The
+   *  Test button and the Active toggle never pass through here. */
+  const handleSaveClick = async (index: number) => {
+    const item = entries[index];
+    if (!entryIsDirty(item)) {
+      await saveEntry(index);
+      return;
+    }
+    const problem = validateEntry(item);
+    if (problem) {
+      toast.error(problem);
+      return;
+    }
+    const choice = await choiceDialog({
+      title: t("Already configured"),
+      message: t("{title} is already configured. It's better to create a new one — changing this one replaces the saved configuration everywhere it is used.").replace("{title}", item.title),
+      confirmLabel: t("Change this one"),
+      altLabel: t("Make new one"),
+      cancelLabel: t("Cancel"),
+    });
+    if (choice === "confirm") await saveEntry(index);
+    else if (choice === "alt") await makeNewEntry(index);
   };
 
   // Test runs the SAVED configuration through the backend runner —
@@ -1658,7 +1833,11 @@ function ServiceBuilderPanel({
       isConnected: true,
       persisted: false,
       persistedSlug: "",
+      uiId: nextUiId(),
+      savedJson: "",
+      savedState: null,
     };
+    let fresh = base;
     if (!categoryIds.includes("CUSTOM") && allowedCategories.length > 0) {
       const firstCategory = allowedCategories[0];
       const firstSub = firstCategory.subServices[0];
@@ -1668,15 +1847,16 @@ function ServiceBuilderPanel({
           if (field.default) fields[field.key] = field.default;
         }
       }
-      setEntries([...entries, {
+      fresh = {
         ...base,
         usageType: firstCategory.id,
         subService: firstSub?.id ?? "custom",
         fields,
-      }]);
-      return;
+      };
     }
-    setEntries([...entries, base]);
+    setEntries([...entries, fresh]);
+    // A newly added (unsaved) card starts OPEN.
+    setOpenIds((current) => new Set(current).add(fresh.uiId));
   };
 
   return (
@@ -1689,9 +1869,10 @@ function ServiceBuilderPanel({
           const categoryDef = categoryById(category);
           const configured = entryConfigured(item);
           const entryBusy = busy[index];
+          const isOpen = openIds.has(item.uiId);
           return (
-            <div key={index} className="rounded-xl border border-[var(--border)] bg-[var(--surface)]/30 p-5 space-y-4">
-              <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
+            <div key={index} className={`rounded-xl border border-[var(--border)] bg-[var(--surface)]/30 ${isOpen ? "p-5 space-y-4" : "px-5 py-4"}`}>
+              <div className={`flex items-center justify-between ${isOpen ? "border-b border-[var(--border)] pb-3" : ""}`}>
                 <div className="flex items-center gap-2">
                   <Globe className="h-4 w-4 text-[var(--primary)]" />
                   <span className="font-semibold text-sm text-[var(--text)]">
@@ -1718,16 +1899,19 @@ function ServiceBuilderPanel({
                     onChange={(isConnected) => updateEntry(index, { isConnected })}
                   />
                   <Button
-                    variant="danger"
+                    variant="ghost"
                     size="sm"
-                    icon={Trash2}
-                    title={t("Remove service")}
-                    aria-label={t("Remove service")}
-                    disabled={entryBusy === "delete"}
-                    onClick={() => void removeEntry(index)}
+                    icon={isOpen ? ChevronUp : ChevronDown}
+                    title={isOpen ? t("Collapse") : t("Expand")}
+                    aria-label={isOpen ? t("Collapse") : t("Expand")}
+                    aria-expanded={isOpen}
+                    onClick={() => toggleOpen(item.uiId)}
                   />
                 </div>
               </div>
+
+              {isOpen && (
+              <>
 
               {/* Title / (Service) / Slug / Sub-Service. In the
                   single-category tabs (Payment Methods, Shipping) the
@@ -2013,24 +2197,42 @@ function ServiceBuilderPanel({
                 </>
               )}
 
-              {/* Per-entry actions: THIS entry's own Test + Save. */}
-              <div className="flex justify-end gap-2 border-t border-[var(--border)] pt-4">
+              {/* Per-entry actions: Delete on the LEFT of the row
+                  (it moved out of the header — the header now carries
+                  the open/close chevron instead), THIS entry's own
+                  Test + Save on the right. */}
+              <div className="flex items-center justify-between gap-2 border-t border-[var(--border)] pt-4">
                 <Button
-                  variant="outline"
-                  onClick={() => void testEntry(index)}
-                  disabled={entryBusy !== undefined}
-                  icon={entryBusy === "test" ? LoaderCircle : Play}
+                  variant="danger"
+                  size="sm"
+                  icon={Trash2}
+                  title={t("Remove service")}
+                  aria-label={t("Remove service")}
+                  disabled={entryBusy === "delete"}
+                  onClick={() => void removeEntry(index)}
                 >
-                  {entryBusy === "test" ? t("Testing…") : t("Test")}
+                  {t("Delete")}
                 </Button>
-                <Button
-                  onClick={() => void saveEntry(index)}
-                  disabled={entryBusy !== undefined}
-                  icon={entryBusy === "save" ? LoaderCircle : Save}
-                >
-                  {entryBusy === "save" ? t("Saving...") : t("Save")}
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => void testEntry(index)}
+                    disabled={entryBusy !== undefined}
+                    icon={entryBusy === "test" ? LoaderCircle : Play}
+                  >
+                    {entryBusy === "test" ? t("Testing…") : t("Test")}
+                  </Button>
+                  <Button
+                    onClick={() => void handleSaveClick(index)}
+                    disabled={entryBusy !== undefined}
+                    icon={entryBusy === "save" ? LoaderCircle : Save}
+                  >
+                    {entryBusy === "save" ? t("Saving...") : t("Save")}
+                  </Button>
+                </div>
               </div>
+              </>
+              )}
             </div>
           );
         })}
