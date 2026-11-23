@@ -214,6 +214,25 @@ const PageLayout: React.FC = () => {
 
   // --- view state ---------------------------------------------------------
   const [selectedRawRow, setSelectedRawRow] = useState<Row | null>(null);
+  // Notification click-through search: the term a TopBar feed click
+  // asked this page to pre-apply to the FilterBar search box (nonce =
+  // the click's timestamp, so repeat clicks re-apply). Null when the
+  // page was reached by ordinary navigation — no stale filter.
+  const [searchHandoff, setSearchHandoff] = useState<{
+    term: string;
+    nonce: number;
+    path: string;
+  } | null>(null);
+  const appliedHandoffRef = useRef<number | null>(null);
+
+  // A hand-off belongs to its target page only: once the admin moves
+  // to another page it is dropped, so coming back to the target page
+  // later via ordinary navigation never resurrects the filter.
+  useEffect(() => {
+    if (searchHandoff && searchHandoff.path !== pathname) {
+      setSearchHandoff(null);
+    }
+  }, [pathname, searchHandoff]);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(DEFAULT_PAGE_SIZE);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -791,8 +810,11 @@ const PageLayout: React.FC = () => {
   }, [pathname, canCreate, isMediaPage, buildInitialFormValues]);
 
   // Notification click-through (TopBar bell / messages): the target
-  // record is handed over via sessionStorage ("openRecord") and simply
-  // SELECTED here (its details panel opens) once the list has loaded.
+  // record is handed over via sessionStorage ("openRecord"). On arrival
+  // the page (1) pre-applies the click's search term to the FilterBar
+  // search box — visibly, so the clicked record is in the results, not
+  // hidden behind whatever the list happened to show — and (2) SELECTS
+  // the record (its details panel opens) once the list has loaded.
   // Re-checked whenever the items change and whenever the handoff
   // event fires (same-page clicks don't remount the page).
   useEffect(() => {
@@ -804,13 +826,41 @@ const PageLayout: React.FC = () => {
         raw = null;
       }
       if (!raw) return;
-      let parsed: { path?: string; id?: string } | null = null;
+      let parsed: {
+        path?: string;
+        id?: string;
+        search?: string;
+        ts?: number;
+      } | null = null;
       try {
         parsed = JSON.parse(raw);
       } catch {
         parsed = null;
       }
-      if (!parsed || parsed.path !== pathname || !parsed.id) return;
+      if (!parsed || parsed.path !== pathname) return;
+      // Apply the search hand-off once per click (the click's ts is
+      // the nonce — a repeat click on the same item re-applies).
+      if (
+        parsed.search &&
+        parsed.ts &&
+        appliedHandoffRef.current !== parsed.ts
+      ) {
+        appliedHandoffRef.current = parsed.ts;
+        setSearchHandoff({
+          term: parsed.search,
+          nonce: parsed.ts,
+          path: parsed.path,
+        });
+      }
+      if (!parsed.id) {
+        // Search-only hand-off: nothing to select, consume it now.
+        try {
+          sessionStorage.removeItem("openRecord");
+        } catch {
+          /* ignore */
+        }
+        return;
+      }
       const targetId = parsed.id;
       const row = items.find(
         (item) => String(item._id || item.id) === String(targetId),
@@ -931,6 +981,7 @@ const PageLayout: React.FC = () => {
                 searchPlaceholder={t("Search {route}...").replace("{route}", t(Route).toLowerCase())}
                 filtersData={filtersData}
                 onDataChange={setDisplayItems}
+                searchHandoff={searchHandoff}
               />
             </div>
 

@@ -52,6 +52,13 @@ export interface SearchBarProps<TSearchData extends SearchableEntityRecord>
   isFullWidthSearch?: boolean;
   showShortcut?: boolean;
   debounceDelay?: number;
+  /**
+   * One-shot external query (notification click-through hand-off):
+   * when `handoffNonce` changes to a new value, `handoffTerm` becomes
+   * the box's query — visibly, exactly as if the user typed it.
+   */
+  handoffTerm?: string;
+  handoffNonce?: number;
 }
 
 export const SearchBar = <TSearchData extends SearchableEntityRecord>({
@@ -64,6 +71,8 @@ export const SearchBar = <TSearchData extends SearchableEntityRecord>({
   isFullWidthSearch = false,
   showShortcut = true,
   debounceDelay = 300,
+  handoffTerm,
+  handoffNonce,
   disabled = false,
   className = "",
   ...props
@@ -71,6 +80,17 @@ export const SearchBar = <TSearchData extends SearchableEntityRecord>({
   const { t } = useLanguage();
   const [searchQuery, setSearchQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Apply a click-through hand-off once per nonce. The ref guards
+  // re-renders: the term stays in the box (the user can edit or clear
+  // it like typed text) but is never forcefully re-applied.
+  const appliedHandoffRef = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (handoffNonce === undefined) return;
+    if (appliedHandoffRef.current === handoffNonce) return;
+    appliedHandoffRef.current = handoffNonce;
+    setSearchQuery(handoffTerm ?? "");
+  }, [handoffNonce, handoffTerm]);
 
   useEffect(() => {
     if (!showShortcut) return;

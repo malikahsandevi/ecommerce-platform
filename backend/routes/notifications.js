@@ -36,7 +36,11 @@ const displayName = (user) => {
 // Every item carries a stable id (entity + the state that produced it,
 // so a changed state re-lights the badge), an English title, a real
 // timestamp where one exists, and a click-through target (page path +
-// record id). Read markers live on the client (per device + user).
+// record id + a `search` term the target list page pre-applies to its
+// search box, so the clicked record is in the visible results on
+// arrival — the record's unique public code where it has one, the
+// order number for orders, the email for customers).
+// Read markers live on the client (per device + user).
 router.get('/', async (req, res) => {
     try {
         const [
@@ -50,12 +54,12 @@ router.get('/', async (req, res) => {
             Product.find({ stock: 0 })
                 .sort({ updatedAt: -1 })
                 .limit(FEED_LIMIT)
-                .select('name stock updatedAt')
+                .select('name stock updatedAt code')
                 .lean(),
             Product.find({ stock: { $gte: 1, $lte: LOW_STOCK_MAX } })
                 .sort({ stock: 1, updatedAt: -1 })
                 .limit(FEED_LIMIT)
-                .select('name stock updatedAt')
+                .select('name stock updatedAt code')
                 .lean(),
             Order.find({ status: { $nin: ['delivered', 'cancelled'] } })
                 .sort({ createdAt: -1 })
@@ -86,6 +90,7 @@ router.get('/', async (req, res) => {
                 time: p.updatedAt,
                 path: '/products',
                 recordId: String(p._id),
+                search: p.code || p.name,
             });
         }
         for (const p of lowStock) {
@@ -96,6 +101,7 @@ router.get('/', async (req, res) => {
                 time: p.updatedAt,
                 path: '/products',
                 recordId: String(p._id),
+                search: p.code || p.name,
             });
         }
         for (const o of openOrders) {
@@ -106,6 +112,7 @@ router.get('/', async (req, res) => {
                 time: o.createdAt,
                 path: '/orders',
                 recordId: String(o._id),
+                search: o.orderNumber,
             });
         }
         if (pendingCount > 0) {
@@ -117,6 +124,7 @@ router.get('/', async (req, res) => {
                 time: newest ? newest.createdAt : new Date(),
                 path: '/reviews',
                 recordId: newest ? String(newest._id) : null,
+                search: newest ? newest.code || newest.product?.name || null : null,
             });
         }
 
@@ -131,6 +139,7 @@ router.get('/', async (req, res) => {
                 time: r.createdAt,
                 path: '/reviews',
                 recordId: String(r._id),
+                search: r.code || r.product?.name || null,
             });
         }
         for (const u of newCustomers) {
@@ -141,6 +150,7 @@ router.get('/', async (req, res) => {
                 time: u.createdAt,
                 path: '/customers',
                 recordId: String(u._id),
+                search: u.email || displayName(u),
             });
         }
         inbox.sort((a, b) => new Date(b.time) - new Date(a.time));

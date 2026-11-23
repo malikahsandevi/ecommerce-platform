@@ -48,6 +48,13 @@ export interface FilterBarProps<TSearchData extends SearchableEntityRecord> {
   onDataChange: (filteredData: TSearchData[]) => void;
 
   clearButtonText?: string;
+
+  /**
+   * One-shot search hand-off (notification click-through): when the
+   * nonce changes, the term is applied to the search box as if typed,
+   * so it is visible and drives the same filtering.
+   */
+  searchHandoff?: { term: string; nonce: number } | null;
 }
 
 export const FilterBar = <TSearchData extends SearchableEntityRecord>({
@@ -60,6 +67,7 @@ export const FilterBar = <TSearchData extends SearchableEntityRecord>({
   filtersData,
   onDataChange,
   clearButtonText = "Clear",
+  searchHandoff = null,
 }: FilterBarProps<TSearchData>) => {
   const { t } = useLanguage();
 
@@ -137,6 +145,8 @@ export const FilterBar = <TSearchData extends SearchableEntityRecord>({
         searchVariant={searchVariant}
         searchSize={searchSize}
         showShortcut={showShortcut}
+        handoffTerm={searchHandoff?.term}
+        handoffNonce={searchHandoff?.nonce}
       />
 
       {/* Mapped Select Filters */}

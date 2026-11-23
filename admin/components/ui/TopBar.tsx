@@ -116,11 +116,21 @@ export const TopBar = <T extends SearchableEntityRecord>({
   };
 
   const openFeedItem = (item: FeedItem) => {
-    if (item.recordId) {
+    if (item.recordId || item.search) {
       try {
         sessionStorage.setItem(
           "openRecord",
-          JSON.stringify({ path: item.path, id: item.recordId }),
+          JSON.stringify({
+            path: item.path,
+            id: item.recordId,
+            // The target page pre-applies this term to its search box
+            // (visibly), so the clicked record is in the results on
+            // arrival — not just selected behind an unrelated filter.
+            // `ts` makes every click a fresh hand-off, even a repeat
+            // click on the same item.
+            search: item.search || undefined,
+            ts: Date.now(),
+          }),
         );
       } catch {
         /* storage blocked — navigation still happens */

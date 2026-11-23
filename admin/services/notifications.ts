@@ -30,6 +30,10 @@ export interface FeedItem {
   time: string;
   path: string;
   recordId: string | null;
+  /** Term the target list page pre-applies to its search box on arrival
+   *  (the record's public code / order number / customer email), so the
+   *  clicked record is in the visible results. */
+  search: string | null;
 }
 
 interface Feeds {
