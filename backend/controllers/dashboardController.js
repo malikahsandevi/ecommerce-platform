@@ -323,6 +323,64 @@ const getDashboardData = async (req, res) => {
     }
 };
 
+// @desc    Get revenue + orders for a custom date range (daily, zero-filled)
+// @route   GET /api/dashboard/revenue-range?from=YYYY-MM-DD&to=YYYY-MM-DD
+// @access  Admin
+const getRevenueRange = async (req, res) => {
+    try {
+        const { from, to } = req.query;
+        const parseDay = (value) => {
+            if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+            const d = new Date(`${value}T00:00:00`);
+            if (Number.isNaN(d.getTime())) return null;
+            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            return key === value ? startOfDay(d) : null;
+        };
+        const fromDate = parseDay(from);
+        const toDate = parseDay(to);
+        if (!fromDate || !toDate || fromDate > toDate) {
+            return res.status(400).json({ message: 'A valid from/to date range is required.' });
+        }
+        const dayCount = Math.round((toDate - fromDate) / DAY_MS) + 1;
+        if (dayCount > 366) {
+            return res.status(400).json({ message: 'Date range is too large.' });
+        }
+
+        const rows = await Order.aggregate([
+            {
+                $match: {
+                    createdAt: { $gte: fromDate, $lt: new Date(toDate.getTime() + DAY_MS) },
+                    status: { $ne: 'cancelled' },
+                },
+            },
+            {
+                $group: {
+                    _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+                    revenue: { $sum: '$total' },
+                    orders: { $sum: 1 },
+                },
+            },
+        ]);
+        const byDay = new Map(rows.map((row) => [row._id, row]));
+        const series = [];
+        for (let i = 0; i < dayCount; i++) {
+            const d = new Date(fromDate.getTime() + i * DAY_MS);
+            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            const row = byDay.get(key);
+            series.push({
+                date: key,
+                day: `${d.getDate()} ${MONTH_NAMES[d.getMonth()]}`,
+                revenue: row ? round2(row.revenue) : 0,
+                orders: row ? row.orders : 0,
+            });
+        }
+        res.json({ from, to, series });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
 module.exports = {
-    getDashboardData
+    getDashboardData,
+    getRevenueRange
 };

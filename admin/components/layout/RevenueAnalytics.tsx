@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   CartesianGrid,
   Line,
@@ -11,6 +11,11 @@ import {
   YAxis,
 } from "recharts";
 import Select from "@/components/ui/Select";
+import DateRangePicker, {
+  formatRangeDayShort,
+  type DateRange,
+} from "@/components/ui/DateRangePicker";
+import { apiClient } from "@/services/api";
 import {
   formatMoney,
   formatMoneyCompact,
@@ -37,7 +42,7 @@ interface RevenueAnalyticsProps {
   monthlyData?: RevenuePoint[];
 }
 
-type RangeKey = "8days" | "6months";
+type RangeKey = "8days" | "6months" | "custom";
 
 // Chart accents derive from the Admin Panel Color (Settings →
 // Appearance): the revenue line IS the primary color, the orders line
@@ -79,8 +84,10 @@ function ChartTooltip({
 /**
  * Revenue Analytics in the EzMart reference style: Revenue (solid orange)
  * and Orders (dashed light orange) lines over a range the admin picks —
- * "Last 8 Days" (daily) or "Last 6 Months" (monthly). Both series come
- * from the real Order collection; cancelled orders are excluded.
+ * "Last 8 Days" (daily), "Last 6 Months" (monthly) or "Custom" (the
+ * shared DateRangePicker's From/To span, fetched daily + zero-filled
+ * from /dashboard/revenue-range). All series come from the real Order
+ * collection; cancelled orders are excluded.
  */
 export const RevenueAnalytics: React.FC<RevenueAnalyticsProps> = ({
   dailyData,
@@ -91,6 +98,38 @@ export const RevenueAnalytics: React.FC<RevenueAnalyticsProps> = ({
   const REVENUE_COLOR = useAdminColor();
   const ORDERS_COLOR = tint(REVENUE_COLOR, 0.52);
   const [range, setRange] = useState<RangeKey>("8days");
+  // Custom range (Ahsan's Filters-by-Date round): the shared
+  // DateRangePicker collects From/To; Apply fetches the zero-filled
+  // daily series for exactly that span from the dashboard API.
+  const [customRange, setCustomRange] = useState<DateRange | null>(null);
+  const [customData, setCustomData] = useState<DailyPoint[] | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  useEffect(() => {
+    if (range !== "custom" || !customRange) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await apiClient.get("/dashboard/revenue-range", {
+          params: { from: customRange.from, to: customRange.to },
+        });
+        if (cancelled) return;
+        const series = Array.isArray(res.data?.series) ? res.data.series : [];
+        setCustomData(
+          series.map((point: { day: string; revenue: number; orders: number }) => ({
+            day: String(point.day || ""),
+            revenue: Number(point.revenue || 0),
+            orders: Number(point.orders || 0),
+          }))
+        );
+      } catch {
+        if (!cancelled) setCustomData([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [range, customRange]);
 
   if (dailyData === undefined || monthlyData === undefined) {
     return (
@@ -114,11 +153,17 @@ export const RevenueAnalytics: React.FC<RevenueAnalyticsProps> = ({
           revenue: point.revenue,
           orders: point.orders,
         }))
-      : monthlyData.map((point) => ({
-          label: point.month,
-          revenue: point.revenue,
-          orders: point.orders,
-        }));
+      : range === "6months"
+        ? monthlyData.map((point) => ({
+            label: point.month,
+            revenue: point.revenue,
+            orders: point.orders,
+          }))
+        : (customData ?? []).map((point) => ({
+            label: point.day,
+            revenue: point.revenue,
+            orders: point.orders,
+          }));
 
   const { t } = useLanguage();
   return (
@@ -137,13 +182,38 @@ export const RevenueAnalytics: React.FC<RevenueAnalyticsProps> = ({
           size="md"
           triggerFullWidth
           value={range}
-          onChange={(value) => setRange(value as RangeKey)}
+          onChange={(value) => {
+            // "Custom" never switches the range by itself — it opens
+            // the shared DateRangePicker; only its Apply commits (a
+            // Cancel leaves the active period untouched).
+            if (value === "custom") {
+              setPickerOpen(true);
+              return;
+            }
+            setRange(value as RangeKey);
+          }}
           options={[
             { label: t("Last 8 Days"), value: "8days" },
             { label: t("Last 6 Months"), value: "6months" },
+            { label: t("Custom"), value: "custom" },
           ]}
+          triggerLabel={
+            range === "custom" && customRange
+              ? `${formatRangeDayShort(customRange.from)} – ${formatRangeDayShort(customRange.to)}`
+              : undefined
+          }
           aria-label={t("Chart range")}
           className="min-w-36"
+        />
+        <DateRangePicker
+          open={pickerOpen}
+          value={customRange}
+          onClose={() => setPickerOpen(false)}
+          onApply={(next) => {
+            setCustomRange(next);
+            setRange("custom");
+            setPickerOpen(false);
+          }}
         />
       </div>
 
@@ -189,7 +259,7 @@ export const RevenueAnalytics: React.FC<RevenueAnalyticsProps> = ({
               tickLine={false}
               dy={4}
               tickMargin={4}
-              interval={0}
+              interval={data.length > 31 ? "preserveStartEnd" : 0}
               angle={-35}
               textAnchor="end"
               height={52}

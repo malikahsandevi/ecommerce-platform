@@ -59,6 +59,11 @@ export interface SelectProps extends Omit<ComponentPropsWithoutRef<"button">, "o
   triggerClassName?: string;
   /** Placeholder for the search input (searchable only). */
   searchPlaceholder?: string;
+  /** Overrides the text shown on the CLOSED trigger (the open menu
+   *  still lists the options by their own labels) — e.g. the Revenue
+   *  range picker shows the chosen custom range ("12 Nov – 20 Nov")
+   *  on the trigger while the menu keeps the "Custom" option. */
+  triggerLabel?: string;
   /** Shown inside the open dropdown when there are no options at all. */
   emptyText?: string;
   /** Label for an optional action button under `emptyText` (empty state only). */
@@ -83,6 +88,7 @@ const Select: React.FC<SelectProps> = ({
   searchable = false,
   menuWide = false,
   searchPlaceholder = "Search...",
+  triggerLabel,
   emptyText,
   emptyActionLabel,
   onEmptyAction,
@@ -147,7 +153,7 @@ const Select: React.FC<SelectProps> = ({
       >
         <span className="inline-flex items-center gap-1.5 truncate">
           <span className="truncate font-medium">
-            {selectedOption ? selectedOption.label : t(placeholder)}
+            {triggerLabel ?? (selectedOption ? selectedOption.label : t(placeholder))}
           </span>
         </span>
         <ChevronDown
