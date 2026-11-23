@@ -37,6 +37,10 @@ const BuyerAvatar: React.FC<{ order: DashboardOrder }> = ({ order }) => {
   );
 };
 
+/** Same thin styled scrollbar as the media panel's scroll areas. */
+const SCROLLBAR_CLASSES =
+  "[&::-webkit-scrollbar]:w-[6px] [&::-webkit-scrollbar]:h-[6px] [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[var(--primary)] [&::-webkit-scrollbar-thumb]:rounded-[4px] [scrollbar-width:thin] [scrollbar-color:var(--primary)_transparent]";
+
 interface RecentOrdersProps {
   orders?: DashboardOrder[];
 }
@@ -82,10 +86,24 @@ export const RecentOrdersCard: React.FC<RecentOrdersProps> = ({ orders }) => {
           </p>
         </div>
       ) : (
-        <div className="overflow-x-auto">
+        // Ahsan's cap, mirroring Recent Activity (418d583): the
+        // table area takes the SAME max-heights at every breakpoint,
+        // so this panel never outgrows its row neighbour — with many
+        // orders the rows scroll inside the panel instead. The
+        // column header sticks to the top of the scroll area while
+        // the rows move under it (its bg matches the card so rows
+        // pass cleanly beneath; the th bottom border replaces the
+        // tr's, which does not travel with sticky cells). max-height,
+        // not height: with few orders the area takes its natural
+        // height and no scrollbar appears. pr-2 keeps the Status
+        // pills clear of the bar, the same clearance the other
+        // dashboard lists use.
+        <div
+          className={`overflow-x-auto overflow-y-auto pr-2 max-h-[218px] md:max-h-[168px] lg:max-h-[316px] xl:max-h-[218px] ${SCROLLBAR_CLASSES}`}
+        >
           <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="text-[11px] uppercase tracking-wide text-(--text-muted) border-b border-(--border)">
+            <thead className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-(--background) [&_th]:border-b [&_th]:border-(--border)">
+              <tr className="text-[11px] uppercase tracking-wide text-(--text-muted)">
                 <th className="py-2 pr-3 font-semibold whitespace-nowrap">{t("Order")}</th>
                 <th className="py-2 pr-3 font-semibold whitespace-nowrap">{t("Customer")}</th>
                 <th className="py-2 pr-3 font-semibold whitespace-nowrap">{t("Product")}</th>
