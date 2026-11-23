@@ -225,6 +225,22 @@ function clearPalettePreviewTimer(): void {
   }
 }
 
+/** Notifies the reactive palette consumers (usePalette/useAdminColor —
+ *  the dashboard charts) that the panel's CURRENT palette changed
+ *  without anything being persisted. persistPalette dispatches the
+ *  same event on the keep path; the preview begin/revert paths must
+ *  dispatch it too, or the CSS variables follow the preview while
+ *  every JS-coloured element (donut ramp, revenue line, inventory
+ *  bars, status ramp) stays on the KEPT palette — Ahsan's defect:
+ *  previewing Sunset/Slate over a kept Indigo left the charts indigo. */
+function emitPaletteChange(paletteId: string | null): void {
+  try {
+    window.dispatchEvent(new CustomEvent(PALETTE_EVENT, { detail: paletteId }));
+  } catch {
+    /* cosmetic */
+  }
+}
+
 export function beginPalettePreview(previewId: string, totalSeconds: number, keptId: string | null): void {
   if (typeof window === 'undefined') return;
   clearPalettePreviewTimer();
@@ -236,6 +252,10 @@ export function beginPalettePreview(previewId: string, totalSeconds: number, kep
     totalSeconds,
     phase: 'counting',
   };
+  // AFTER the preview state exists: mounted reactive consumers
+  // re-resolve against it (see usePalette), and components that
+  // mount later resolve to the preview from their first render.
+  emitPaletteChange(previewId);
   palettePreviewTimer = setTimeout(() => {
     if (!palettePreview) return;
     palettePreview = { ...palettePreview, phase: 'deciding' };
@@ -252,6 +272,7 @@ export function revertPalettePreview(): void {
   const keptId = palettePreview?.keptId ?? getDevicePaletteId();
   palettePreview = null;
   applyPalette(keptId);
+  emitPaletteChange(keptId);
   emitPalettePreview();
 }
 
@@ -302,19 +323,27 @@ export function usePalettePreview(): PalettePreviewState | null {
 
 const defaultPalette = (): PaletteDef => paletteById(DEFAULT_PALETTE_ID) as PaletteDef;
 
-/** The panel's current palette (the kept one, or the default) —
- *  reactive: consumers re-derive when a palette is kept. */
+/** The panel's CURRENT palette: the PREVIEWED one while a preview
+ *  runs, otherwise the kept one (or the default). Resolved through
+ *  this one function everywhere — initial state included — because
+ *  a component that mounts mid-preview (the admin navigates to the
+ *  Dashboard to judge the colors) missed the preview's start event
+ *  and must still come up in the previewed palette, not the kept
+ *  one stored on the device. */
+function resolveCurrentPalette(): PaletteDef {
+  return (
+    paletteById(getPalettePreview()?.previewId ?? getDevicePaletteId()) ??
+    defaultPalette()
+  );
+}
+
 export function usePalette(): PaletteDef {
-  const [palette, setPalette] = useState<PaletteDef>(() => paletteById(getDevicePaletteId()) ?? defaultPalette());
+  const [palette, setPalette] = useState<PaletteDef>(() => resolveCurrentPalette());
   useEffect(() => {
-    const sync = () => setPalette(paletteById(getDevicePaletteId()) ?? defaultPalette());
+    const sync = () => setPalette(resolveCurrentPalette());
     sync();
-    const onChange = (event: Event) => {
-      const detail = (event as CustomEvent<string>).detail;
-      setPalette(paletteById(detail) ?? paletteById(getDevicePaletteId()) ?? defaultPalette());
-    };
-    window.addEventListener(PALETTE_EVENT, onChange);
-    return () => window.removeEventListener(PALETTE_EVENT, onChange);
+    window.addEventListener(PALETTE_EVENT, sync);
+    return () => window.removeEventListener(PALETTE_EVENT, sync);
   }, []);
   return palette;
 }

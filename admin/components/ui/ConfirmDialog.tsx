@@ -271,12 +271,13 @@ export const ConfirmDialogHost: React.FC = () => {
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-start gap-3">
+          {/* The icon badge follows the THEME in both variants
+              (Ahsan's order): primary-soft circle, primary icon —
+              the fixed red/pink badge clashed with every palette.
+              The danger CONFIRM BUTTON below stays red: that is a
+              semantic destructive-action signal, not decoration. */}
           <span
-            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
-              danger
-                ? "bg-red-500/10 text-red-500"
-                : "bg-[var(--primary-soft)] text-[var(--primary)]"
-            }`}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--primary-soft)] text-[var(--primary)]"
           >
             {danger ? <AlertTriangle className="h-5 w-5" /> : <Info className="h-5 w-5" />}
           </span>

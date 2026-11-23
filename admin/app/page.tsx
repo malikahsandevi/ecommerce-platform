@@ -1,6 +1,6 @@
 // /app/page.tsx
 "use client";
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { AlertCircle, CircleDollarSign, RefreshCcw, ShieldAlert, ShoppingBag, Users } from "lucide-react";
 import DashboardStatCard from "@/components/layout/DashboardStatCard";
 import RevenueAnalytics, {
@@ -28,13 +28,7 @@ import {
 import { formatMoney, useStoreCurrency } from "@/services/currency";
 import { useAdminAuth } from "@/services/authContext";
 import { useLanguage } from "@/services/i18n";
-import {
-  DEFAULT_ADMIN_COLOR,
-  getDeviceAdminColor,
-  shade,
-  tint,
-  useAdminColor,
-} from "@/services/appearance";
+import { shade, tint, useAdminColor } from "@/services/appearance";
 
 // The donut palette: a shade ramp of the Admin Panel Color (Settings
 // → Appearance), darkest first. With the default color it reproduces
@@ -93,6 +87,12 @@ export default function Page() {
   const { t } = useLanguage();
   // Re-map the category donut when the Admin Panel Color changes.
   const adminColor = useAdminColor();
+  // fetchData reads the CURRENT color through this ref: the reactive
+  // adminColor (kept palette — or the palette being PREVIEWED, which
+  // never reaches the device store the old getDeviceAdminColor read,
+  // so the donut judged a preview by the kept palette's colors).
+  const adminColorRef = useRef(adminColor);
+  adminColorRef.current = adminColor;
   // Re-map every figure when the store currency changes.
   const currencyCode = useStoreCurrency();
   const [stats, setStats] = useState<DashboardStats | undefined>(undefined);
@@ -276,8 +276,10 @@ export default function Page() {
     const salesTotal = Number(data.totalSales || 0);
     setTotalSales(salesTotal);
     // Read the color at map time (like the currency formatters) so a
-    // color change re-maps the donut on the next fetch.
-    const ramp = categoryRamp(getDeviceAdminColor() ?? DEFAULT_ADMIN_COLOR);
+    // color change re-maps the donut on the next fetch. The color is
+    // the REACTIVE admin color (see adminColorRef above) — during a
+    // palette preview it is the previewed palette, not the kept one.
+    const ramp = categoryRamp(adminColorRef.current);
     setCategories(
       (data.topCategories || []).map((category: AnyRecord, index: number) => {
         const revenue = Number(category.revenue || 0);

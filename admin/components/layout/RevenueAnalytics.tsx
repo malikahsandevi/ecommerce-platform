@@ -285,7 +285,7 @@ export const RevenueAnalytics: React.FC<RevenueAnalyticsProps> = ({
               hide
               domain={[0, (dataMax: number) => Math.max(2, Math.ceil(dataMax * 1.8))]}
             />
-            <Tooltip content={<ChartTooltip />} cursor={{ stroke: "rgba(249,115,22,0.25)" }} />
+            <Tooltip content={<ChartTooltip />} cursor={{ stroke: `color-mix(in srgb, ${REVENUE_COLOR} 25%, transparent)` }} />
             <Line
               yAxisId="revenue"
               type="monotone"

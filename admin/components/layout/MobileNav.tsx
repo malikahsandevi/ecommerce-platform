@@ -87,7 +87,7 @@ const MobileNav: React.FC = () => {
     // z-50 only keeps its open dropdown above the content below.
     <div className="md:hidden z-50 mx-3 mt-3 shrink-0">
       {/* Top bar — same panel treatment as the desktop sidebar card. */}
-      <div ref={barRef} className="relative flex items-center gap-2.5 shadow-xl px-3 py-2.5 bg-(--primary-light) rounded-2xl">
+      <div ref={barRef} className="relative flex items-center gap-2.5 shadow-xl px-3 py-2.5 bg-(--surface) rounded-2xl">
         <span className="w-9 h-9 shrink-0 rounded-xl bg-(--primary) text-white flex items-center justify-center shadow-sm">
           <Store className="w-[18px] h-[18px]" />
         </span>
@@ -136,7 +136,7 @@ const MobileNav: React.FC = () => {
 
         {/* Full nav dropdown — overlays the page, never pushes it. */}
         {open && (
-          <div className="absolute left-0 right-0 top-full mt-2 shadow-xl px-3 py-2.5 bg-(--primary-light) rounded-2xl max-h-[70dvh] overflow-y-auto no-scrollbar">
+          <div className="absolute left-0 right-0 top-full mt-2 shadow-xl px-3 py-2.5 bg-(--surface) rounded-2xl max-h-[70dvh] overflow-y-auto no-scrollbar">
             <nav className="flex flex-col gap-0.5" aria-label={t("Main")}>
               <span className="px-3 pb-0.5 text-[10px] font-bold uppercase tracking-widest text-(--text-soft)/80">
                 {t("Main Menu")}

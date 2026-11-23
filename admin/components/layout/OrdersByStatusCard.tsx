@@ -2,7 +2,7 @@ import React from "react";
 import Link from "next/link";
 import { ReceiptText } from "lucide-react";
 import { useLanguage } from "@/services/i18n";
-import { DEFAULT_ADMIN_COLOR, getDeviceAdminColor, shade, tint } from "@/services/appearance";
+import { shade, tint, useAdminColor } from "@/services/appearance";
 
 export interface OrderStatusCount {
   status: string;
@@ -45,6 +45,10 @@ const statusColor = (status: string, base: string): string => {
  * store has no traffic-source data, so none is shown).
  */
 export const OrdersByStatusCard: React.FC<OrdersByStatusCardProps> = ({ data }) => {
+  // The REACTIVE admin color: during a palette preview this is the
+  // previewed palette — the device store this card used to read only
+  // ever holds the KEPT palette, so the ramp judged previews wrong.
+  const base = useAdminColor();
   if (data === undefined) {
     return (
       <div className="p-5 w-full h-full bg-(--background) rounded-2xl shadow-sm border border-(--border) animate-pulse">
@@ -61,7 +65,6 @@ export const OrdersByStatusCard: React.FC<OrdersByStatusCardProps> = ({ data }) 
   }
 
   const total = data.reduce((sum, row) => sum + row.count, 0);
-  const base = getDeviceAdminColor() ?? DEFAULT_ADMIN_COLOR;
   const rows = data
     .map((row) => ({
       ...row,

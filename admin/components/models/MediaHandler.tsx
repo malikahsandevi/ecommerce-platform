@@ -1989,7 +1989,7 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-3"
       {...backdrop}
     >
-      <div className="w-full max-w-5xl rounded-xl overflow-hidden flex flex-col h-[95vh] sm:max-h-[90vh] shadow-[0_0_20px_rgba(249,115,22,0.15)] bg-[var(--surface)] text-[var(--text)] border border-[var(--primary)]">
+      <div className="w-full max-w-5xl rounded-xl overflow-hidden flex flex-col h-[95vh] sm:max-h-[90vh] shadow-[0_0_20px_color-mix(in_srgb,var(--primary)_15%,transparent)] bg-[var(--surface)] text-[var(--text)] border border-[var(--primary)]">
         {/* Header */}
         <div className="flex items-center justify-between p-3 shrink-0 border-b border-[var(--border)]">
           <div>

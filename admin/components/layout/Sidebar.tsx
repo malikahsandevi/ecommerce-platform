@@ -63,7 +63,7 @@ function SidebarBody({
 }) {
   const { t } = useLanguage();
   return (
-    <div className="h-full flex flex-col shadow-xl px-3 py-2.5 bg-(--primary-light) rounded-2xl">
+    <div className="h-full flex flex-col shadow-xl px-3 py-2.5 bg-(--surface) rounded-2xl">
       {/* Brand Bar */}
       <div className={`sb-center flex items-center ${collapsed ? "justify-center" : "gap-2.5"} px-1 pt-0.5 pb-2`}>
         <span className="w-9 h-9 shrink-0 rounded-xl bg-(--primary) text-white flex items-center justify-center shadow-sm">
