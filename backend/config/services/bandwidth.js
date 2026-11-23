@@ -36,6 +36,13 @@ module.exports = {
             "placeholder": "Paste the API secret — hidden after saving"
         },
         {
+            "key": "applicationId",
+            "label": "Application ID",
+            "secret": false,
+            "required": true,
+            "placeholder": "Messaging application ID from the dashboard"
+        },
+        {
             "key": "fromNumber",
             "label": "From Number",
             "secret": false,

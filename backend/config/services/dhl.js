@@ -22,6 +22,13 @@ module.exports = {
             "placeholder": "Paste the API key — hidden after saving"
         },
         {
+            "key": "apiSecret",
+            "label": "API Secret",
+            "secret": true,
+            "required": false,
+            "placeholder": "Paste the API secret — hidden after saving"
+        },
+        {
             "key": "accountNumber",
             "label": "Account Number",
             "secret": false,

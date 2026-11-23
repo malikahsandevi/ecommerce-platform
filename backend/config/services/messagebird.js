@@ -11,15 +11,15 @@ module.exports = {
     "auth": {
         "style": "apiKeyHeader",
         "header": "Authorization",
-        "key": "apiKey"
+        "key": "accessKey"
     },
     "fields": [
         {
-            "key": "apiKey",
-            "label": "API Key",
+            "key": "accessKey",
+            "label": "Access Key",
             "secret": true,
             "required": true,
-            "placeholder": "Paste the API key — hidden after saving"
+            "placeholder": "Paste the access key — hidden after saving"
         },
         {
             "key": "from",

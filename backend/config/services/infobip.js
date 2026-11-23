@@ -22,6 +22,13 @@ module.exports = {
             "placeholder": "Paste the API key — hidden after saving"
         },
         {
+            "key": "baseUrl",
+            "label": "Base URL",
+            "secret": false,
+            "required": true,
+            "placeholder": "e.g. https://xxxxx.api.infobip.com"
+        },
+        {
             "key": "from",
             "label": "From",
             "secret": false,

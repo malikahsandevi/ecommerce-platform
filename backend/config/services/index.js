@@ -85,6 +85,7 @@ const DEFINITIONS = {
     leopards: require('./leopards'),
     postex: require('./postex'),
     'google-analytics': require('./google-analytics'),
+    'google-tag-manager': require('./google-tag-manager'),
     'meta-pixel': require('./meta-pixel'),
     mixpanel: require('./mixpanel'),
     'google-maps': require('./google-maps'),
@@ -101,7 +102,7 @@ const CATEGORIES = [
     { id: 'SMS_NOTIFICATION', label: 'SMS', subServices: ['twilio', 'vonage', 'messagebird', 'plivo', 'sinch', 'infobip', 'bandwidth', 'telnyx', 'amazon-sns', 'clicksend'] },
     { id: 'AUTH', label: 'Auth', subServices: ['google', 'facebook', 'github', 'store-session-jwt', 'auth0', 'clerk', 'firebase-auth'] },
     { id: 'SHIPPING', label: 'Shipping', subServices: ['easypost', 'shippo', 'fedex', 'ups', 'dhl', 'usps', 'aramex', 'sendcloud', 'aftership', 'leopards', 'postex', 'custom'] },
-    { id: 'ANALYTICS', label: 'Analytics', subServices: ['google-analytics', 'meta-pixel', 'mixpanel'] },
+    { id: 'ANALYTICS', label: 'Analytics', subServices: ['google-analytics', 'google-tag-manager', 'meta-pixel', 'mixpanel'] },
     { id: 'MAPS', label: 'Maps', subServices: ['google-maps', 'mapbox'] },
     { id: 'CUSTOM', label: 'Custom', subServices: ['custom'] },
 ];

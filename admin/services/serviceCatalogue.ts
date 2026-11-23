@@ -67,7 +67,7 @@ export const SERVICE_CATALOGUE: ServiceCategoryDef[] = [
       },
       {
         id: "google-cloud-storage", name: "Google Cloud Storage", hasFixedBase: false,
-        fields: [F("accessKey", "Access Key", false, { placeholder: "HMAC access key from Cloud Storage settings" }), F("secretKey", "Secret Key", true), F("bucket", "Bucket"), F("projectId", "Project ID")],
+        fields: [F("projectId", "Project ID"), F("bucket", "Bucket"), F("clientEmail", "Client Email"), F("privateKey", "Private Key", true)],
         endpoints: [],
       },
       {
@@ -102,7 +102,15 @@ export const SERVICE_CATALOGUE: ServiceCategoryDef[] = [
       },
       {
         id: "firebase-storage", name: "Firebase Storage", hasFixedBase: false,
-        fields: [F("projectId", "Project ID"), F("bucket", "Bucket", false, { placeholder: "e.g. my-project.appspot.com" }), F("clientEmail", "Client Email"), F("privateKey", "Private Key", true)],
+        fields: [
+          F("apiKey", "API Key", false, { placeholder: "Web API key from Project settings" }),
+          F("authDomain", "Auth Domain", false, { placeholder: "e.g. my-project.firebaseapp.com" }),
+          F("projectId", "Project ID"),
+          F("storageBucket", "Storage Bucket", false, { placeholder: "e.g. my-project.appspot.com" }),
+          F("messagingSenderId", "Messaging Sender ID", false, { placeholder: "e.g. 123456789012" }),
+          F("appId", "App ID", false, { placeholder: "e.g. 1:123456789012:web:abcdef123456" }),
+          F("measurementId", "Measurement ID", false, { required: false }),
+        ],
         endpoints: [],
       },
       {
@@ -131,18 +139,19 @@ export const SERVICE_CATALOGUE: ServiceCategoryDef[] = [
       },
       {
         id: "razorpay", name: "Razorpay", hasFixedBase: true,
-        fields: [F("keyId", "Key ID"), F("keySecret", "Key Secret", true)],
+        fields: [F("keyId", "Key ID"), F("keySecret", "Key Secret", true), F("webhookSecret", "Webhook Secret", true, { required: false })],
         endpoints: [{ name: "payments", path: "/payments", method: "GET" }],
       },
       {
         id: "square", name: "Square", hasFixedBase: true,
-        fields: [F("accessToken", "Access Token", true), F("locationId", "Location ID")],
+        fields: [F("accessToken", "Access Token", true), F("locationId", "Location ID"), F("applicationId", "Application ID", false, { required: false, placeholder: "e.g. sq0idp-…" })],
         endpoints: [{ name: "locations", path: "/locations", method: "GET" }],
       },
       {
         id: "adyen", name: "Adyen", hasFixedBase: true,
         fields: [
           F("apiKey", "API Key", true), F("merchantAccount", "Merchant Account"),
+          F("clientKey", "Client Key", false, { required: false, placeholder: "Client key for web components" }),
           F("environment", "Environment", false, { type: "select", options: ["Test", "Live"], default: "Test" }),
         ],
         endpoints: [{ name: "paymentMethods", path: "/paymentMethods", method: "POST" }],
@@ -253,7 +262,7 @@ export const SERVICE_CATALOGUE: ServiceCategoryDef[] = [
       },
       {
         id: "messagebird", name: "MessageBird", hasFixedBase: true,
-        fields: [F("apiKey", "API Key", true), F("from", "From")],
+        fields: [F("accessKey", "Access Key", true), F("from", "From")],
         endpoints: [{ name: "balance", path: "/balance", method: "GET" }],
       },
       {
@@ -268,12 +277,12 @@ export const SERVICE_CATALOGUE: ServiceCategoryDef[] = [
       },
       {
         id: "infobip", name: "Infobip", hasFixedBase: false,
-        fields: [F("apiKey", "API Key", true), F("from", "From")],
+        fields: [F("apiKey", "API Key", true), F("baseUrl", "Base URL", false, { placeholder: "e.g. https://xxxxx.api.infobip.com" }), F("from", "From")],
         endpoints: [],
       },
       {
         id: "bandwidth", name: "Bandwidth", hasFixedBase: true,
-        fields: [F("accountId", "Account ID"), F("apiToken", "API Token", false, { placeholder: "Your Bandwidth API token" }), F("apiSecret", "API Secret", true), F("fromNumber", "From Number")],
+        fields: [F("accountId", "Account ID"), F("apiToken", "API Token", false, { placeholder: "Your Bandwidth API token" }), F("apiSecret", "API Secret", true), F("applicationId", "Application ID", false, { placeholder: "Messaging application ID from the dashboard" }), F("fromNumber", "From Number")],
         endpoints: [],
       },
       {
@@ -329,7 +338,15 @@ export const SERVICE_CATALOGUE: ServiceCategoryDef[] = [
       },
       {
         id: "firebase-auth", name: "Firebase Auth", hasFixedBase: false,
-        fields: [F("projectId", "Project ID"), F("clientEmail", "Client Email"), F("privateKey", "Private Key", true)],
+        fields: [
+          F("apiKey", "API Key", false, { placeholder: "Web API key from Project settings" }),
+          F("authDomain", "Auth Domain", false, { placeholder: "e.g. my-project.firebaseapp.com" }),
+          F("projectId", "Project ID"),
+          F("storageBucket", "Storage Bucket", false, { placeholder: "e.g. my-project.appspot.com" }),
+          F("messagingSenderId", "Messaging Sender ID", false, { placeholder: "e.g. 123456789012" }),
+          F("appId", "App ID", false, { placeholder: "e.g. 1:123456789012:web:abcdef123456" }),
+          F("measurementId", "Measurement ID", false, { required: false }),
+        ],
         endpoints: [],
       },
     ],
@@ -352,7 +369,7 @@ export const SERVICE_CATALOGUE: ServiceCategoryDef[] = [
       },
       {
         id: "dhl", name: "DHL", hasFixedBase: true,
-        fields: [F("apiKey", "API Key", true), F("accountNumber", "Account Number")],
+        fields: [F("apiKey", "API Key", true), F("apiSecret", "API Secret", true, { required: false }), F("accountNumber", "Account Number")],
         endpoints: [],
       },
       {
@@ -362,7 +379,7 @@ export const SERVICE_CATALOGUE: ServiceCategoryDef[] = [
       },
       {
         id: "aramex", name: "Aramex", hasFixedBase: false,
-        fields: [F("username", "Username"), F("password", "Password", true), F("accountNumber", "Account Number"), F("accountPin", "Account PIN", true)],
+        fields: [F("username", "Username"), F("password", "Password", true), F("accountNumber", "Account Number"), F("accountPin", "Account PIN", true), F("accountEntity", "Account Entity", false, { placeholder: "e.g. DXB" }), F("accountCountryCode", "Account Country Code", false, { placeholder: "e.g. AE" })],
         endpoints: [],
       },
       {
@@ -371,7 +388,7 @@ export const SERVICE_CATALOGUE: ServiceCategoryDef[] = [
         endpoints: [{ name: "user", path: "/user", method: "GET" }],
       },
       { id: "aftership", name: "AfterShip", hasFixedBase: true, fields: [F("apiKey", "API Key", true)], endpoints: [{ name: "couriers", path: "/couriers", method: "GET" }] },
-      { id: "leopards", name: "Leopards Courier", hasFixedBase: false, fields: [F("apiKey", "API Key", true)], endpoints: [] },
+      { id: "leopards", name: "Leopards Courier", hasFixedBase: false, fields: [F("apiKey", "API Key", true), F("apiPassword", "API Password", true)], endpoints: [] },
       { id: "postex", name: "PostEx", hasFixedBase: true, fields: [F("apiToken", "API Token", true)], endpoints: [] },
       // Custom is ALWAYS last (Ahsan's order): any carrier not in the
       // list is added with free key-value pairs; the entry still
@@ -383,9 +400,10 @@ export const SERVICE_CATALOGUE: ServiceCategoryDef[] = [
     id: "ANALYTICS",
     label: "Analytics",
     subServices: [
-      { id: "google-analytics", name: "Google Analytics", hasFixedBase: false, fields: [F("measurementId", "Measurement ID")], endpoints: [] },
+      { id: "google-analytics", name: "Google Analytics", hasFixedBase: false, fields: [F("measurementId", "Measurement ID"), F("apiSecret", "API Secret (Measurement Protocol)", true, { required: false, placeholder: "Only for server-side events — hidden after saving" })], endpoints: [] },
+      { id: "google-tag-manager", name: "Google Tag Manager", hasFixedBase: false, fields: [F("containerId", "Container ID", false, { placeholder: "e.g. GTM-XXXXXXX" })], endpoints: [] },
       { id: "meta-pixel", name: "Meta Pixel", hasFixedBase: false, fields: [F("pixelId", "Pixel ID")], endpoints: [] },
-      { id: "mixpanel", name: "Mixpanel", hasFixedBase: false, fields: [F("projectToken", "Project Token")], endpoints: [] },
+      { id: "mixpanel", name: "Mixpanel", hasFixedBase: false, fields: [F("projectToken", "Project Token"), F("apiSecret", "API Secret", true, { required: false })], endpoints: [] },
     ],
   },
   {
@@ -473,6 +491,7 @@ const SECRET_PLACEHOLDER_BY_KEY: Record<string, string> = {
   accountKey: "Paste the account key — hidden after saving",
   applicationKey: "Paste the application key — hidden after saving",
   accessKey: "Paste the access key — hidden after saving",
+  apiPassword: "Paste the API password — hidden after saving",
 };
 // apiKey is a plain identifier for some providers (Cloudinary) and a
 // secret for others — the per-field secret flag decides, like the

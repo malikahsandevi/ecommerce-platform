@@ -39,6 +39,20 @@ module.exports = {
             "secret": true,
             "required": true,
             "placeholder": "Paste the account PIN — hidden after saving"
+        },
+        {
+            "key": "accountEntity",
+            "label": "Account Entity",
+            "secret": false,
+            "required": true,
+            "placeholder": "e.g. DXB"
+        },
+        {
+            "key": "accountCountryCode",
+            "label": "Account Country Code",
+            "secret": false,
+            "required": true,
+            "placeholder": "e.g. AE"
         }
     ],
     "endpoints": []

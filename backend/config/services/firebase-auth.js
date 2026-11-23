@@ -3,6 +3,14 @@
 // style. Credential VALUES are never stored here or anywhere in git —
 // they live in the database and are resolved at runtime through
 // config/services/index.js (the single gate for every consumer).
+//
+// Firebase issues ONE web config object per project/app (Project
+// settings → Your apps → Web app) and Firebase Auth consumes that
+// same object, so the fields mirror it exactly: apiKey, authDomain,
+// projectId, storageBucket, messagingSenderId, appId, measurementId.
+// These are config identifiers, not true secrets, so none is masked;
+// measurementId only exists when Analytics is enabled, so it is the
+// one optional field.
 module.exports = {
     "id": "firebase-auth",
     "service": "AUTH",
@@ -13,6 +21,20 @@ module.exports = {
     },
     "fields": [
         {
+            "key": "apiKey",
+            "label": "API Key",
+            "secret": false,
+            "required": true,
+            "placeholder": "Web API key from Project settings"
+        },
+        {
+            "key": "authDomain",
+            "label": "Auth Domain",
+            "secret": false,
+            "required": true,
+            "placeholder": "e.g. my-project.firebaseapp.com"
+        },
+        {
             "key": "projectId",
             "label": "Project ID",
             "secret": false,
@@ -20,18 +42,32 @@ module.exports = {
             "placeholder": "e.g. my-project-123"
         },
         {
-            "key": "clientEmail",
-            "label": "Client Email",
+            "key": "storageBucket",
+            "label": "Storage Bucket",
             "secret": false,
             "required": true,
-            "placeholder": "Service account email"
+            "placeholder": "e.g. my-project.appspot.com"
         },
         {
-            "key": "privateKey",
-            "label": "Private Key",
-            "secret": true,
+            "key": "messagingSenderId",
+            "label": "Messaging Sender ID",
+            "secret": false,
             "required": true,
-            "placeholder": "Paste the private key — hidden after saving"
+            "placeholder": "e.g. 123456789012"
+        },
+        {
+            "key": "appId",
+            "label": "App ID",
+            "secret": false,
+            "required": true,
+            "placeholder": "e.g. 1:123456789012:web:abcdef123456"
+        },
+        {
+            "key": "measurementId",
+            "label": "Measurement ID",
+            "secret": false,
+            "required": false,
+            "placeholder": "e.g. G-XXXXXXXXXX"
         }
     ],
     "endpoints": []

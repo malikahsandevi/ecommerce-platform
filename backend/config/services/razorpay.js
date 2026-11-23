@@ -27,6 +27,13 @@ module.exports = {
             "secret": true,
             "required": true,
             "placeholder": "Paste the key secret — hidden after saving"
+        },
+        {
+            "key": "webhookSecret",
+            "label": "Webhook Secret",
+            "secret": true,
+            "required": false,
+            "placeholder": "Paste the webhook secret — hidden after saving"
         }
     ],
     "endpoints": [

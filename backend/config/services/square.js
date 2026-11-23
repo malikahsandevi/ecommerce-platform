@@ -26,6 +26,13 @@ module.exports = {
             "secret": false,
             "required": true,
             "placeholder": "Your Square location ID"
+        },
+        {
+            "key": "applicationId",
+            "label": "Application ID",
+            "secret": false,
+            "required": false,
+            "placeholder": "e.g. sq0idp-…"
         }
     ],
     "endpoints": [

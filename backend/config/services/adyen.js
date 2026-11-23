@@ -36,6 +36,13 @@ module.exports = {
             "placeholder": "e.g. MyStoreECOM"
         },
         {
+            "key": "clientKey",
+            "label": "Client Key",
+            "secret": false,
+            "required": false,
+            "placeholder": "Client key for web components"
+        },
+        {
             "key": "environment",
             "label": "Environment",
             "secret": false,

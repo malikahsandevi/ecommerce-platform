@@ -3,28 +3,25 @@
 // style. Credential VALUES are never stored here or anywhere in git —
 // they live in the database and are resolved at runtime through
 // config/services/index.js (the single gate for every consumer).
+//
+// Fields = the service-account key Google Cloud issues for the
+// project (IAM → Service accounts → Keys): project ID + bucket, and
+// the service account's client email + private key from the JSON key.
 module.exports = {
     "id": "google-cloud-storage",
     "service": "STORAGE",
     "name": "Google Cloud Storage",
     "baseUrl": null,
     "auth": {
-        "style": "aws-sigv4"
+        "style": "generic"
     },
     "fields": [
         {
-            "key": "accessKey",
-            "label": "Access Key",
+            "key": "projectId",
+            "label": "Project ID",
             "secret": false,
             "required": true,
-            "placeholder": "HMAC access key from Cloud Storage settings"
-        },
-        {
-            "key": "secretKey",
-            "label": "Secret Key",
-            "secret": true,
-            "required": true,
-            "placeholder": "Paste the secret key — hidden after saving"
+            "placeholder": "e.g. my-project-123"
         },
         {
             "key": "bucket",
@@ -34,11 +31,18 @@ module.exports = {
             "placeholder": "e.g. store-media"
         },
         {
-            "key": "projectId",
-            "label": "Project ID",
+            "key": "clientEmail",
+            "label": "Client Email",
             "secret": false,
             "required": true,
-            "placeholder": "e.g. my-project-123"
+            "placeholder": "Service account email"
+        },
+        {
+            "key": "privateKey",
+            "label": "Private Key",
+            "secret": true,
+            "required": true,
+            "placeholder": "Paste the private key — hidden after saving"
         }
     ],
     "endpoints": []
