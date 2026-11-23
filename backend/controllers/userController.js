@@ -64,11 +64,30 @@ const createUser = async (req, res) => {
         if (String(password).length < 6) {
             return res.status(400).json({ message: 'Password must be at least 6 characters.' });
         }
+        // When the caller sends a confirmation (the Add User form
+        // always does), it must match the password — a mismatch
+        // creates nothing. Callers that send no confirmation field at
+        // all (the Customers page) keep the previous contract.
+        if ('confirmPassword' in (req.body || {})
+            && String(req.body.confirmPassword ?? '') !== String(password)) {
+            return res.status(400).json({
+                message: 'The password and its confirmation do not match.'
+            });
+        }
         if (role !== undefined) {
             const knownRoles = await getAllRoleNames();
             if (!knownRoles.includes(role)) {
                 return res.status(400).json({ message: `Invalid role. Use one of: ${knownRoles.join(', ')}.` });
             }
+        }
+
+        // Role assignment is Super-Admin-only: a non-Super-Admin may
+        // create Customer accounts only — any other role in the payload
+        // is refused and nothing is persisted.
+        if (req.user?.role !== 'Super Admin' && role !== undefined && role !== 'Customer') {
+            return res.status(403).json({
+                message: 'Only a Super Admin can create a user with this role.'
+            });
         }
 
         const normalizedEmail = String(email).trim().toLowerCase();
@@ -116,6 +135,11 @@ const createUser = async (req, res) => {
 
         res.status(201).json(userObj);
     } catch (error) {
+        // A duplicate key (a race past the pre-check above) is reported
+        // with the same clean message — never the raw MongoDB text.
+        if (error?.code === 11000) {
+            return res.status(400).json({ message: 'A user with this email already exists.' });
+        }
         res.status(400).json({ message: error.message });
     }
 };
@@ -135,7 +159,7 @@ const otherActiveSuperAdmins = async (excludeId) => {
 // @access  Admin
 const updateUser = async (req, res) => {
     try {
-        const { password, ...updateData } = req.body || {};
+        const { password, currentPassword, confirmPassword, ...updateData } = req.body || {};
 
         // Password change: the edit forms promise "leave blank to keep
         // the current password" — an absent or blank password therefore
@@ -151,14 +175,64 @@ const updateUser = async (req, res) => {
             return res.status(400).json({ message: 'Password must be at least 6 characters.' });
         }
 
+        // The Settings → Users & Roles Edit User form changes a password
+        // as a TRIO (Ahsan's order): it always sends currentPassword +
+        // confirmPassword alongside the new password. When a request
+        // engages the trio (either companion field is present), the
+        // change is accepted only if the CURRENT password of the
+        // ACCOUNT BEING EDITED verifies against its stored hash and the
+        // confirmation matches — verified below, before anything is
+        // written, so a failure rejects the WHOLE update (no other
+        // field is saved either). There is no admin bypass: editing
+        // another user requires THAT user's current password. Callers
+        // that send a bare `password` with neither companion field (the
+        // Customers page's long-standing admin-reset contract — it
+        // cannot know the customer's current password) keep the
+        // previous behaviour above.
+        const trioEngaged =
+            wantsPasswordChange &&
+            ('currentPassword' in (req.body || {}) || 'confirmPassword' in (req.body || {}));
+
         if (Array.isArray(updateData.favoriteCategories)
             && updateData.favoriteCategories.length > FAVORITE_CATEGORY_LIMIT) {
             return favoriteCategoryError(res);
         }
 
-        const target = await User.findById(req.params.id);
+        // +password: the schema marks the hash select:false, and the
+        // password-trio verification below needs it. Responses still
+        // never carry it (the model's toJSON transform strips it).
+        const target = await User.findById(req.params.id).select('+password');
         if (!target) {
             return res.status(404).json({ message: 'User not found' });
+        }
+
+        // Ownership rule (Ahsan): only a Super Admin may edit another
+        // account. Anyone else may edit ONLY their own — refused here,
+        // server-side, whatever the payload carries (profile fields,
+        // inline role/status quick edits and password changes alike).
+        const isSelf = String(req.user?._id) === String(target._id);
+        if (req.user?.role !== 'Super Admin' && !isSelf) {
+            return res.status(403).json({
+                message: 'Only a Super Admin can edit another account.'
+            });
+        }
+
+        // An email change must not land on another account's address —
+        // checked up front so the panel gets a clean message instead of
+        // the raw duplicate-key error the save would otherwise throw.
+        if (updateData.email !== undefined) {
+            const normalizedEmail = String(updateData.email).trim().toLowerCase();
+            if (normalizedEmail && normalizedEmail !== String(target.email || '').toLowerCase()) {
+                const clash = await User.findOne({
+                    email: normalizedEmail,
+                    _id: { $ne: target._id },
+                });
+                if (clash) {
+                    return res.status(400).json({
+                        message: 'A user with this email already exists.'
+                    });
+                }
+            }
         }
 
         if (updateData.role !== undefined) {
@@ -168,10 +242,52 @@ const updateUser = async (req, res) => {
             }
         }
 
+        // Trio verification (see the note at the top of this handler):
+        // a missing or wrong current password, or a confirmation that
+        // does not equal the new password, rejects the entire update —
+        // nothing has been written yet at this point.
+        if (trioEngaged) {
+            const currentOk =
+                typeof currentPassword === 'string' &&
+                currentPassword.length > 0 &&
+                (await target.comparePassword(currentPassword));
+            if (!currentOk) {
+                return res.status(400).json({ message: 'Current password is incorrect.' });
+            }
+            if (confirmPassword !== password) {
+                return res.status(400).json({
+                    message: 'The new password and its confirmation do not match.'
+                });
+            }
+        }
+
         const roleChanges = updateData.role !== undefined && updateData.role !== target.role;
         const deactivates = updateData.isActive !== undefined
             && Boolean(updateData.isActive) === false
             && target.isActive !== false;
+
+        // Role assignment is Super-Admin-only: a non-Super-Admin cannot
+        // change ANY role, including their own — otherwise any admin
+        // could promote himself. Refused before anything is written
+        // (and before the self-lockout guard below, so the refusal is
+        // the 403 this rule promises).
+        if (req.user?.role !== 'Super Admin' && roleChanges) {
+            return res.status(403).json({
+                message: 'Only a Super Admin can change roles.'
+            });
+        }
+
+        // Last-Super-Admin guard FIRST: the final active Super Admin
+        // cannot be demoted or deactivated, or the store is left with
+        // no top admin — its message is the refusal for that case,
+        // including when the Super Admin attempts it on himself.
+        if (target.role === 'Super Admin' && (roleChanges || deactivates)) {
+            if ((await otherActiveSuperAdmins(target._id)) === 0) {
+                return res.status(400).json({
+                    message: "You can't remove the last Super Admin account."
+                });
+            }
+        }
 
         // Self-lockout guard: you cannot demote or deactivate your own
         // account from the panel — another admin has to do it.
@@ -179,16 +295,6 @@ const updateUser = async (req, res) => {
             return res.status(400).json({
                 message: 'You cannot change your own role or deactivate your own account.'
             });
-        }
-
-        // Last-Super-Admin guard: the final active Super Admin cannot be
-        // demoted or deactivated, or the store is left with no top admin.
-        if (target.role === 'Super Admin' && (roleChanges || deactivates)) {
-            if ((await otherActiveSuperAdmins(target._id)) === 0) {
-                return res.status(400).json({
-                    message: 'This is the last active Super Admin — promote another user first.'
-                });
-            }
         }
 
         // Document save (not findByIdAndUpdate) so schema validators run
@@ -204,6 +310,11 @@ const updateUser = async (req, res) => {
         const user = await User.findById(target._id).select('-password');
         res.json(user);
     } catch (error) {
+        // Duplicate key (a race past the email pre-check above) gets
+        // the same clean message — never the raw MongoDB text.
+        if (error?.code === 11000) {
+            return res.status(400).json({ message: 'A user with this email already exists.' });
+        }
         res.status(400).json({ message: error.message });
     }
 };
@@ -218,14 +329,21 @@ const deleteUser = async (req, res) => {
             return res.status(404).json({ message: 'User not found' });
         }
 
-        if (String(req.user?._id) === String(target._id)) {
-            return res.status(400).json({ message: 'You cannot delete your own account.' });
+        // Ownership rule (Ahsan): only a Super Admin may delete another
+        // account. Deleting your OWN account is allowed — self-service
+        // (the last-Super-Admin guard below still applies on top, so
+        // the final active Super Admin cannot delete itself either).
+        if (req.user?.role !== 'Super Admin'
+            && String(req.user?._id) !== String(target._id)) {
+            return res.status(403).json({
+                message: 'Only a Super Admin can delete another account.'
+            });
         }
 
         if (target.role === 'Super Admin' && target.isActive !== false
             && (await otherActiveSuperAdmins(target._id)) === 0) {
             return res.status(400).json({
-                message: 'This is the last active Super Admin — promote another user first.'
+                message: "You can't remove the last Super Admin account."
             });
         }
 

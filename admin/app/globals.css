@@ -323,3 +323,23 @@ input[type="number"] {
     opacity 0.22s ease-in,
     transform 0.22s ease-in;
 }
+
+/* Chrome autofill paint guard (Ahsan's order): when the browser forces
+   its autofill styling onto a field, Chrome paints its own light-blue
+   background and dark text — which clashes with BOTH admin themes.
+   Settings inputs carry autocomplete="off" (passwords use the
+   current-/new-password semantics), and this guard is the second line
+   of defence: it repaints any autofilled input with the theme's own
+   surface + text variables, so a forced fill can never clash — in the
+   dark theme, the light theme, and every palette, since it reads the
+   same CSS variables the palette system sets. The very long
+   background-color transition delays Chrome's fill paint itself. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 100px var(--surface) inset;
+  -webkit-text-fill-color: var(--text);
+  caret-color: var(--text);
+  transition: background-color 9999s ease-in-out 0s;
+}

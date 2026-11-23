@@ -10,6 +10,7 @@ import {
   subServiceById,
 } from "@/services/serviceCatalogue";
 import Button from "@/components/ui/Button";
+import Select from "@/components/ui/Select";
 import { useBackdropClose } from "@/hooks/useBackdropClose";
 import MediaPickerModal from "@/components/models/MediaPickerModal";
 import { apiClient, extractApiError } from "@/services/api";
@@ -86,6 +87,9 @@ export type NewUserValues = {
   lastName: string;
   email: string;
   password: string;
+  /** Add User form only: the typed confirmation. The API rejects a
+   *  mismatch and creates nothing. */
+  confirmPassword?: string;
   role: string;
   isActive: boolean;
 };
@@ -548,13 +552,17 @@ function UsersPanel({
   onCreateUser: (values: NewUserValues) => Promise<void>;
 }) {
   const { t } = useLanguage();
-  const { hasPermission } = useAdminAuth();
+  const { user: sessionUser, hasPermission } = useAdminAuth();
   const canCreateUsers =
     typeof hasPermission !== "function" || hasPermission("Users", "create");
-  const canEditUsers =
-    typeof hasPermission !== "function" || hasPermission("Users", "edit");
-  const canDeleteUsers =
-    typeof hasPermission !== "function" || hasPermission("Users", "delete");
+  // Ownership rule (Ahsan): a Super Admin may edit/delete ANY account;
+  // anyone else may edit/delete ONLY their own. The row actions stay
+  // VISIBLE on every row and are disabled where the rule doesn't allow
+  // them ("disable karo", not hide) — and role changes are
+  // Super-Admin-only everywhere, including your own row. The server
+  // enforces all of this too; this is the visual half.
+  const isSuperAdmin = sessionUser?.role === "Super Admin";
+  const sessionUserId = sessionUser?.id || sessionUser?._id || "";
 
   const [showAddForm, setShowAddForm] = useState(false);
   const [form, setForm] = useState<NewUserValues>({
@@ -562,6 +570,7 @@ function UsersPanel({
     lastName: "",
     email: "",
     password: "",
+    confirmPassword: "",
     role: "Manager",
     isActive: true,
   });
@@ -578,7 +587,7 @@ function UsersPanel({
   );
 
   const openAddForm = () => {
-    setForm({ firstName: "", lastName: "", email: "", password: "", role: "Manager", isActive: true });
+    setForm({ firstName: "", lastName: "", email: "", password: "", confirmPassword: "", role: "Manager", isActive: true });
     setFormError("");
     setShowAddForm(true);
   };
@@ -596,6 +605,10 @@ function UsersPanel({
       setFormError(t("Password must be at least 6 characters."));
       return;
     }
+    if (form.password !== (form.confirmPassword || "")) {
+      setFormError(t("The password and its confirmation do not match."));
+      return;
+    }
     setCreating(true);
     setFormError("");
     try {
@@ -604,6 +617,10 @@ function UsersPanel({
         firstName: form.firstName.trim(),
         lastName: form.lastName.trim(),
         email: form.email.trim(),
+        // Non-Super-Admin sessions create Customer accounts only (the
+        // selector above is locked to Customer for them; the server
+        // refuses any other role too).
+        role: isSuperAdmin ? form.role : "Customer",
       });
       setShowAddForm(false);
     } catch (createError) {
@@ -614,12 +631,14 @@ function UsersPanel({
     }
   };
 
-  const selectClassName =
-    "h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-sm text-[var(--text)] outline-none transition focus:border-[var(--primary)]";
-
-  // Role choices for every select in this panel: the built-in list,
-  // widened with any custom roles the permissions API knows about (a
-  // user already holding a custom role must keep it selectable too).
+  // Role choices for every dropdown in this panel, from ONE source:
+  // the roles list of the permissions payload (built-ins + custom
+  // roles). Seeded with the built-ins, refreshed on mount, and kept
+  // live by the Role Permissions panel below — it reports its freshly
+  // loaded roles up (onRolesLoaded), so a role created there appears
+  // in these dropdowns immediately, without a reload. Roles held by
+  // listed users are merged in as well, so an assigned role always
+  // stays selectable.
   const [knownRoles, setKnownRoles] = useState<string[]>(USER_ROLE_OPTIONS);
   useEffect(() => {
     let cancelled = false;
@@ -653,9 +672,13 @@ function UsersPanel({
   };
 
   // ── Edit User ──────────────────────────────────────────────────────
-  // Same modal shape as Add User, plus the password rule the form
-  // states in its placeholder: blank keeps the current password (the
-  // field is then omitted from the request entirely).
+  // Same modal shape as Add User, plus the password TRIO (Ahsan's
+  // order): Current Password → New Password → Confirm New Password.
+  // All three blank = no password change (the trio is omitted from the
+  // request entirely, exactly like the old single blank field). If ANY
+  // of the three is filled, ALL three are required, the confirmation
+  // must match, and the backend verifies the current password against
+  // the edited account's stored hash before saving anything.
   const [editingUser, setEditingUser] = useState<SettingsUser | null>(null);
   const [editForm, setEditForm] = useState<NewUserValues>({
     firstName: "",
@@ -664,6 +687,11 @@ function UsersPanel({
     password: "",
     role: "Manager",
     isActive: true,
+  });
+  const [editPasswords, setEditPasswords] = useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
   });
   const [editError, setEditError] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
@@ -682,6 +710,7 @@ function UsersPanel({
       role: user.role || "Customer",
       isActive: user.isActive !== false,
     });
+    setEditPasswords({ currentPassword: "", newPassword: "", confirmPassword: "" });
     setEditError("");
     setEditingUser(user);
   };
@@ -696,9 +725,33 @@ function UsersPanel({
       setEditError(t("Enter a valid email address."));
       return;
     }
-    if (editForm.password && editForm.password.length < 6) {
-      setEditError(t("Password must be at least 6 characters."));
-      return;
+    // Password trio: all three blank = no change. Any one filled makes
+    // all three required; the new password keeps the creation minimum
+    // and the confirmation must match it (the backend re-checks both,
+    // and verifies the current password, before saving anything).
+    const { currentPassword, newPassword, confirmPassword } = editPasswords;
+    const wantsPasswordChange = Boolean(currentPassword || newPassword || confirmPassword);
+    if (wantsPasswordChange) {
+      if (!currentPassword) {
+        setEditError(t("Enter the current password."));
+        return;
+      }
+      if (!newPassword) {
+        setEditError(t("Enter a new password."));
+        return;
+      }
+      if (!confirmPassword) {
+        setEditError(t("Confirm the new password."));
+        return;
+      }
+      if (newPassword.length < 6) {
+        setEditError(t("Password must be at least 6 characters."));
+        return;
+      }
+      if (newPassword !== confirmPassword) {
+        setEditError(t("The new password and its confirmation do not match."));
+        return;
+      }
     }
     setSavingEdit(true);
     setEditError("");
@@ -709,7 +762,9 @@ function UsersPanel({
         email: editForm.email.trim(),
         role: editForm.role,
         isActive: editForm.isActive,
-        ...(editForm.password ? { password: editForm.password } : {}),
+        ...(wantsPasswordChange
+          ? { password: newPassword, currentPassword, confirmPassword }
+          : {}),
       });
       setEditingUser(null);
     } catch (updateError) {
@@ -749,11 +804,13 @@ function UsersPanel({
             <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
               <SettingsInput
                 label="First Name"
+                autoComplete="off"
                 value={form.firstName}
                 onChange={(event) => setForm({ ...form, firstName: event.target.value })}
               />
               <SettingsInput
                 label="Last Name"
+                autoComplete="off"
                 value={form.lastName}
                 onChange={(event) => setForm({ ...form, lastName: event.target.value })}
               />
@@ -761,6 +818,7 @@ function UsersPanel({
                 <SettingsInput
                   label="Email Address"
                   type="email"
+                  autoComplete="off"
                   value={form.email}
                   onChange={(event) => setForm({ ...form, email: event.target.value })}
                 />
@@ -774,33 +832,38 @@ function UsersPanel({
                   onChange={(event) => setForm({ ...form, password: event.target.value })}
                 />
               </div>
+              <div className="sm:col-span-2">
+                <SettingsInput
+                  label="Confirm Password"
+                  type="password"
+                  autoComplete="new-password"
+                  placeholder="Repeat the password"
+                  value={form.confirmPassword || ""}
+                  onChange={(event) => setForm({ ...form, confirmPassword: event.target.value })}
+                />
+              </div>
               <div>
                 <span className="mb-2 block text-xs font-medium text-[var(--text-soft)]">{t("Role")}</span>
-                <select
+                <Select
                   aria-label={t("Role for the new user")}
-                  value={form.role}
-                  onChange={(event) => setForm({ ...form, role: event.target.value })}
-                  className={selectClassName}
-                >
-                  {selectRoleOptions.map((role) => (
-                    <option key={role} value={role}>
-                      {t(role)}
-                    </option>
-                  ))}
-                </select>
+                  value={isSuperAdmin ? form.role : "Customer"}
+                  options={selectRoleOptions.map((role) => ({ label: t(role), value: role }))}
+                  onChange={(value) => setForm({ ...form, role: value })}
+                  disabled={!isSuperAdmin}
+                  variant="outline"
+                  fullWidth
+                  triggerClassName="h-10 px-3"
+                />
               </div>
-              <div>
-                <span className="mb-2 block text-xs font-medium text-[var(--text-soft)]">{t("Status")}</span>
-                <select
-                  aria-label={t("Status for the new user")}
-                  value={form.isActive ? "active" : "inactive"}
-                  onChange={(event) => setForm({ ...form, isActive: event.target.value === "active" })}
-                  className={selectClassName}
-                >
-                  <option value="active">{t("Active")}</option>
-                  <option value="inactive">{t("Inactive")}</option>
-                </select>
-              </div>
+              <SettingsSelect
+                label="Status"
+                value={form.isActive ? "active" : "inactive"}
+                options={[
+                  { label: t("Active"), value: "active" },
+                  { label: t("Inactive"), value: "inactive" },
+                ]}
+                onChange={(value) => setForm({ ...form, isActive: value === "active" })}
+              />
             </div>
 
             {formError && (
@@ -835,11 +898,13 @@ function UsersPanel({
             <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
               <SettingsInput
                 label="First Name"
+                autoComplete="off"
                 value={editForm.firstName}
                 onChange={(event) => setEditForm({ ...editForm, firstName: event.target.value })}
               />
               <SettingsInput
                 label="Last Name"
+                autoComplete="off"
                 value={editForm.lastName}
                 onChange={(event) => setEditForm({ ...editForm, lastName: event.target.value })}
               />
@@ -847,8 +912,19 @@ function UsersPanel({
                 <SettingsInput
                   label="Email Address"
                   type="email"
+                  autoComplete="off"
                   value={editForm.email}
                   onChange={(event) => setEditForm({ ...editForm, email: event.target.value })}
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <SettingsInput
+                  label="Current Password"
+                  type="password"
+                  autoComplete="current-password"
+                  placeholder="Enter the current password"
+                  value={editPasswords.currentPassword}
+                  onChange={(event) => setEditPasswords({ ...editPasswords, currentPassword: event.target.value })}
                 />
               </div>
               <div className="sm:col-span-2">
@@ -856,38 +932,43 @@ function UsersPanel({
                   label="New Password"
                   type="password"
                   autoComplete="new-password"
-                  placeholder="Leave blank to keep the current password"
-                  value={editForm.password}
-                  onChange={(event) => setEditForm({ ...editForm, password: event.target.value })}
+                  placeholder="Enter a new password"
+                  value={editPasswords.newPassword}
+                  onChange={(event) => setEditPasswords({ ...editPasswords, newPassword: event.target.value })}
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <SettingsInput
+                  label="Confirm New Password"
+                  type="password"
+                  autoComplete="new-password"
+                  placeholder="Repeat the new password"
+                  value={editPasswords.confirmPassword}
+                  onChange={(event) => setEditPasswords({ ...editPasswords, confirmPassword: event.target.value })}
                 />
               </div>
               <div>
                 <span className="mb-2 block text-xs font-medium text-[var(--text-soft)]">{t("Role")}</span>
-                <select
+                <Select
                   aria-label={t("Role for the user being edited")}
                   value={editForm.role}
-                  onChange={(event) => setEditForm({ ...editForm, role: event.target.value })}
-                  className={selectClassName}
-                >
-                  {selectRoleOptions.map((role) => (
-                    <option key={role} value={role}>
-                      {t(role)}
-                    </option>
-                  ))}
-                </select>
+                  options={selectRoleOptions.map((role) => ({ label: t(role), value: role }))}
+                  onChange={(value) => setEditForm({ ...editForm, role: value })}
+                  disabled={!isSuperAdmin}
+                  variant="outline"
+                  fullWidth
+                  triggerClassName="h-10 px-3"
+                />
               </div>
-              <div>
-                <span className="mb-2 block text-xs font-medium text-[var(--text-soft)]">{t("Status")}</span>
-                <select
-                  aria-label={t("Status for the user being edited")}
-                  value={editForm.isActive ? "active" : "inactive"}
-                  onChange={(event) => setEditForm({ ...editForm, isActive: event.target.value === "active" })}
-                  className={selectClassName}
-                >
-                  <option value="active">{t("Active")}</option>
-                  <option value="inactive">{t("Inactive")}</option>
-                </select>
-              </div>
+              <SettingsSelect
+                label="Status"
+                value={editForm.isActive ? "active" : "inactive"}
+                options={[
+                  { label: t("Active"), value: "active" },
+                  { label: t("Inactive"), value: "inactive" },
+                ]}
+                onChange={(value) => setEditForm({ ...editForm, isActive: value === "active" })}
+              />
             </div>
 
             {editError && (
@@ -920,7 +1001,10 @@ function UsersPanel({
             </tr>
           </thead>
           <tbody>
-            {users.map((user) => (
+            {users.map((user) => {
+              const isOwnRow = Boolean(sessionUserId) && String(sessionUserId) === String(user._id);
+              const canActOnRow = isSuperAdmin || isOwnRow;
+              return (
               <tr key={user._id} className="group border-t border-[var(--border)]">
                 <td className="px-4 py-3 font-medium text-[var(--text)]">
                   <span className="flex items-center gap-2.5">
@@ -930,24 +1014,20 @@ function UsersPanel({
                 </td>
                 <td className="px-4 py-3 text-[var(--text-soft)] text-center">{user.email}</td>
                 <td className="px-4 py-3 text-center">
-                  <select
+                  <Select
                     aria-label={t("Role for {email}").replace("{email}", user.email)}
                     value={user.role || "Customer"}
-                    disabled={!canEditUsers}
-                    onChange={(event) => inlineUpdate(user._id, { role: event.target.value })}
-                    className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-[13px] text-[var(--text)] outline-none focus:border-[var(--primary)] disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {selectRoleOptions.map((role) => (
-                      <option key={role} value={role}>
-                        {t(role)}
-                      </option>
-                    ))}
-                  </select>
+                    disabled={!isSuperAdmin}
+                    onChange={(value) => inlineUpdate(user._id, { role: value })}
+                    options={selectRoleOptions.map((role) => ({ label: t(role), value: role }))}
+                    variant="outline"
+                    size="md"
+                  />
                 </td>
                 <td className="px-4 py-3 text-center">
                   <button
                     type="button"
-                    disabled={!canEditUsers}
+                    disabled={!canActOnRow}
                     onClick={() => inlineUpdate(user._id, { isActive: user.isActive === false })}
                     className={`rounded-full px-2.5 py-1 text-[11px] font-semibold disabled:cursor-not-allowed disabled:opacity-60 ${
                       user.isActive === false
@@ -965,31 +1045,30 @@ function UsersPanel({
                       colour on the hovered row. Edit opens the user
                       form (profile + optional password change); the
                       role/status quick edits stay inline. */}
-                  {canEditUsers && (
-                    <button
-                      type="button"
-                      aria-label={t("Edit User")}
-                      title={t("Edit")}
-                      onClick={() => openEditForm(user)}
-                      className="rounded-md p-1.5 text-[var(--text-muted)] transition-colors duration-200 hover:bg-[var(--primary-soft)] hover:text-[var(--primary)] group-hover:text-[var(--primary)]"
-                    >
-                      <Pencil size={16} />
-                    </button>
-                  )}
-                  {canDeleteUsers && (
-                    <button
-                      type="button"
-                      aria-label={t("Delete {email}").replace("{email}", user.email)}
-                      title={t("Delete")}
-                      onClick={() => onDeleteUser(user._id)}
-                      className="rounded-md p-1.5 text-[var(--text-muted)] transition-colors duration-200 hover:bg-red-500/10 hover:text-red-500 group-hover:text-red-500"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    aria-label={t("Edit User")}
+                    title={t("Edit")}
+                    disabled={!canActOnRow}
+                    onClick={() => openEditForm(user)}
+                    className="rounded-md p-1.5 text-[var(--text-muted)] transition-colors duration-200 hover:bg-[var(--primary-soft)] hover:text-[var(--primary)] group-hover:text-[var(--primary)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[var(--text-muted)]"
+                  >
+                    <Pencil size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={t("Delete {email}").replace("{email}", user.email)}
+                    title={t("Delete")}
+                    disabled={!canActOnRow}
+                    onClick={() => onDeleteUser(user._id)}
+                    className="rounded-md p-1.5 text-[var(--text-muted)] transition-colors duration-200 hover:bg-red-500/10 hover:text-red-500 group-hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[var(--text-muted)]"
+                  >
+                    <Trash2 size={16} />
+                  </button>
                 </td>
               </tr>
-            ))}
+              );
+            })}
             {users.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-4 py-8 text-center text-sm text-[var(--text-muted)]">
@@ -1002,7 +1081,7 @@ function UsersPanel({
       </div>
     </SettingsCard>
 
-    <RolePermissionsPanel />
+    <RolePermissionsPanel onRolesLoaded={setKnownRoles} />
     </>
   );
 }
@@ -1052,7 +1131,16 @@ function MatrixTick({
  * role always has full access, whatever the matrix says, so the store
  * can never lock its top admin out.
  */
-function RolePermissionsPanel() {
+function RolePermissionsPanel({
+  onRolesLoaded,
+}: {
+  /** The Users panel above keeps its role dropdowns on THIS panel's
+   *  roles list (one shared source): every load — mount, and the
+   *  reload after a role is created — reports the fresh list up, so a
+   *  new custom role is selectable in the user rows and the Add/Edit
+   *  User modals right away, without a page reload. */
+  onRolesLoaded?: (roles: string[]) => void;
+}) {
   const { t } = useLanguage();
   const [data, setData] = useState<RolePermissionsData | null>(null);
   const [matrix, setMatrix] = useState<PermissionMatrixData>({});
@@ -1066,6 +1154,9 @@ function RolePermissionsPanel() {
     const loaded = await settingsService.getPermissions();
     setData(loaded);
     setMatrix(loaded.matrix);
+    if (Array.isArray(loaded.roles) && loaded.roles.length > 0) {
+      onRolesLoaded?.(loaded.roles);
+    }
     return loaded;
   };
 
@@ -1090,6 +1181,8 @@ function RolePermissionsPanel() {
   const canEdit = Boolean(data?.canEdit);
   const roleLocked = selectedRole === "Super Admin";
   const editable = canEdit && !roleLocked;
+  // Only custom roles can be deleted — built-ins never get the control.
+  const isCustomSelected = Boolean(data?.customRoles?.includes(selectedRole));
 
   const toggleCell = (module: string, action: string) => {
     if (!editable) return;
@@ -1146,6 +1239,39 @@ function RolePermissionsPanel() {
       toast.error(extractApiError(restoreError));
     } finally {
       setRestoring(false);
+    }
+  };
+
+  // ── Delete Role ────────────────────────────────────────────────────
+  // Custom roles only (built-ins never show the control; the API also
+  // refuses them with a 400, refuses non-Super-Admins with a 403, and
+  // refuses while any user still holds the role — 400 with the count,
+  // surfaced here as a toast; nobody is silently reassigned). Confirm
+  // first — the house dialog's backdrop/Escape is a cancel and leaves
+  // the role untouched. On success the panel reloads, which also
+  // pushes the fresh roles list up to the Users panel, so the role
+  // vanishes from every role dropdown in place.
+  const [deletingRole, setDeletingRole] = useState(false);
+
+  const deleteSelectedRole = async () => {
+    if (!data?.customRoles.includes(selectedRole)) return;
+    const confirmed = await confirmDialog({
+      title: t("Delete this role?"),
+      message: t("The role will be removed from the permissions matrix and from every role dropdown. This cannot be undone."),
+      confirmLabel: t("Delete Role"),
+      variant: "danger",
+    });
+    if (!confirmed) return;
+    setDeletingRole(true);
+    try {
+      await settingsService.deleteRole(selectedRole);
+      setSelectedRole("Admin");
+      await loadPermissions();
+      toast.success(t("Role deleted."));
+    } catch (deleteError) {
+      toast.error(extractApiError(deleteError));
+    } finally {
+      setDeletingRole(false);
     }
   };
 
@@ -1299,19 +1425,30 @@ function RolePermissionsPanel() {
             </div>
 
             {canEdit && (
-              <div className="mt-4 flex justify-end gap-3">
+              <div className="mt-4 flex items-center justify-end gap-3">
+                {isCustomSelected && (
+                  <Button
+                    variant="danger"
+                    icon={Trash2}
+                    className="mr-auto"
+                    onClick={() => void deleteSelectedRole()}
+                    disabled={saving || restoring || deletingRole}
+                  >
+                    {deletingRole ? t("Deleting...") : t("Delete Role")}
+                  </Button>
+                )}
                 <Button
                   variant="ghost"
                   icon={RotateCcw}
                   onClick={() => void restoreDefaults()}
-                  disabled={saving || restoring}
+                  disabled={saving || restoring || deletingRole}
                 >
                   {restoring ? t("Saving...") : t("Restore Defaults")}
                 </Button>
                 <Button
                   variant="primary"
                   onClick={() => void saveMatrix()}
-                  disabled={saving || restoring}
+                  disabled={saving || restoring || deletingRole}
                 >
                   {saving ? t("Saving...") : t("Save Permissions")}
                 </Button>
@@ -1332,6 +1469,7 @@ function RolePermissionsPanel() {
                   <div className="mt-4">
                     <SettingsInput
                       label="Role Name"
+                      autoComplete="off"
                       value={roleName}
                       onChange={(event) => setRoleName(event.target.value)}
                     />

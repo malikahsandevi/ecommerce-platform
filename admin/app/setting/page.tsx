@@ -168,6 +168,7 @@ export default function SettingsPage() {
     lastName: string;
     email: string;
     password: string;
+    confirmPassword?: string;
     role: string;
     isActive: boolean;
   }) => {

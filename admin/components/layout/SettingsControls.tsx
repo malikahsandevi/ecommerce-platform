@@ -1,8 +1,8 @@
 "use client";
 
-import { useRef, type InputHTMLAttributes, type ReactNode } from "react";
+import { useRef, useState, type InputHTMLAttributes, type ReactNode } from "react";
 import { useLanguage } from "@/services/i18n";
-import { LoaderCircle, Save } from "lucide-react";
+import { Eye, EyeOff, LoaderCircle, Save } from "lucide-react";
 import Button from "@/components/ui/Button";
 import Select from "@/components/ui/Select";
 import { StepperButtons, steppedValue } from "@/components/ui/NumberStepper";
@@ -36,6 +36,14 @@ export function SettingsInput({
   const { t } = useLanguage();
   const inputRef = useRef<HTMLInputElement>(null);
   const isNumber = props.type === "number";
+  // Password fields get a show/hide eye toggle at the field's right
+  // edge (Ahsan's order): it flips THIS field only between
+  // type="password" and type="text". The autocomplete semantics are
+  // computed from the DECLARED type below, so revealing the value
+  // never changes the field's autofill behaviour.
+  const isPassword = props.type === "password";
+  const [showPassword, setShowPassword] = useState(false);
+  const effectiveType = isPassword && showPassword ? "text" : props.type;
 
   // Custom steppers for number inputs: compute the stepped value, write
   // it through the native setter and fire a real input event, so the
@@ -64,6 +72,7 @@ export function SettingsInput({
         <input
           ref={inputRef}
           {...props}
+          type={effectiveType}
           placeholder={typeof props.placeholder === "string" ? t(props.placeholder) : props.placeholder}
           // AUTOFILL IS OFF across the whole Settings panel (Ahsan's
           // order): the browser must never suggest or populate saved
@@ -76,10 +85,20 @@ export function SettingsInput({
           spellCheck={false}
           autoCorrect="off"
           autoCapitalize="off"
-          className={`h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-sm text-[var(--text)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)] ${isNumber ? "pr-7" : ""}`}
+          className={`h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-sm text-[var(--text)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)] ${isNumber ? "pr-7" : ""} ${isPassword ? "pr-10" : ""}`}
         />
         {isNumber && (
           <StepperButtons onStep={handleStep} disabled={props.disabled} />
+        )}
+        {isPassword && (
+          <button
+            type="button"
+            aria-label={t(showPassword ? "Hide password" : "Show password")}
+            onClick={() => setShowPassword((visible) => !visible)}
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-[var(--text-muted)] transition-colors hover:text-[var(--text)]"
+          >
+            {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+          </button>
         )}
       </span>
     </label>

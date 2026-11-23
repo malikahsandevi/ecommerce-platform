@@ -50,14 +50,19 @@ export interface RolePermissionsData {
   canEdit: boolean;
 }
 
-/** Fields the Users & Roles edit form may send. `password` is only
- *  included when the admin typed a new one — blank means "keep the
- *  current password" and the field is omitted entirely. */
+/** Fields the Users & Roles edit form may send. A password change is
+ *  a trio: `password` (the new one) travels with `currentPassword` and
+ *  `confirmPassword`, and the backend verifies the current password
+ *  against the edited account's stored hash plus the confirmation
+ *  before anything is saved. When no change is wanted, all three are
+ *  omitted entirely — blank means "keep the current password". */
 export interface UpdateUserValues {
   firstName?: string;
   lastName?: string;
   email?: string;
   password?: string;
+  currentPassword?: string;
+  confirmPassword?: string;
   role?: string;
   isActive?: boolean;
 }
@@ -117,6 +122,9 @@ export const settingsService = {
     lastName: string;
     email: string;
     password: string;
+    /** The Add User form's confirmation — the API rejects a mismatch
+     *  with a 400 and creates nothing. */
+    confirmPassword?: string;
     role: string;
     isActive: boolean;
   }): Promise<SettingsUser> {
@@ -127,8 +135,10 @@ export const settingsService = {
   /** Profile / role / active-status / password changes for the Users
    *  & Roles panel. The backend refuses self-demotion, self-deactivation
    *  and removing the last active Super Admin — those errors surface to
-   *  the page. A non-empty `password` replaces the account's password
-   *  (hashed server-side); omitting it leaves the password untouched. */
+   *  the page. A password change rides as a trio (`password` +
+   *  `currentPassword` + `confirmPassword`): the backend verifies the
+   *  current password and the confirmation before replacing the hash;
+   *  omitting all three leaves the password untouched. */
   async updateUser(
     id: string,
     values: UpdateUserValues,
@@ -143,6 +153,16 @@ export const settingsService = {
     const { data } = await apiClient.post<{ role: string; roles: string[]; customRoles: string[] }>(
       "/permissions/roles",
       { name },
+    );
+    return data;
+  },
+
+  /** Deletes a custom role (Super Admin only — the API answers 403 for
+   *  anyone else, 400 for a built-in role, and 400 with the assignment
+   *  count while any user still holds the role). */
+  async deleteRole(name: string): Promise<{ role: string; roles: string[]; customRoles: string[] }> {
+    const { data } = await apiClient.delete<{ role: string; roles: string[]; customRoles: string[] }>(
+      `/permissions/roles/${encodeURIComponent(name)}`,
     );
     return data;
   },

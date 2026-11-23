@@ -2,6 +2,7 @@ const express = require('express');
 const { protect } = require('../middleware/auth');
 const { requireStaff } = require('../middleware/admin');
 const RolePermission = require('../models/RolePermission');
+const User = require('../models/User');
 const {
     MODULES,
     MODULE_ACTIONS,
@@ -106,6 +107,58 @@ router.post('/roles', async (req, res) => {
             role: name,
             roles: [...ROLES, ...allCustomRoles],
             customRoles: allCustomRoles,
+        });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+});
+
+// DELETE /api/permissions/roles/:name — delete a CUSTOM role. Super
+// Admin only (server-side, same rule as creation). Built-in roles can
+// never be deleted. A role that users still hold is refused with the
+// assignment count — nobody is silently reassigned; the panel must
+// move those users first. On success the role leaves customRoles[]
+// and its matrix row is dropped in the same write.
+router.delete('/roles/:name', async (req, res) => {
+    try {
+        if (req.user.role !== 'Super Admin') {
+            return res.status(403).json({
+                message: 'Only a Super Admin can delete roles.',
+            });
+        }
+        const name = String(req.params.name || '').trim();
+        if (ROLES.some((role) => role.toLowerCase() === name.toLowerCase())) {
+            return res.status(400).json({
+                message: 'Built-in roles cannot be deleted.',
+            });
+        }
+        const customRoles = await getCustomRoles();
+        const stored = customRoles.find(
+            (role) => role.toLowerCase() === name.toLowerCase(),
+        );
+        if (!stored) {
+            return res.status(404).json({ message: 'Role not found.' });
+        }
+        const assigned = await User.countDocuments({ role: stored });
+        if (assigned > 0) {
+            return res.status(400).json({
+                message: `${assigned} ${assigned === 1 ? 'user has' : 'users have'} this role. Reassign them before deleting it.`,
+            });
+        }
+        await RolePermission.findOneAndUpdate(
+            { key: 'matrix' },
+            {
+                $pull: { customRoles: stored },
+                $unset: { [`matrix.${stored}`]: 1 },
+            },
+            { upsert: true, new: true },
+        );
+        invalidatePermissionCache();
+        const remainingCustomRoles = await getCustomRoles();
+        res.json({
+            role: stored,
+            roles: [...ROLES, ...remainingCustomRoles],
+            customRoles: remainingCustomRoles,
         });
     } catch (error) {
         res.status(500).json({ message: error.message });
