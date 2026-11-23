@@ -13,6 +13,7 @@ import {
   paletteById,
   resolvePaletteId,
   sanitizeLastUsed,
+  type PaletteDef,
 } from "@/services/palettes";
 import {
   PALETTE_EVENT,
@@ -47,10 +48,16 @@ function confirmSeconds(): number {
  *
  * ONE row of compact palette BOXES (the old 8×8 swatch table was
  * too big — Ahsan's order): the palette name sits above its box,
- * the box is split by a vertical line into a LIGHT half (the light
- * set's background with its primary as a filled dot) and a DARK
- * half (the dark set's background with its primary dot), and the
- * caption under the box reads "Light | Dark" instead of hex codes.
+ * the box is split by a vertical line into a LIGHT half and a DARK
+ * half, and the caption under the box reads "Light | Dark" instead
+ * of hex codes. Each half is a miniature preview of its set
+ * (Ahsan: the compact box must not hide colours — "baki color
+ * kha hai" — and the plain dot/bars were rejected as a design):
+ * the half's own background IS the set's background colour, and
+ * inside it an "Aa" sample (text colour), a primary pill and a
+ * secondary pill show the rest, so all 8 colours of a palette
+ * (4 light + 4 dark) are visible at a glance, like the old
+ * table showed.
  * Selecting a box only previews it in the dummy cards on the right
  * (one dark card and one light card, both recoloring live) — the
  * selected box carries a light border. There is no per-color
@@ -201,6 +208,53 @@ export default function ThemePalettePicker({
         }
       : { boxShadow: "inset 0 0 0 1px var(--border)" };
 
+  // One half of a palette box: a MINIATURE THEME PREVIEW of the
+  // mode (Ahsan's redesign — the lone dot was rejected, and plain
+  // colour bars too: "isko redesign karo, acha nhi hai"). The
+  // half's background is the set's background colour, and inside
+  // it sits a tiny piece of real UI: an "Aa" sample in the set's
+  // text colour, a primary pill like a small button, and a
+  // shorter secondary pill — so the half reads as the theme
+  // itself in miniature and all four colours of the set stay
+  // visible and individually measurable. The pills size as
+  // fractions of the half, so nothing cramps or overflows at any
+  // box width and the halves stay equal. The primary pill keeps
+  // the data-palette-dot marker the panel's checks have used.
+  const renderHalf = (palette: PaletteDef, mode: "light" | "dark") => {
+    const set = palette[mode];
+    return (
+      <span
+        data-palette-half={`${palette.id}:${mode}`}
+        className="flex flex-1 flex-col justify-center gap-[3px] px-1.5"
+        style={{
+          backgroundColor: set.background,
+          ...(mode === "dark"
+            ? { borderLeft: "1px solid rgba(140, 140, 140, 0.45)" }
+            : {}),
+        }}
+      >
+        <span
+          data-palette-swatch={`${palette.id}:${mode}:text`}
+          className="text-[10px] font-semibold leading-none"
+          style={{ color: set.text }}
+        >
+          Aa
+        </span>
+        <span
+          data-palette-dot={`${palette.id}:${mode}`}
+          data-palette-swatch={`${palette.id}:${mode}:primary`}
+          className="h-[7px] w-4/5 rounded-full"
+          style={{ backgroundColor: set.primary }}
+        />
+        <span
+          data-palette-swatch={`${palette.id}:${mode}:secondary`}
+          className="h-[5px] w-3/5 rounded-full"
+          style={{ backgroundColor: set.secondary }}
+        />
+      </span>
+    );
+  };
+
   return (
     <div className="rounded-lg border border-[var(--border)] p-4">
       <h3 className="text-sm font-medium text-[var(--text)]">{t("Theme Colors")}</h3>
@@ -241,11 +295,13 @@ export default function ThemePalettePicker({
               (wrapping to 4, then 2, on narrow widths, so every box
               stays the SAME width — "brabar karo"). The name sits
               above the box; the box is split by a vertical line —
-              LEFT half is the LIGHT presentation (light background,
-              light primary dot), RIGHT half the DARK presentation
-              (dark background, dark primary dot), both from the
-              palette's real sets; the caption under the box reads
-              "Light | Dark" where hex codes used to be. */}
+              LEFT half is the LIGHT presentation, RIGHT half the
+              DARK presentation, both from the palette's real sets;
+              each half is a miniature of its set — its background
+              plus an "Aa" text sample, a primary pill and a
+              secondary pill — so the FULL colour set shows; the
+              caption under the box reads "Light | Dark" where hex
+              codes used to be. */}
           <div
             className="grid grid-cols-2 gap-3 min-[560px]:grid-cols-4 xl:grid-cols-8"
             data-testid="palette-boxes"
@@ -268,31 +324,8 @@ export default function ThemePalettePicker({
                   style={boxStyle(palette.id)}
                 >
                   <span className="flex h-11 overflow-hidden rounded-md">
-                    <span
-                      data-palette-half={`${palette.id}:light`}
-                      className="flex flex-1 items-center justify-center"
-                      style={{ backgroundColor: palette.light.background }}
-                    >
-                      <span
-                        data-palette-dot={`${palette.id}:light`}
-                        className="h-4 w-4 rounded-full border border-black/20"
-                        style={{ backgroundColor: palette.light.primary }}
-                      />
-                    </span>
-                    <span
-                      data-palette-half={`${palette.id}:dark`}
-                      className="flex flex-1 items-center justify-center"
-                      style={{
-                        backgroundColor: palette.dark.background,
-                        borderLeft: "1px solid rgba(140, 140, 140, 0.45)",
-                      }}
-                    >
-                      <span
-                        data-palette-dot={`${palette.id}:dark`}
-                        className="h-4 w-4 rounded-full border border-black/20"
-                        style={{ backgroundColor: palette.dark.primary }}
-                      />
-                    </span>
+                    {renderHalf(palette, "light")}
+                    {renderHalf(palette, "dark")}
                   </span>
                 </span>
                 <span
