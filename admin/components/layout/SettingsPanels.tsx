@@ -1014,6 +1014,11 @@ function UsersPanel({
                 </td>
                 <td className="px-4 py-3 text-[var(--text-soft)] text-center">{user.email}</td>
                 <td className="px-4 py-3 text-center">
+                  {/* Role column width is FIXED at the Super Admin
+                      dropdown's measured natural width (116.17px) so
+                      every row's dropdown is identical instead of
+                      sizing to its label (Ahsan's order); a longer
+                      custom role name truncates in the trigger. */}
                   <Select
                     aria-label={t("Role for {email}").replace("{email}", user.email)}
                     value={user.role || "Customer"}
@@ -1022,6 +1027,8 @@ function UsersPanel({
                     options={selectRoleOptions.map((role) => ({ label: t(role), value: role }))}
                     variant="outline"
                     size="md"
+                    className="w-[116.17px]"
+                    triggerFullWidth
                   />
                 </td>
                 <td className="px-4 py-3 text-center">
