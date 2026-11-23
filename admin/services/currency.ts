@@ -249,10 +249,13 @@ export function applyStoreCurrency(code: string | undefined | null): void {
   }
 }
 
-/** Loads the settings document once and applies its store currency. */
+/** Loads the store currency once and applies it. Reads the shell
+ *  bootstrap slice (GET /settings/bootstrap) — the full settings
+ *  document requires Settings view, but the currency formats money
+ *  panel-wide for every staff session. */
 export async function fetchAndApplyStoreCurrency(): Promise<void> {
   try {
-    const { data } = await apiClient.get("/settings");
+    const { data } = await apiClient.get("/settings/bootstrap");
     applyStoreCurrency(data?.general?.currency);
   } catch {
     /* settings may be unreachable — the panel keeps its cached default */

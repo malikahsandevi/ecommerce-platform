@@ -68,8 +68,13 @@ const MobileNav: React.FC = () => {
   const avatarSrc = user?.avatar?.trim();
   const showUserImage = Boolean(avatarSrc && failedAvatarUrl !== avatarSrc);
 
+  // Settings stays visible for every staff user (same rule as the
+  // Sidebar): the page itself shows the permission notice when the
+  // role has no Settings view, and the API refuses the data.
   const canView = (module: string): boolean =>
-    typeof hasPermission === "function" ? hasPermission(module, "view") : true;
+    module === "Settings"
+      ? true
+      : typeof hasPermission === "function" ? hasPermission(module, "view") : true;
   const topItems = TOP_NAV_ITEMS.filter((item) => canView(item.module));
   const bottomItems = BOTTOM_NAV_ITEMS.filter((item) => canView(item.module));
 

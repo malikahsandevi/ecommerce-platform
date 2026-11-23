@@ -86,9 +86,12 @@ export default function SettingsPage() {
   // The settings API requires the admin token — wait for the session
   // before loading, and reload once it appears (the shell renders this
   // page behind the login popup, so a mount-only fetch would 401 and the
-  // page would sit on an error even after signing in).
+  // page would sit on an error even after signing in). A role without
+  // Settings view never fires the fetch at all: the page renders the
+  // permission notice below and no settings data is even requested
+  // (the API would answer 403 anyway — this keeps the state clean).
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated || !canViewSettings) return;
     let cancelled = false;
     setLoading(true);
     settingsService.getSettings()
@@ -105,10 +108,10 @@ export default function SettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, canViewSettings]);
 
   useEffect(() => {
-    if (activeMenu !== "Users & Roles" || !isAuthenticated) return;
+    if (activeMenu !== "Users & Roles" || !isAuthenticated || !canViewSettings) return;
     let cancelled = false;
 
     settingsService.getUsers()
@@ -122,7 +125,7 @@ export default function SettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeMenu, isAuthenticated]);
+  }, [activeMenu, isAuthenticated, canViewSettings]);
 
   const saveSection = async (section: SettingsSection, value: unknown) => {
     setSaving(true);

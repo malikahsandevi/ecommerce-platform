@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { Setting } = require('../models');
 const genericController = require('../controllers/genericController')(Setting);
-const { getSettings, updateSettings, executeIntegration, getServicesCatalogue, getSettingById, updateSettingById, saveIntegrationEntry, deleteIntegrationEntry } = require('../controllers/settingController');
+const { getSettings, getShellBootstrap, updateSettings, executeIntegration, getServicesCatalogue, getSettingById, updateSettingById, saveIntegrationEntry, deleteIntegrationEntry } = require('../controllers/settingController');
 const { protect } = require('../middleware/auth');
 const { requireStaff } = require('../middleware/admin');
 const { requirePermission } = require('../middleware/permissions');
@@ -23,6 +23,16 @@ router.post('/execute', requirePermission('Settings', 'edit'), executeIntegratio
 // The service catalogue (categories → sub-services → field schemas,
 // structure only, no values) the integrations panel renders from.
 router.get('/services/catalogue', requirePermission('Settings', 'view'), getServicesCatalogue);
+
+// Shell bootstrap: the appearance section + general's language and
+// currency ONLY — the universal rendering basics the shell applies
+// for EVERY staff
+// session, including roles with no Settings view (the Settings page
+// itself stays permission-gated, and no other settings data leaves
+// through here). Staff guard comes from router.use above; no
+// Settings permission is required for this slice by design. Must be
+// declared before '/:id' so "bootstrap" is not read as a settings id.
+router.get('/bootstrap', getShellBootstrap);
 
 // Per-entry integration writes — every service entry in the panel has
 // its OWN Save and Remove, which write/delete exactly that one entry

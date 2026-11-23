@@ -2,11 +2,18 @@
 
 // Admin language (Settings → General → Language) — a real i18n layer,
 // not just a stored value. The choice lives in the settings document
-// (general.language, stored as the language's English label), is
-// cached on the device (localStorage "admin-language" + the
-// "language" cookie, exactly like the theme) so the root layout can
-// render <html lang dir> correctly on first paint, and is applied by
-// AdminShell once signed in via fetchAndApplyLanguage().
+// (general.language, stored as the language's English label) and the
+// document is the SINGLE SOURCE OF TRUTH, universal like the theme:
+// AdminShell applies the doc's language on every load/login via
+// fetchAndApplyLanguage(), and the device copy (localStorage
+// "admin-language" + the "language" cookie, exactly like the theme)
+// is only a first-paint cache — it lets the root layout render
+// <html lang> correctly before the fetch lands, is rewritten from
+// the doc by that fetch, and never overrides it. The fetch reads the
+// shell bootstrap slice (GET /settings/bootstrap), so the doc
+// language reaches every staff session — a role without Settings
+// view gets the language applied too (only the Settings PANEL is
+// gated, never the rendering).
 //
 // SCOPE: the dictionary (services/i18n-dict.ts) covers the WHOLE
 // admin — shell, dashboard, every resource list/form/detail panel,
@@ -75,11 +82,14 @@ export function applyLanguage(label: string) {
   window.dispatchEvent(new CustomEvent(LANGUAGE_EVENT, { detail: def.label }));
 }
 
-/** Loads the saved language from the settings document and applies
- *  it (called once signed in, like Appearance and Currency). */
+/** Loads the saved language from the settings document (via the
+ *  shell bootstrap slice, readable by every staff session) and
+ *  applies it — the doc wins over any stale device cache, and
+ *  applyLanguage rewrites that cache from the doc (called once
+ *  signed in, like Appearance and Currency). */
 export async function fetchAndApplyLanguage(): Promise<void> {
   try {
-    const { data } = await apiClient.get<{ general?: { language?: string } }>("/settings");
+    const { data } = await apiClient.get<{ general?: { language?: string } }>("/settings/bootstrap");
     const saved = data?.general?.language;
     if (saved && saved !== readDeviceLanguage()) applyLanguage(saved);
   } catch { /* keep the device language */ }

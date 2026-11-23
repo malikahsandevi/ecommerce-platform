@@ -137,6 +137,37 @@ const getSettings = async (req, res) => {
     }
 };
 
+// ── Shell bootstrap read ───────────────────────────────────────────
+// The admin shell must paint for EVERY staff member, including roles
+// with no Settings view: the universal theme (appearance palette +
+// mode) and the universal language both live in this document, and
+// the Setting doc is their single source of truth on every browser
+// and device. The rest of the document — integration credentials,
+// store configuration — is Settings-view data and stays behind the
+// Settings permission on the routes above (Ahsan: "iska data backend
+// ki bhi na nikly"). This read serves ONLY the two non-sensitive
+// slices the shell applies on load: the appearance section (colours
+// and panel cosmetics — no credential values of any kind) and the
+// general section's two rendering basics, language and currency
+// (they format every string and money figure in the panel, exactly
+// like the theme paints it). Any signed-in staff session may read
+// it; it exposes nothing else from the document.
+const getShellBootstrap = async (req, res) => {
+    try {
+        const settings = await Setting.findOne().sort({ createdAt: 1 });
+        const doc = settings?.toObject ? settings.toObject() : settings;
+        res.json({
+            appearance: doc?.appearance || {},
+            general: {
+                language: doc?.general?.language || '',
+                currency: doc?.general?.currency || '',
+            },
+        });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
 // The service catalogue (config/services): categories → sub-services →
 // field schemas. Structure only — safe for any staff member, and the
 // panel renders its dynamic forms from exactly this.
@@ -560,4 +591,4 @@ const deleteIntegrationEntry = async (req, res) => {
     }
 };
 
-module.exports = { getSettings, updateSettings, executeIntegration, getServicesCatalogue, maskSettingsDocument, maskValue, isMaskOf, getSettingById, updateSettingById, saveIntegrationEntry, deleteIntegrationEntry };
+module.exports = { getSettings, getShellBootstrap, updateSettings, executeIntegration, getServicesCatalogue, maskSettingsDocument, maskValue, isMaskOf, getSettingById, updateSettingById, saveIntegrationEntry, deleteIntegrationEntry };

@@ -242,8 +242,14 @@ const Sidebar: React.FC = () => {
 
   // Modules the signed-in role cannot view are hidden. While permissions
   // are still loading, hasPermission answers "yes" so nothing flickers.
+  // EXCEPTION (Ahsan's order): Settings stays visible for EVERY staff
+  // user — opening it without Settings view shows the permission
+  // notice (the same one the Dashboard uses), and the settings API
+  // refuses the data, so nothing sensitive is exposed by the entry.
   const canView = (module: string): boolean =>
-    typeof hasPermission === "function" ? hasPermission(module, "view") : true;
+    module === "Settings"
+      ? true
+      : typeof hasPermission === "function" ? hasPermission(module, "view") : true;
   const topItems = TOP_NAV_ITEMS.filter((item) => canView(item.module));
   const bottomItems = BOTTOM_NAV_ITEMS.filter((item) => canView(item.module));
 

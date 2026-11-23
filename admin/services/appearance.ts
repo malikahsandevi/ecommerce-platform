@@ -405,10 +405,15 @@ export function applyAppearance(appearance: AppearanceSettings | undefined): voi
   }
 }
 
-/** Loads the settings document once and applies its Appearance section. */
+/** Loads the shell bootstrap slice once and applies its Appearance
+ *  section. The bootstrap read (GET /settings/bootstrap) serves the
+ *  appearance section + language to ANY staff session — the full
+ *  settings document requires Settings view, but the universal theme
+ *  must converge for every signed-in user, roles without Settings
+ *  access included. */
 export async function fetchAndApplyAppearance(): Promise<void> {
   try {
-    const { data } = await apiClient.get('/settings');
+    const { data } = await apiClient.get('/settings/bootstrap');
     const appearance = data?.appearance as AppearanceSettings | undefined;
     if (!appearance) return;
 
