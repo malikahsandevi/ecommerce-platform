@@ -30,6 +30,30 @@ import {
  *  default is always 30. */
 export const PALETTE_CONFIRM_SECONDS = 30;
 
+/** The panel's current theme mode, read off <html data-theme> and
+ *  kept live with a MutationObserver (the same pattern GlobalSearch
+ *  uses for data-animations) — the applied card's ring resolves its
+ *  primary from the palette set of the mode on screen. */
+function useThemeMode(): "dark" | "light" {
+  const [mode, setMode] = useState<"dark" | "light">("dark");
+  useEffect(() => {
+    const read = () =>
+      setMode(
+        document.documentElement.getAttribute("data-theme") === "dark"
+          ? "dark"
+          : "light",
+      );
+    read();
+    const observer = new MutationObserver(read);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme"],
+    });
+    return () => observer.disconnect();
+  }, []);
+  return mode;
+}
+
 function confirmSeconds(): number {
   try {
     const override = (window as unknown as { __PALETTE_CONFIRM_SECONDS__?: number })
@@ -62,9 +86,10 @@ function confirmSeconds(): number {
  * table showed.
  * Selecting a box only previews it in the dummy cards on the right
  * (one dark card and one light card, both recoloring live) — the
- * selected box carries a light border. There is no per-color
- * editing. The single palette colours the admin panel AND the
- * storefront together.
+ * selected box carries a light border, and the APPLIED (kept)
+ * palette's box carries a ring in the applied theme's own primary
+ * colour. There is no per-color editing. The single palette
+ * colours the admin panel AND the storefront together.
  *
  * Apply puts the palette on the WHOLE panel as a temporary preview
  * and starts a 30-second countdown beside the Apply button — no
@@ -200,15 +225,33 @@ export default function ThemePalettePicker({
 
   const selected = paletteById(selectedId) ?? PALETTES[0];
   const applyDisabled = previewActive || selectedId === savedId;
-  // The selected box carries the same light border the selected
-  // table column had; every other box gets the plain hairline.
-  const boxStyle = (id: string): React.CSSProperties =>
-    selectedId === id
+  // Three box states, told apart at a glance (Ahsan's order,
+  // 2026-11-23: "jo applied ho uspr primary applied theme ka color
+  // ho"): the APPLIED (kept) palette's box carries a ring in the
+  // applied theme's OWN primary colour — resolved from that
+  // palette's set for the mode on screen — so the palette that is
+  // actually live is marked in its own colour. A merely SELECTED
+  // box (the dummy-card preview selection) keeps the neutral light
+  // border the selected table column had; every other box gets the
+  // plain hairline. Applied wins over selected when both are the
+  // same box (the resting state).
+  const mode = useThemeMode();
+  const appliedId = savedId ?? DEFAULT_PALETTE_ID;
+  const boxStyle = (id: string): React.CSSProperties => {
+    if (id === appliedId) {
+      const primary = paletteById(id)?.[mode].primary ?? "var(--primary)";
+      return {
+        boxShadow: `inset 0 0 0 2px ${primary}`,
+        backgroundColor: "var(--surface-muted)",
+      };
+    }
+    return selectedId === id
       ? {
           boxShadow: "inset 0 0 0 2px rgba(255, 255, 255, 0.85)",
           backgroundColor: "var(--surface-muted)",
         }
       : { boxShadow: "inset 0 0 0 1px var(--border)" };
+  };
 
   // One half of a palette box: a MINIATURE THEME PREVIEW of the
   // mode (Ahsan's redesign — the lone dot was rejected, and plain
@@ -324,6 +367,7 @@ export default function ThemePalettePicker({
                 </span>
                 <span
                   data-palette-box={palette.id}
+                  data-palette-applied={palette.id === appliedId ? "true" : undefined}
                   className="block rounded-lg p-1 transition"
                   style={boxStyle(palette.id)}
                 >
