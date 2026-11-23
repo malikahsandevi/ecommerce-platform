@@ -61,6 +61,51 @@ export const SERVICE_CATALOGUE: ServiceCategoryDef[] = [
         fields: [F("accountId", "Account ID"), F("accessKey", "Access Key"), F("secretKey", "Secret Key", true), F("bucket", "Bucket")],
         endpoints: [],
       },
+      {
+        id: "google-cloud-storage", name: "Google Cloud Storage", hasFixedBase: false,
+        fields: [F("accessKey", "Access Key", false, { placeholder: "HMAC access key from Cloud Storage settings" }), F("secretKey", "Secret Key", true), F("bucket", "Bucket"), F("projectId", "Project ID")],
+        endpoints: [],
+      },
+      {
+        id: "azure-blob-storage", name: "Azure Blob Storage", hasFixedBase: false,
+        fields: [F("accountName", "Storage Account"), F("accountKey", "Account Key", true), F("container", "Container")],
+        endpoints: [],
+      },
+      {
+        id: "digitalocean-spaces", name: "DigitalOcean Spaces", hasFixedBase: false,
+        fields: [F("accessKey", "Access Key", false, { placeholder: "Spaces access key from the API page" }), F("secretKey", "Secret Key", true), F("bucket", "Bucket"), F("region", "Region", false, { placeholder: "e.g. nyc3" })],
+        endpoints: [],
+      },
+      {
+        id: "backblaze-b2", name: "Backblaze B2", hasFixedBase: false,
+        fields: [F("keyId", "Key ID", false, { placeholder: "Application key ID from B2" }), F("applicationKey", "Application Key", true), F("bucket", "Bucket")],
+        endpoints: [],
+      },
+      {
+        id: "wasabi", name: "Wasabi", hasFixedBase: false,
+        fields: [F("accessKey", "Access Key", false, { placeholder: "Access key from the Wasabi console" }), F("secretKey", "Secret Key", true), F("bucket", "Bucket"), F("region", "Region", false, { placeholder: "e.g. us-east-1" })],
+        endpoints: [],
+      },
+      {
+        id: "bunny-storage", name: "Bunny Storage", hasFixedBase: false,
+        fields: [F("storageZone", "Storage Zone"), F("accessKey", "Access Key", true), F("region", "Storage Hostname", false, { placeholder: "e.g. storage.bunnycdn.com" })],
+        endpoints: [],
+      },
+      {
+        id: "supabase-storage", name: "Supabase Storage", hasFixedBase: false,
+        fields: [F("projectUrl", "Project URL"), F("serviceRoleKey", "Service Role Key", true), F("bucket", "Bucket")],
+        endpoints: [],
+      },
+      {
+        id: "firebase-storage", name: "Firebase Storage", hasFixedBase: false,
+        fields: [F("projectId", "Project ID"), F("bucket", "Bucket", false, { placeholder: "e.g. my-project.appspot.com" }), F("clientEmail", "Client Email"), F("privateKey", "Private Key", true)],
+        endpoints: [],
+      },
+      {
+        id: "minio", name: "MinIO", hasFixedBase: false,
+        fields: [F("endpoint", "Endpoint URL"), F("accessKey", "Access Key", false, { placeholder: "Access key for your MinIO server" }), F("secretKey", "Secret Key", true), F("bucket", "Bucket"), F("region", "Region", false, { placeholder: "e.g. us-east-1" })],
+        endpoints: [],
+      },
     ],
   },
   {
@@ -181,6 +226,11 @@ export const SERVICE_CATALOGUE: ServiceCategoryDef[] = [
         fields: [F("apiKey", "API Key", true), F("domain", "Domain"), F("fromEmail", "From Email")],
         endpoints: [{ name: "domain", path: "/domains/{domain}", method: "GET" }],
       },
+      {
+        id: "postmark", name: "Postmark", hasFixedBase: true,
+        fields: [F("serverToken", "Server Token", true), F("fromEmail", "From Email")],
+        endpoints: [{ name: "server", path: "/server", method: "GET" }],
+      },
     ],
   },
   {
@@ -196,6 +246,46 @@ export const SERVICE_CATALOGUE: ServiceCategoryDef[] = [
         id: "vonage", name: "Vonage", hasFixedBase: true,
         fields: [F("apiKey", "API Key"), F("apiSecret", "API Secret", true), F("from", "From")],
         endpoints: [{ name: "balance", path: "/account/get-balance", method: "GET" }],
+      },
+      {
+        id: "messagebird", name: "MessageBird", hasFixedBase: true,
+        fields: [F("apiKey", "API Key", true), F("from", "From")],
+        endpoints: [{ name: "balance", path: "/balance", method: "GET" }],
+      },
+      {
+        id: "plivo", name: "Plivo", hasFixedBase: true,
+        fields: [F("authId", "Auth ID"), F("authToken", "Auth Token", true), F("fromNumber", "From Number")],
+        endpoints: [{ name: "account", path: "/", method: "GET" }],
+      },
+      {
+        id: "sinch", name: "Sinch", hasFixedBase: true,
+        fields: [F("servicePlanId", "Service Plan ID"), F("apiToken", "API Token", true), F("fromNumber", "From Number")],
+        endpoints: [{ name: "batches", path: "/batches", method: "GET" }],
+      },
+      {
+        id: "infobip", name: "Infobip", hasFixedBase: false,
+        fields: [F("apiKey", "API Key", true), F("from", "From")],
+        endpoints: [],
+      },
+      {
+        id: "bandwidth", name: "Bandwidth", hasFixedBase: true,
+        fields: [F("accountId", "Account ID"), F("apiToken", "API Token", false, { placeholder: "Your Bandwidth API token" }), F("apiSecret", "API Secret", true), F("fromNumber", "From Number")],
+        endpoints: [],
+      },
+      {
+        id: "telnyx", name: "Telnyx", hasFixedBase: true,
+        fields: [F("apiKey", "API Key", true), F("fromNumber", "From Number"), F("messagingProfileId", "Messaging Profile ID")],
+        endpoints: [{ name: "balance", path: "/balance", method: "GET" }],
+      },
+      {
+        id: "amazon-sns", name: "Amazon SNS", hasFixedBase: false,
+        fields: [F("accessKey", "Access Key"), F("secretKey", "Secret Key", true), F("region", "Region")],
+        endpoints: [],
+      },
+      {
+        id: "clicksend", name: "ClickSend", hasFixedBase: true,
+        fields: [F("username", "Username", false, { placeholder: "Your ClickSend username" }), F("apiKey", "API Key", true), F("from", "From")],
+        endpoints: [{ name: "account", path: "/account", method: "GET" }],
       },
     ],
   },
@@ -222,6 +312,21 @@ export const SERVICE_CATALOGUE: ServiceCategoryDef[] = [
         id: "store-session-jwt", name: "Store Session (JWT)", hasFixedBase: false,
         fields: [F("jwtSecret", "JWT Secret", true)],
         endpoints: [{ name: "verify", path: "/", method: "GET" }],
+      },
+      {
+        id: "auth0", name: "Auth0", hasFixedBase: false,
+        fields: [F("domain", "Domain", false, { placeholder: "e.g. myapp.us.auth0.com" }), F("clientId", "Client ID"), F("clientSecret", "Client Secret", true)],
+        endpoints: [],
+      },
+      {
+        id: "clerk", name: "Clerk", hasFixedBase: true,
+        fields: [F("publishableKey", "Publishable Key"), F("secretKey", "Secret Key", true)],
+        endpoints: [],
+      },
+      {
+        id: "firebase-auth", name: "Firebase Auth", hasFixedBase: false,
+        fields: [F("projectId", "Project ID"), F("clientEmail", "Client Email"), F("privateKey", "Private Key", true)],
+        endpoints: [],
       },
     ],
   },
@@ -276,6 +381,7 @@ export const SERVICE_CATALOGUE: ServiceCategoryDef[] = [
     subServices: [
       { id: "google-analytics", name: "Google Analytics", hasFixedBase: false, fields: [F("measurementId", "Measurement ID")], endpoints: [] },
       { id: "meta-pixel", name: "Meta Pixel", hasFixedBase: false, fields: [F("pixelId", "Pixel ID")], endpoints: [] },
+      { id: "mixpanel", name: "Mixpanel", hasFixedBase: false, fields: [F("projectToken", "Project Token")], endpoints: [] },
     ],
   },
   {
@@ -328,6 +434,17 @@ const PLACEHOLDER_BY_KEY: Record<string, string> = {
   accountNumber: "e.g. 123456789",
   measurementId: "e.g. G-XXXXXXXXXX",
   pixelId: "e.g. 123456789012345",
+  projectId: "e.g. my-project-123",
+  storageZone: "e.g. my-store-zone",
+  servicePlanId: "Your Sinch service plan ID",
+  messagingProfileId: "Your messaging profile ID",
+  projectUrl: "e.g. https://xyzcompany.supabase.co",
+  endpoint: "e.g. https://minio.example.com:9000",
+  container: "e.g. store-media",
+  accountName: "e.g. mystoreaccount",
+  authId: "Your Plivo Auth ID",
+  clientEmail: "Service account email",
+  projectToken: "e.g. 1234567890abcdef…",
 };
 const SECRET_PLACEHOLDER_BY_KEY: Record<string, string> = {
   apiKey: "Paste the API key — hidden after saving",
@@ -347,6 +464,11 @@ const SECRET_PLACEHOLDER_BY_KEY: Record<string, string> = {
   apiToken: "Paste the API token — hidden after saving",
   accessToken: "Paste the access token — hidden after saving",
   accountPin: "Paste the account PIN — hidden after saving",
+  serverToken: "Paste the server token — hidden after saving",
+  serviceRoleKey: "Paste the service role key — hidden after saving",
+  accountKey: "Paste the account key — hidden after saving",
+  applicationKey: "Paste the application key — hidden after saving",
+  accessKey: "Paste the access key — hidden after saving",
 };
 // apiKey is a plain identifier for some providers (Cloudinary) and a
 // secret for others — the per-field secret flag decides, like the
