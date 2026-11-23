@@ -95,6 +95,21 @@ body {
   overflow-x: clip;
 }
 
+/* Text selection follows the theme: the highlight is the active
+   palette's primary with its on-primary text colour, in both modes and
+   everywhere — body text, headings and form fields alike — instead of
+   the browser's default blue. Palette switches recolour it for free
+   because it reads the same variables as everything else. */
+::selection {
+  background: var(--primary);
+  color: var(--primary-text, #ffffff);
+}
+
+::-moz-selection {
+  background: var(--primary);
+  color: var(--primary-text, #ffffff);
+}
+
 *,
 *::before,
 *::after {
