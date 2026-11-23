@@ -48,14 +48,37 @@ const generateToken = async (id) => {
     });
 };
 
-// Short-lived, single-purpose token handed back by login when the account
-// has 2FA on. It is NOT a session token: it carries a purpose claim that
-// only the 2FA verify endpoint accepts, and a real session token is
-// minted only after the TOTP code checks out.
+// Short-lived, single-purpose tokens handed back by login when the
+// account still owes a second step. They are NOT session tokens: each
+// carries a purpose claim that only its own endpoint accepts, and a
+// real session token is minted only after that step completes.
+//  - 'two-factor-login': the account has 2FA on — the TOTP code is owed.
+//  - 'two-factor-enroll': the account has NO 2FA yet — enrolment is
+//    mandatory for every staff account (Ahsan's order), so the code
+//    confirmation that turns 2FA on is owed instead.
 const generateTwoFactorTempToken = async (id) => {
     return jwt.sign({ id, purpose: 'two-factor-login' }, await getJwtSignSecret(), {
         expiresIn: '5m',
     });
+};
+
+const generateTwoFactorEnrollToken = async (id) => {
+    return jwt.sign({ id, purpose: 'two-factor-enroll' }, await getJwtSignSecret(), {
+        expiresIn: '5m',
+    });
+};
+
+// Verifies a login temp token and returns its payload, or null when it
+// is missing, expired, or minted for a different step. Both 2FA login
+// steps share this so a token can never be replayed across steps.
+const decodeLoginTempToken = async (tempToken, purpose) => {
+    if (!tempToken) return null;
+    try {
+        const decoded = jwt.verify(tempToken, await getJwtSecret());
+        return decoded.purpose === purpose ? decoded : null;
+    } catch {
+        return null;
+    }
 };
 
 // The payload a completed sign-in returns (shared by plain login and the
@@ -148,7 +171,18 @@ const loginAdmin = async (req, res) => {
                     });
                 }
 
-                return res.json(await sessionPayload(adminUser));
+                // Two-factor NOT set up yet: enrolment is mandatory for
+                // every staff account (Ahsan's order — "har admin ka 2F
+                // auth bhi ho"), so the password alone earns only an
+                // enrolment temp token. The session token waits until
+                // the account enrols and confirms a live code in this
+                // same sign-in (see the enroll endpoints below). There
+                // is no skip: a staff account without 2FA never gets a
+                // session from this endpoint.
+                return res.json({
+                    twoFactorSetupRequired: true,
+                    tempToken: await generateTwoFactorEnrollToken(adminUser._id),
+                });
             }
         }
 
@@ -172,13 +206,8 @@ const verifyTwoFactorLogin = async (req, res) => {
             return res.status(400).json({ message: 'A verification code is required.' });
         }
 
-        let decoded;
-        try {
-            decoded = jwt.verify(tempToken, await getJwtSecret());
-        } catch {
-            return res.status(401).json({ message: 'This sign-in attempt expired — sign in again.' });
-        }
-        if (decoded.purpose !== 'two-factor-login') {
+        const decoded = await decodeLoginTempToken(tempToken, 'two-factor-login');
+        if (!decoded) {
             return res.status(401).json({ message: 'This sign-in attempt expired — sign in again.' });
         }
 
@@ -196,6 +225,103 @@ const verifyTwoFactorLogin = async (req, res) => {
         if (!valid) {
             return res.status(400).json({ message: 'Invalid verification code — check your authenticator app and try again.' });
         }
+
+        res.json(await sessionPayload(user));
+    } catch (error) {
+        if (error.code === 'JWT_SIGNING_DISABLED') {
+            return res.status(403).json({ message: error.message });
+        }
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// @desc    Login-time enrolment, step 1 — issue a TOTP secret + QR for
+//          an account that signed in with its password but has no 2FA
+//          yet. The enrolment temp token from /login is the credential;
+//          NO session exists yet. Same handshake as the in-panel setup:
+//          the secret is stored but NOT enabled — only a live code in
+//          step 2 turns it on, so a password alone can never silently
+//          enrol an authenticator the account owner didn't confirm.
+// @route   POST /api/auth/2fa/enroll-setup
+// @access  Public (the enrolment temp token is the credential)
+const enrollSetupTwoFactor = async (req, res) => {
+    try {
+        const { tempToken } = req.body || {};
+        const decoded = await decodeLoginTempToken(tempToken, 'two-factor-enroll');
+        if (!decoded) {
+            return res.status(401).json({ message: 'This sign-in attempt expired — sign in again.' });
+        }
+
+        const user = await User.findById(decoded.id).select('+twoFactorSecret');
+        if (!user) {
+            return res.status(400).json({ message: 'Two-factor authentication is not available for this account.' });
+        }
+
+        const accessError = panelAccessError(user);
+        if (accessError) {
+            return res.status(accessError.status).json({ message: accessError.message });
+        }
+        if (user.twoFactorEnabled) {
+            return res.status(400).json({ message: 'Two-factor authentication is already enabled for this account. Sign in and enter your code.' });
+        }
+
+        // A fresh secret every time this step runs: an abandoned
+        // enrolment's unconfirmed secret is simply overwritten, never
+        // left half-active.
+        const secret = generateTotpKey();
+        user.twoFactorSecret = secret;
+        await user.save();
+
+        const otpauthUrl = authenticator.keyuri(user.email, ISSUER, secret);
+        const qrCode = await QRCode.toDataURL(otpauthUrl);
+
+        res.json({ secret, otpauthUrl, qrCode, enabled: false });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// @desc    Login-time enrolment, step 2 — confirm a live code from the
+//          authenticator just enrolled: 2FA turns ON for the account
+//          and the real session token is minted (this completes the
+//          sign-in — enrolment is asked only here, at login).
+// @route   POST /api/auth/2fa/enroll-confirm
+// @access  Public (the enrolment temp token is the credential)
+const enrollConfirmTwoFactor = async (req, res) => {
+    try {
+        const { tempToken, code } = req.body || {};
+        if (!code) {
+            return res.status(400).json({ message: 'A verification code is required.' });
+        }
+
+        const decoded = await decodeLoginTempToken(tempToken, 'two-factor-enroll');
+        if (!decoded) {
+            return res.status(401).json({ message: 'This sign-in attempt expired — sign in again.' });
+        }
+
+        const user = await User.findById(decoded.id).select('+twoFactorSecret');
+        if (!user) {
+            return res.status(400).json({ message: 'Two-factor authentication is not available for this account.' });
+        }
+
+        const accessError = panelAccessError(user);
+        if (accessError) {
+            return res.status(accessError.status).json({ message: accessError.message });
+        }
+        if (user.twoFactorEnabled) {
+            return res.status(400).json({ message: 'Two-factor authentication is already enabled for this account. Sign in and enter your code.' });
+        }
+        if (!user.twoFactorSecret) {
+            return res.status(400).json({ message: 'Start the setup first, then confirm with a code.' });
+        }
+
+        const valid = authenticator.check(String(code).trim(), user.twoFactorSecret);
+        if (!valid) {
+            return res.status(400).json({ message: 'Invalid verification code — check your authenticator app and try again.' });
+        }
+
+        user.twoFactorEnabled = true;
+        await user.save();
 
         res.json(await sessionPayload(user));
     } catch (error) {
@@ -399,6 +525,8 @@ module.exports = {
     forgotPassword,
     resetPassword,
     verifyTwoFactorLogin,
+    enrollSetupTwoFactor,
+    enrollConfirmTwoFactor,
     twoFactorStatus,
     setupTwoFactor,
     enableTwoFactor,

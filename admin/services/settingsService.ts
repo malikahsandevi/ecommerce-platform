@@ -29,6 +29,8 @@ export interface SettingsUser {
   avatar?: string;
   role?: string;
   isActive?: boolean;
+  /** Panel 2FA state (staff accounts) — drives the Reset 2FA row action. */
+  twoFactorEnabled?: boolean;
 }
 
 /** The role → module → action permission matrix (GET /permissions). */
@@ -157,6 +159,18 @@ export const settingsService = {
         ? { "X-Settings-Password": securityPassword }
         : undefined,
     });
+  },
+
+  /** Resets a staff account's two-factor authentication (Super Admin
+   *  only — the API answers 403 otherwise). A Settings save, so the
+   *  per-save security password rides in the body like the other user
+   *  writes; the API verifies and strips it before anything changes.
+   *  The account enrols again at its next sign-in. */
+  async resetUserTwoFactor(id: string, securityPassword?: string): Promise<SettingsUser> {
+    const { data } = await apiClient.post<SettingsUser>(`/users/${id}/reset-2fa`, {
+      ...(securityPassword ? { securityPassword } : {}),
+    });
+    return data;
   },
 
   /** Creates an account from Settings → Users & Roles ("Add User").

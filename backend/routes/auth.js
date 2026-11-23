@@ -5,6 +5,8 @@ const {
     forgotPassword,
     resetPassword,
     verifyTwoFactorLogin,
+    enrollSetupTwoFactor,
+    enrollConfirmTwoFactor,
     twoFactorStatus,
     setupTwoFactor,
     enableTwoFactor,
@@ -23,6 +25,12 @@ router.post('/reset-password', resetPassword);
 // Two-factor login second step — the temp token from /login is the
 // credential here, so no Bearer token is involved yet.
 router.post('/2fa/verify', verifyTwoFactorLogin);
+
+// Mandatory login-time enrolment for staff accounts without 2FA yet —
+// same idea: the enrolment temp token from /login is the credential,
+// and the session is minted only by the confirm step.
+router.post('/2fa/enroll-setup', enrollSetupTwoFactor);
+router.post('/2fa/enroll-confirm', enrollConfirmTwoFactor);
 
 // Enrolment management — all behind a completed sign-in.
 router.get('/2fa/status', protect, twoFactorStatus);

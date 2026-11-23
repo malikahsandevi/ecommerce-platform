@@ -214,6 +214,36 @@ export default function SettingsPage() {
     }
   };
 
+  const resetUserTwoFactor = async (id: string) => {
+    const target = users.find((user) => user._id === id);
+    const confirmed = await confirmDialog({
+      title: t("Reset two-factor authentication?"),
+      message: t(
+        "This clears the authenticator setup for {email}. They will set up two-factor authentication again at their next sign-in — there is no way to sign in without it.",
+      ).replace("{email}", target?.email || "this user"),
+      confirmLabel: t("Reset 2FA"),
+      variant: "danger",
+    });
+    if (!confirmed) return;
+    // Settings Lock: the reset is a Settings save — it verifies the
+    // admin's own password after the confirmation, like every other
+    // Users & Roles write.
+    const securityPassword = await securityCheckDialog({
+      message: t("Enter your own account password to reset two-factor authentication for this user."),
+      confirmLabel: t("Verify & Reset"),
+    });
+    if (!securityPassword) return;
+    try {
+      const updated = await settingsService.resetUserTwoFactor(id, securityPassword);
+      setUsers((currentUsers) =>
+        currentUsers.map((user) => (user._id === id ? { ...user, ...updated } : user)),
+      );
+      toast.success(t("Two-factor authentication has been reset. It will be set up again at the next sign-in."));
+    } catch (resetError) {
+      toast.error(extractApiError(resetError));
+    }
+  };
+
   const createUser = async (values: {
     firstName: string;
     lastName: string;
@@ -433,6 +463,7 @@ export default function SettingsPage() {
             onDeleteUser={(id) => void deleteUser(id)}
             onUpdateUser={updateUser}
             onCreateUser={createUser}
+            onResetUserTwoFactor={(id) => void resetUserTwoFactor(id)}
             onIntegrationsSync={(integrations) =>
               setSettings((current) => ({ ...current, integrations }))
             }

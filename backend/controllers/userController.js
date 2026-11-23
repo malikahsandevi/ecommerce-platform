@@ -354,6 +354,50 @@ const deleteUser = async (req, res) => {
     }
 };
 
+// @desc    Reset a staff account's two-factor authentication
+// @route   POST /api/users/:id/reset-2fa
+// @access  Super Admin only (the route enforces the role, and the
+//          Settings Lock save gate verifies the caller's own password
+//          for this save — a 2FA reset is a Settings → Users & Roles
+//          write like any other staff administration). Clearing the
+//          secret + flag means the account enrols again at its next
+//          sign-in: mandatory enrolment happens in the login flow
+//          itself, so a reset can never leave an account without 2FA
+//          for longer than until its next login.
+const resetUserTwoFactor = async (req, res) => {
+    try {
+        const target = await User.findById(req.params.id).select('+twoFactorSecret');
+        if (!target) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        // Customer accounts never sign in to the panel and hold no
+        // panel 2FA — there is nothing to reset on them.
+        if (target.role === 'Customer') {
+            return res.status(400).json({
+                message: 'Customer accounts do not use two-factor authentication.'
+            });
+        }
+        // No self-reset from inside a session: your own 2FA is managed
+        // by signing in (a reset here would let a hijacked session
+        // strip its own second factor with no code at all).
+        if (String(req.user?._id) === String(target._id)) {
+            return res.status(400).json({
+                message: "You can't reset your own two-factor authentication. Ask another Super Admin to reset it for you."
+            });
+        }
+
+        target.twoFactorEnabled = false;
+        target.twoFactorSecret = null;
+        await target.save();
+
+        const user = await User.findById(target._id).select('-password');
+        await User.withCodes(user);
+        res.json(user);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
 // @desc    Get a customer's full shopping profile
 // @route   GET /api/users/:id/profile
 // @access  Admin
@@ -480,6 +524,7 @@ module.exports = {
     createUser,
     updateUser,
     deleteUser,
+    resetUserTwoFactor,
     getUserProfile
 };
 

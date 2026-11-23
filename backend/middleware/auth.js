@@ -16,6 +16,15 @@ const protect = async (req, res, next) => {
         // The signing secret is managed in Settings → Credentials (DB
         // store, environment fallback) — never read process.env here.
         const decoded = jwt.verify(token, await getJwtSecret());
+        // Session tokens are minted WITHOUT a purpose claim. Every
+        // purpose-scoped token (the 2FA login/enrolment temp tokens,
+        // the Settings unlock proof) is a credential for its own step
+        // only — presenting one here must never act as a session,
+        // otherwise the second factor could be skipped entirely by
+        // replaying the temp token as a Bearer token.
+        if (decoded.purpose) {
+            return res.status(401).json({ message: 'Not authorized — invalid or expired token.' });
+        }
         const user = await User.findById(decoded.id).select('-password');
         if (!user) {
             return res.status(401).json({ message: 'Not authorized — account no longer exists.' });

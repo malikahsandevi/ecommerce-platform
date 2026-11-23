@@ -166,18 +166,28 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   /**
-   * First factor only. When the account has two-factor authentication
-   * on, the API answers with a temp token instead of a session — the
-   * caller must collect the TOTP code and finish with verifyTwoFactor.
+   * First factor only. The API answers with a temp token instead of a
+   * session whenever a second step is still owed — a TOTP code for an
+   * account with 2FA on (finish with verifyTwoFactor), or mandatory
+   * enrolment for an account without 2FA yet (finish with
+   * startLoginEnrolment + confirmLoginEnrolment). Every staff account
+   * has 2FA, asked only here, at sign-in.
    */
   const login = async (
     email: string,
     password: string,
-  ): Promise<{ status: 'authenticated' } | { status: 'two-factor-required'; tempToken: string }> => {
+  ): Promise<
+    | { status: 'authenticated' }
+    | { status: 'two-factor-required'; tempToken: string }
+    | { status: 'two-factor-setup-required'; tempToken: string }
+  > => {
     try {
       const res = await apiClient.post('/auth/login', { email, password });
       if (res.data?.twoFactorRequired) {
         return { status: 'two-factor-required', tempToken: res.data.tempToken };
+      }
+      if (res.data?.twoFactorSetupRequired) {
+        return { status: 'two-factor-setup-required', tempToken: res.data.tempToken };
       }
       completeLogin(res.data, email);
       return { status: 'authenticated' };
@@ -194,9 +204,32 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return true;
   };
 
+  /**
+   * Mandatory enrolment, step 1: exchange the enrolment temp token for
+   * the account's fresh TOTP secret + QR code. The secret is shown only
+   * in this sign-in flow (and the in-panel setup) — never again.
+   */
+  const startLoginEnrolment = async (
+    tempToken: string,
+  ): Promise<{ secret: string; qrCode: string; otpauthUrl: string }> => {
+    const res = await apiClient.post('/auth/2fa/enroll-setup', { tempToken });
+    return res.data;
+  };
+
+  /**
+   * Mandatory enrolment, step 2: a live code from the authenticator
+   * just enrolled turns 2FA on for the account, and the API answers
+   * with the real session — enrolment completes the sign-in.
+   */
+  const confirmLoginEnrolment = async (tempToken: string, code: string): Promise<boolean> => {
+    const res = await apiClient.post('/auth/2fa/enroll-confirm', { tempToken, code });
+    completeLogin(res.data, '');
+    return true;
+  };
+
   return (
     <AuthContext.Provider
-      value={{ isAuthenticated, isRestoring, user, login, verifyTwoFactor, logout, sessionNotice, clearNotice, hasPermission }}
+      value={{ isAuthenticated, isRestoring, user, login, verifyTwoFactor, startLoginEnrolment, confirmLoginEnrolment, logout, sessionNotice, clearNotice, hasPermission }}
     >
       {children}
     </AuthContext.Provider>

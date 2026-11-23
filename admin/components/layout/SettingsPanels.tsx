@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import Image from "next/image";
-import { Check, ChevronDown, ChevronUp, Copy, Eye, EyeOff, KeyRound, LoaderCircle, Pencil, Play, Plus, RotateCcw, Save, ShieldCheck, Trash2, Code2 } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Copy, Eye, EyeOff, KeyRound, LoaderCircle, Pencil, Play, Plus, RotateCcw, Save, ShieldCheck, ShieldOff, Trash2, Code2 } from "lucide-react";
 import ServiceIcon from "@/components/ui/ServiceIcon";
 import {
   SERVICE_CATALOGUE,
@@ -107,6 +107,7 @@ export function SettingsPanel({
   onDeleteUser,
   onUpdateUser,
   onCreateUser,
+  onResetUserTwoFactor,
   onIntegrationsSync,
 }: {
   activeMenu: string;
@@ -118,6 +119,7 @@ export function SettingsPanel({
   onDeleteUser: (id: string) => void;
   onUpdateUser: (id: string, values: UpdateUserValues) => Promise<void>;
   onCreateUser: (values: NewUserValues) => Promise<void>;
+  onResetUserTwoFactor: (id: string) => void;
 }) {
   switch (activeMenu) {
     case "General":
@@ -171,6 +173,7 @@ export function SettingsPanel({
           onDeleteUser={onDeleteUser}
           onUpdateUser={onUpdateUser}
           onCreateUser={onCreateUser}
+          onResetUserTwoFactor={onResetUserTwoFactor}
         />
       );
     case "Security":
@@ -549,11 +552,13 @@ function UsersPanel({
   onDeleteUser,
   onUpdateUser,
   onCreateUser,
+  onResetUserTwoFactor,
 }: {
   users: SettingsUser[];
   onDeleteUser: (id: string) => void;
   onUpdateUser: (id: string, values: UpdateUserValues) => Promise<void>;
   onCreateUser: (values: NewUserValues) => Promise<void>;
+  onResetUserTwoFactor: (id: string) => void;
 }) {
   const { t } = useLanguage();
   const { user: sessionUser, hasPermission } = useAdminAuth();
@@ -1076,6 +1081,27 @@ function UsersPanel({
                   >
                     <Pencil size={16} />
                   </button>
+                  {/* Reset 2FA (Super Admin only): rendered only
+                      where there is something to reset — a staff
+                      account whose 2FA is on. Customers never hold
+                      panel 2FA, and an account without it enrols at
+                      sign-in anyway. Disabled on your own row: a
+                      self-reset from inside a session is not offered
+                      (the API refuses it too). The page handler runs
+                      the confirm dialog + the Settings Lock per-save
+                      password check, like every Users & Roles write. */}
+                  {user.role !== "Customer" && user.twoFactorEnabled && (
+                    <button
+                      type="button"
+                      aria-label={t("Reset two-factor authentication for {email}").replace("{email}", user.email)}
+                      title={t("Reset 2FA")}
+                      disabled={!isSuperAdmin || isOwnRow}
+                      onClick={() => onResetUserTwoFactor(user._id)}
+                      className="rounded-md p-1.5 text-[var(--text-muted)] transition-colors duration-200 hover:bg-[var(--primary-soft)] hover:text-[var(--primary)] group-hover:text-[var(--primary)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[var(--text-muted)]"
+                    >
+                      <ShieldOff size={16} />
+                    </button>
+                  )}
                   <button
                     type="button"
                     aria-label={t("Delete {email}").replace("{email}", user.email)}

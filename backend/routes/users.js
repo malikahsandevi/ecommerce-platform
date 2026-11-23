@@ -6,12 +6,14 @@ const {
     createUser,
     updateUser,
     deleteUser,
+    resetUserTwoFactor,
     getUserProfile
 } = require('../controllers/userController');
 const { protect } = require('../middleware/auth');
 const { requireStaff } = require('../middleware/admin');
 const { requirePermission, requireAnyPermission } = require('../middleware/permissions');
 const {
+    requireSettingsSavePassword,
     requireSavePasswordForUserCreate,
     requireSavePasswordForUserUpdate,
     requireSavePasswordForUserDelete,
@@ -79,6 +81,28 @@ router.route('/:id')
     .get(requireAnyPermission([['Users', 'view'], ['Customers', 'view']]), getUserById)
     .put(guardUpdate, requireSavePasswordForUserUpdate, updateUser)
     .delete(guardDelete, requireSavePasswordForUserDelete, deleteUser);
+
+// Reset a staff account's 2FA (Settings → Users & Roles). Super Admin
+// only — the same inline role gate the role-management routes use —
+// and, because it administers a staff account, it is a Settings save:
+// the caller's own password is verified for this save by the Settings
+// Lock gate, exactly like the create/update/delete writes above. The
+// reset account enrols again at its next sign-in.
+const guardResetTwoFactor = (req, res, next) => {
+    if (req.user.role !== 'Super Admin') {
+        return res.status(403).json({
+            message: 'Only a Super Admin can reset two-factor authentication.',
+        });
+    }
+    return next();
+};
+
+router.post(
+    '/:id/reset-2fa',
+    guardResetTwoFactor,
+    requireSettingsSavePassword,
+    resetUserTwoFactor
+);
 
 // The customer's shopping profile: stored lists + order-derived stats.
 router.get(
