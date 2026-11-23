@@ -2,6 +2,7 @@ const Order = require('../models/Order');
 const Product = require('../models/Product');
 const User = require('../models/User');
 const { logActivity } = require('../utils/activity');
+const { resolveCoupon, recordCouponUse } = require('../utils/coupon');
 const { sendOrderConfirmationEmail, sendOrderStatusEmail } = require('../utils/emailTemplates');
 
 // Human-readable, unique order numbers: ORD-YYMMDD-XXXX where XXXX is a
@@ -64,7 +65,7 @@ const logLowStockAlerts = async (items) => {
 // @access  Admin
 const getOrders = async (req, res) => {
     try {
-        const orders = await Order.find({}).populate('user', 'firstName lastName email avatar');
+        const orders = await Order.find({}).populate('user', 'firstName lastName email avatar').populate('coupon', 'code');
         await Order.withCodes(orders);
         res.json(orders);
     } catch (error) {
@@ -77,7 +78,7 @@ const getOrders = async (req, res) => {
 // @access  Admin
 const getOrderById = async (req, res) => {
     try {
-        const order = await Order.findById(req.params.id).populate('user', 'firstName lastName email avatar');
+        const order = await Order.findById(req.params.id).populate('user', 'firstName lastName email avatar').populate('coupon', 'code');
         if (!order) {
             return res.status(404).json({ message: 'Order not found' });
         }
@@ -113,6 +114,32 @@ const createOrder = async (req, res) => {
             }
         }
 
+        // Coupon (optional): a caller may pass `couponCode` — the admin's
+        // Create Order form does. The shared resolver (utils/coupon.js)
+        // validates it against the real coupon rules and computes the
+        // discount from the items subtotal; any rule failure aborts the
+        // order with the resolver's message — no phantom discount is
+        // ever stored. Callers that pass no code (the storefront today)
+        // skip this entirely and keep their exact previous behaviour.
+        const couponCode = typeof data.couponCode === 'string' ? data.couponCode.trim() : '';
+        delete data.couponCode;
+        let appliedCoupon = null;
+        if (couponCode) {
+            const subtotal = Number(data.subtotal) || 0;
+            const resolved = await resolveCoupon(couponCode, subtotal);
+            appliedCoupon = resolved.coupon;
+            data.coupon = appliedCoupon._id;
+            data.discount = resolved.discount;
+            data.total =
+                Math.round(
+                    (subtotal -
+                        resolved.discount +
+                        (Number(data.tax) || 0) +
+                        (Number(data.shippingCost) || 0)) *
+                        100
+                ) / 100;
+        }
+
         // Generate the order number here unless the caller supplied one.
         let order = null;
         let lastError = null;
@@ -134,6 +161,9 @@ const createOrder = async (req, res) => {
             }
         }
         if (!order) throw lastError || new Error('Could not create the order.');
+
+        // The redemption counts only once the order carrying it exists.
+        if (appliedCoupon) await recordCouponUse(appliedCoupon._id);
 
         await adjustStock(order.items, -1);
 

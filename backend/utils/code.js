@@ -19,11 +19,11 @@ const randomCode = () => {
 };
 
 /** Generates a code that is unique within the given model's collection. */
-const generateUniqueCode = async (Model) => {
+const generateUniqueCode = async (Model, field = 'code') => {
     for (let attempt = 0; attempt < 12; attempt++) {
         const candidate = randomCode();
         // eslint-disable-next-line no-await-in-loop
-        if (!(await Model.exists({ code: candidate }))) return candidate;
+        if (!(await Model.exists({ [field]: candidate }))) return candidate;
     }
     // Astronomically unlikely with 36^6 combinations — fail loudly rather
     // than loop forever.
@@ -41,10 +41,14 @@ const generateUniqueCode = async (Model) => {
  *   simply reading the live list endpoints backfills legacy records
  *   without a migration script. Works for mongoose documents and lean
  *   objects alike.
+ * - Option `{ field }`: stores the public code under a different field
+ *   name when `code` is already taken by the resource itself — Coupon,
+ *   whose `code` is the customer-facing redeem code, keeps its public
+ *   ID in `publicId` under exactly the same rules.
  */
-const addCodeSupport = (schema) => {
+const addCodeSupport = (schema, { field = 'code' } = {}) => {
     schema.add({
-        code: {
+        [field]: {
             type: String,
             unique: true,
             sparse: true,
@@ -53,8 +57,8 @@ const addCodeSupport = (schema) => {
         },
     });
     schema.pre('save', async function () {
-        if (this.code && CODE_PATTERN.test(this.code)) return;
-        this.code = await generateUniqueCode(this.constructor);
+        if (this[field] && CODE_PATTERN.test(this[field])) return;
+        this[field] = await generateUniqueCode(this.constructor, field);
     });
 
     schema.statics.withCodes = async function (docs) {
@@ -62,14 +66,14 @@ const addCodeSupport = (schema) => {
         const list = Array.isArray(docs) ? docs : [docs];
         for (const doc of list) {
             if (!doc) continue;
-            const current = typeof doc.get === 'function' ? doc.get('code') : doc.code;
+            const current = typeof doc.get === 'function' ? doc.get(field) : doc[field];
             if (current && CODE_PATTERN.test(current)) continue;
             // eslint-disable-next-line no-await-in-loop
-            const code = await generateUniqueCode(this);
+            const code = await generateUniqueCode(this, field);
             // eslint-disable-next-line no-await-in-loop
-            await this.updateOne({ _id: doc._id }, { $set: { code } });
-            if (typeof doc.set === 'function') doc.set('code', code);
-            else doc.code = code;
+            await this.updateOne({ _id: doc._id }, { $set: { [field]: code } });
+            if (typeof doc.set === 'function') doc.set(field, code);
+            else doc[field] = code;
         }
         return docs;
     };

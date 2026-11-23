@@ -1,5 +1,6 @@
 // models/Coupon.js
 const mongoose = require('mongoose');
+const { addCodeSupport } = require('../utils/code');
 
 const couponSchema = new mongoose.Schema({
   // Basic Information
@@ -88,5 +89,11 @@ const couponSchema = new mongoose.Schema({
 // Indexes
 couponSchema.index({ validFrom: 1, validUntil: 1 });
 couponSchema.index({ isActive: 1 });
+
+// Short public ID (6 chars, A–Z0–9) — see utils/code.js. The coupon's
+// own `code` field above is the customer-facing REDEEM code, so the
+// public ID lives in `publicId` under the same generation/uniqueness
+// rules every other resource's `code` follows.
+addCodeSupport(couponSchema, { field: 'publicId' });
 
 module.exports = mongoose.model('Coupon', couponSchema);

@@ -246,6 +246,14 @@ async function buildOrderPayload(data: any) { // eslint-disable-line @typescript
     shippingCost: 0,
     discount: 0,
     total: subtotal,
+    // Only a code the form actually APPLIED (validated live) is sent —
+    // a half-typed code never reaches the server. The server re-runs
+    // the same validation in createOrder and computes the real
+    // discount/total, so this preview can never drift into the record.
+    couponCode:
+      data.couponApplied && data.couponCode
+        ? String(data.couponCode).trim().toUpperCase()
+        : undefined,
     shippingAddress,
     billingAddress: shippingAddress,
     paymentMethod: data.paymentMethod || 'cod',

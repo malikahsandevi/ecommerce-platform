@@ -37,6 +37,8 @@ export interface Order {
   tax?: number;
   shippingCost?: number;
   discount?: number;
+  /** Populated coupon reference (code only) when the order used one. */
+  coupon?: { code?: string } | string | null;
   total?: number;
   shippingAddress?: OrderAddress;
   billingAddress?: OrderAddress;
@@ -188,6 +190,9 @@ export const orderConfig = {
       Subtotal: formatMoney(order.subtotal ?? 0, 2),
       Tax: formatMoney(order.tax ?? 0, 2),
       "Shipping Cost": formatMoney(order.shippingCost ?? 0, 2),
+      ...(order.coupon && typeof order.coupon === "object" && order.coupon.code
+        ? { Coupon: order.coupon.code }
+        : {}),
       Discount: formatMoney(order.discount ?? 0, 2),
       Total: formatMoney(order.total ?? 0, 2),
       "Payment Method": (order.paymentMethod || "—").toUpperCase(),
@@ -210,6 +215,7 @@ export const orderConfig = {
         status: "pending",
         paymentMethod: "cod",
         paymentStatus: "pending",
+        couponCode: "",
         shippingCarrier: "",
         trackingNumber: "",
         shippingStreet: "",
@@ -332,6 +338,15 @@ export const orderConfig = {
       required: true,
       colSpan: 1,
       options: PAYMENT_STATUS_OPTIONS,
+      section: "Payment",
+    },
+    {
+      name: "couponCode",
+      label: "Coupon Code",
+      type: "coupon",
+      colSpan: 2,
+      placeholder: "Enter a coupon code",
+      helperText: "Optional. Apply validates the code against the item subtotal; the discount is taken off the order total.",
       section: "Payment",
     },
 

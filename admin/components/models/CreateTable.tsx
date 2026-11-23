@@ -419,10 +419,15 @@ export function CreateTable<T extends Record<string, any>>({
 
                     // 1. ID Column — the short public code when the row
                     // carries one, otherwise the truncated raw id.
+                    // `publicId` wins over `code`: a coupon's `code` is
+                    // its redeem code, while its public ID lives in
+                    // `publicId` under the same 6-char rules.
                     if (colKeyStr === "_id" || colKeyStr === "id") {
-                      const displayId = item.code
-                        ? String(item.code)
-                        : formatId(rawValue);
+                      const displayId = item.publicId
+                        ? String(item.publicId)
+                        : item.code
+                          ? String(item.code)
+                          : formatId(rawValue);
                       return (
                         <td
                           key={String(colKey) + idx}

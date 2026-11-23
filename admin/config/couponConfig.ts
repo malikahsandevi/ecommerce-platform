@@ -5,6 +5,8 @@ import { formatMoney, getCurrencySymbol } from "@/services/currency";
 export interface Coupon {
   _id?: string;
   id: number;
+  /** Generated 6-char public ID — distinct from `code`, the redeem code. */
+  publicId?: string;
   code: string;
   type: "percentage" | "fixed_amount" | "free_shipping" | string;
   value: number | string;
@@ -75,7 +77,7 @@ export const couponConfig = {
   ],
 
   // Search Fields
-  searchFields: ["code", "discountType", "description"],
+  searchFields: ["code", "publicId", "discountType", "description"],
 
   // Table Column Labels
   columnHeaders: {
@@ -91,6 +93,7 @@ export const couponConfig = {
   mapTableData: (coupon: Coupon) => ({
     id: coupon._id || String(coupon.id),
     _id: coupon._id,
+    publicId: coupon.publicId,
     code: coupon.code,
     type: getDiscountType(coupon) === "percentage" ? "Percentage (%)" : `Fixed Amount (${getCurrencySymbol()})`,
     value: getDiscountType(coupon) === "percentage"
@@ -103,6 +106,7 @@ export const couponConfig = {
   // Map Data for DetailPanel Component
   mapDetailData: (coupon: Coupon) => ({
     id: coupon._id || String(coupon.id),
+    publicId: coupon.publicId,
     title: `Code: ${coupon.code}`,
     status: getCouponStatus(coupon),
     shortDescription: coupon.description || `Discount: ${getDiscountType(coupon) === "percentage" ? `${getDiscountValue(coupon)}%` : formatMoney(getDiscountValue(coupon), 2)}`,

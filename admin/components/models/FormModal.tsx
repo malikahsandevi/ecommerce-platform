@@ -21,6 +21,7 @@ import ProductMediaManager, {
   GalleryImage,
 } from "@/components/models/ProductMediaManager";
 import CustomerShoppingProfile from "@/components/models/CustomerShoppingProfile";
+import CouponApplyField from "@/components/models/CouponApplyField";
 import { mediaService } from "@/services/resourceRegistry";
 import { extractApiError } from "@/services/api";
 import { useLanguage } from "@/services/i18n";
@@ -40,7 +41,8 @@ export type FormFieldType =
   | "key-value"
   | "image"
   | "media-gallery"
-  | "shopping-profile";
+  | "shopping-profile"
+  | "coupon";
 
 export interface FormField {
   name: string; // Key in formData (e.g. "title", "sku", "address.city")
@@ -766,6 +768,33 @@ export const FormModal: React.FC<FormModalProps> = ({
             )}
           </div>
         );
+
+      case "coupon": {
+        // Create Order only: a coupon is applied when the order is
+        // placed (the server validates it again and counts the use) —
+        // editing an existing order never re-opens coupon entry.
+        if (formMode === "edit") return null;
+        return (
+          <div key={field.name} className={colClass}>
+            <label className="font-bold text-[var(--text)] block mb-1 text-xs">
+              {t(field.label)} {field.required && <span className="text-red-500">*</span>}
+            </label>
+            <CouponApplyField
+              value={typeof rawValue === "string" ? rawValue : ""}
+              applied={formData?.couponApplied === true}
+              discount={formData?.couponDiscount}
+              productId={formData?.product ? String(formData.product) : ""}
+              quantity={Number(formData?.quantity) || 1}
+              onFieldChange={handleFieldChange}
+            />
+            {field.helperText && (
+              <span className="text-[10px] text-[var(--text-muted)] mt-0.5 block">
+                {t(field.helperText)}
+              </span>
+            )}
+          </div>
+        );
+      }
 
       case "shopping-profile": {
         // The customer form's Shopping Profile section: this field's
