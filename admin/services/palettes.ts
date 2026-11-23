@@ -85,6 +85,118 @@ export function resolvePaletteId(appearance: {
   return null;
 }
 
+export type PaletteTheme = "dark" | "light";
+
+const hexToRgb = (hex: string): [number, number, number] => [
+  parseInt(hex.slice(1, 3), 16),
+  parseInt(hex.slice(3, 5), 16),
+  parseInt(hex.slice(5, 7), 16),
+];
+
+const rgbToHex = (rgb: [number, number, number]): string =>
+  `#${rgb.map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, "0")).join("")}`;
+
+/** Mix a hex color toward white (amount 0..1). */
+export const tint = (hex: string, amount: number): string => {
+  const rgb = hexToRgb(hex);
+  return rgbToHex([rgb[0] + (255 - rgb[0]) * amount, rgb[1] + (255 - rgb[1]) * amount, rgb[2] + (255 - rgb[2]) * amount]);
+};
+
+/** Mix a hex color toward black (amount 0..1). */
+export const shade = (hex: string, amount: number): string => {
+  const rgb = hexToRgb(hex);
+  return rgbToHex([rgb[0] * (1 - amount), rgb[1] * (1 - amount), rgb[2] * (1 - amount)]);
+};
+
+/** Mix one hex color toward another (amount 0..1). */
+export const mix = (from: string, to: string, amount: number): string => {
+  const a = hexToRgb(from);
+  const b = hexToRgb(to);
+  return rgbToHex([
+    a[0] + (b[0] - a[0]) * amount,
+    a[1] + (b[1] - a[1]) * amount,
+    a[2] + (b[2] - a[2]) * amount,
+  ]);
+};
+
+/** The four --primary* values for a base color under a theme. The
+ *  root layout's pre-paint script computes these with the same math,
+ *  so the first paint and the runtime application always agree. */
+export function adminColorVars(color: string, theme: PaletteTheme): Record<string, string> {
+  if (theme === "dark") {
+    return {
+      "--primary": color,
+      "--primary-dark": shade(color, 0.15),
+      "--primary-light": shade(color, 0.12),
+      "--primary-soft": shade(color, 0.8),
+    };
+  }
+  return {
+    "--primary": color,
+    "--primary-dark": shade(color, 0.12),
+    "--primary-light": tint(color, 0.76),
+    "--primary-soft": tint(color, 0.93),
+  };
+}
+
+const ARROW_PATHS = {
+  up: "M5 2 9 8 H1 Z",
+  down: "M5 8 1 2 H9 Z",
+  left: "M2 5 8 1 V9 Z",
+  right: "M8 5 2 9 V1 Z",
+} as const;
+
+const arrowUri = (path: string, fill: string): string =>
+  `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='${path}' fill='${fill.replace("#", "%23")}'/%3E%3C/svg%3E")`;
+
+/**
+ * The scrollbar arrow glyphs as CSS variables. Chromium IGNORES
+ * -webkit-mask and clip-path on ::-webkit-scrollbar-button (the
+ * palette round's mask re-implementation rendered solid boxes —
+ * Ahsan: "arrow lagwo wapis"), so the triangles are background-image
+ * SVGs, the technique that actually renders. The fill is baked from
+ * the palette's primary / primary-dark, which keeps the arrows
+ * palette-driven with no hard-coded hex in the stylesheet: the
+ * globals.css defaults cover the default palette, and these vars
+ * override them whenever a palette is applied (runtime, pre-paint
+ * script and SSR all set them from the same math).
+ */
+export function scrollbarArrowVars(primary: string, primaryDark: string): Record<string, string> {
+  return {
+    "--sb-arrow-up": arrowUri(ARROW_PATHS.up, primary),
+    "--sb-arrow-down": arrowUri(ARROW_PATHS.down, primary),
+    "--sb-arrow-left": arrowUri(ARROW_PATHS.left, primary),
+    "--sb-arrow-right": arrowUri(ARROW_PATHS.right, primary),
+    "--sb-arrow-up-hover": arrowUri(ARROW_PATHS.up, primaryDark),
+    "--sb-arrow-down-hover": arrowUri(ARROW_PATHS.down, primaryDark),
+    "--sb-arrow-left-hover": arrowUri(ARROW_PATHS.left, primaryDark),
+    "--sb-arrow-right-hover": arrowUri(ARROW_PATHS.right, primaryDark),
+  };
+}
+
+/** Every theme variable a palette drives. The derived surface /
+ *  border / text shades come from the palette's own background and
+ *  text colors, so a kept palette recolors the panel coherently —
+ *  not just its accents. The root layout's pre-paint script computes
+ *  these with the same math from the stored colors, so the first
+ *  paint and the runtime application always agree. */
+export function paletteVars(palette: PaletteDef, theme: PaletteTheme): Record<string, string> {
+  const { primary, secondary, text, background } = palette.colors;
+  const primaryVars = adminColorVars(primary, theme);
+  return {
+    ...primaryVars,
+    "--secondary": secondary,
+    "--text": text,
+    "--background": background,
+    "--surface": mix(background, text, 0.07),
+    "--surface-muted": mix(background, text, 0.12),
+    "--border": mix(background, text, 0.18),
+    "--text-soft": mix(text, background, 0.25),
+    "--text-muted": mix(text, background, 0.45),
+    ...scrollbarArrowVars(primary, primaryVars["--primary-dark"]),
+  };
+}
+
 /** Sanitises a stored last-used list: known palette ids only,
  *  de-duplicated, most-recent-first, capped at 4. */
 export function sanitizeLastUsed(value: unknown): string[] {

@@ -8,6 +8,17 @@
   --primary-soft: #fff7ed;
   --primary-dark: #ea580c;
 
+  /* Scrollbar arrow glyphs (default palette; a kept palette overrides
+     these via services/palettes.ts scrollbarArrowVars) */
+  --sb-arrow-up: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M5 2 9 8 H1 Z' fill='%23f97416'/%3E%3C/svg%3E");
+  --sb-arrow-down: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M5 8 1 2 H9 Z' fill='%23f97416'/%3E%3C/svg%3E");
+  --sb-arrow-left: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2 5 8 1 V9 Z' fill='%23f97416'/%3E%3C/svg%3E");
+  --sb-arrow-right: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M8 5 2 9 V1 Z' fill='%23f97416'/%3E%3C/svg%3E");
+  --sb-arrow-up-hover: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M5 2 9 8 H1 Z' fill='%23ea580c'/%3E%3C/svg%3E");
+  --sb-arrow-down-hover: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M5 8 1 2 H9 Z' fill='%23ea580c'/%3E%3C/svg%3E");
+  --sb-arrow-left-hover: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2 5 8 1 V9 Z' fill='%23ea580c'/%3E%3C/svg%3E");
+  --sb-arrow-right-hover: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M8 5 2 9 V1 Z' fill='%23ea580c'/%3E%3C/svg%3E");
+
   /* Secondary */
   --secondary: #1f2937;
 
@@ -33,6 +44,16 @@
   --primary-light: #ea580c;
   --primary-soft: #271a12;
   --primary-dark: #c2410c;
+
+  /* Scrollbar arrow glyphs (default palette, dark derivations) */
+  --sb-arrow-up: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M5 2 9 8 H1 Z' fill='%23f97316'/%3E%3C/svg%3E");
+  --sb-arrow-down: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M5 8 1 2 H9 Z' fill='%23f97316'/%3E%3C/svg%3E");
+  --sb-arrow-left: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2 5 8 1 V9 Z' fill='%23f97316'/%3E%3C/svg%3E");
+  --sb-arrow-right: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M8 5 2 9 V1 Z' fill='%23f97316'/%3E%3C/svg%3E");
+  --sb-arrow-up-hover: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M5 2 9 8 H1 Z' fill='%23c2410c'/%3E%3C/svg%3E");
+  --sb-arrow-down-hover: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M5 8 1 2 H9 Z' fill='%23c2410c'/%3E%3C/svg%3E");
+  --sb-arrow-left-hover: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2 5 8 1 V9 Z' fill='%23c2410c'/%3E%3C/svg%3E");
+  --sb-arrow-right-hover: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M8 5 2 9 V1 Z' fill='%23c2410c'/%3E%3C/svg%3E");
 
   /* Secondary */
   --secondary: #334155;
@@ -144,23 +165,23 @@ html[data-sidebar="collapsed"] .admin-sidebar .sb-center {
    end carries exactly one arrow. Firefox has no scrollbar-button
    support and ignores these rules; the sidebar nav above keeps its
    fully hidden scrollbar.
-   The triangles are MASKS, not colored images: the button's
-   background-color — the theme's --primary — shows through the
-   triangle's alpha shape, so the arrows follow whatever palette is
-   applied, exactly like the thumb. (They used to be SVG data URIs
-   with a hard-coded orange fill, so they stayed orange under every
-   other palette — Ahsan flagged that: "jo color apply ho usme
-   change ho sab".) Geometry is unchanged: 12px buttons, 6px
-   glyphs, solid triangles. */
+   The triangles are background-image SVGs — the ONLY technique
+   Chromium honours on scrollbar buttons: it ignores -webkit-mask
+   and clip-path there (the palette round's mask version painted
+   the whole button box solid — Ahsan: "arrow lagwo wapis, boxes
+   laga diye hain"). The fill colour rides in CSS variables
+   (--sb-arrow-*): the defaults above carry the default palette, and
+   services/palettes.ts (scrollbarArrowVars) recomputes them from
+   the kept palette's primary / primary-dark whenever a palette is
+   applied, so the arrows follow the palette exactly like the thumb
+   with no hard-coded hex in these rules. Geometry is unchanged:
+   12px buttons, 6px glyphs, solid triangles. */
 ::-webkit-scrollbar-button {
   display: block;
-  background-color: var(--primary);
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
-  -webkit-mask-position: center;
-  mask-position: center;
-  -webkit-mask-size: 6px 6px;
-  mask-size: 6px 6px;
+  background-color: transparent;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 6px 6px;
 }
 ::-webkit-scrollbar-button:vertical:increment:start,
 ::-webkit-scrollbar-button:vertical:decrement:end,
@@ -170,29 +191,31 @@ html[data-sidebar="collapsed"] .admin-sidebar .sb-center {
 }
 ::-webkit-scrollbar-button:vertical:decrement {
   height: 12px;
-  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M5 2 9 8 H1 Z' fill='%23000000'/%3E%3C/svg%3E");
-  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M5 2 9 8 H1 Z' fill='%23000000'/%3E%3C/svg%3E");
+  background-image: var(--sb-arrow-up);
 }
 ::-webkit-scrollbar-button:vertical:increment {
   height: 12px;
-  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M5 8 1 2 H9 Z' fill='%23000000'/%3E%3C/svg%3E");
-  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M5 8 1 2 H9 Z' fill='%23000000'/%3E%3C/svg%3E");
+  background-image: var(--sb-arrow-down);
 }
 ::-webkit-scrollbar-button:horizontal:decrement {
   width: 12px;
-  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2 5 8 1 V9 Z' fill='%23000000'/%3E%3C/svg%3E");
-  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2 5 8 1 V9 Z' fill='%23000000'/%3E%3C/svg%3E");
+  background-image: var(--sb-arrow-left);
 }
 ::-webkit-scrollbar-button:horizontal:increment {
   width: 12px;
-  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M8 5 2 9 V1 Z' fill='%23000000'/%3E%3C/svg%3E");
-  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M8 5 2 9 V1 Z' fill='%23000000'/%3E%3C/svg%3E");
+  background-image: var(--sb-arrow-right);
 }
-::-webkit-scrollbar-button:vertical:decrement:hover,
-::-webkit-scrollbar-button:vertical:increment:hover,
-::-webkit-scrollbar-button:horizontal:decrement:hover,
+::-webkit-scrollbar-button:vertical:decrement:hover {
+  background-image: var(--sb-arrow-up-hover, var(--sb-arrow-up));
+}
+::-webkit-scrollbar-button:vertical:increment:hover {
+  background-image: var(--sb-arrow-down-hover, var(--sb-arrow-down));
+}
+::-webkit-scrollbar-button:horizontal:decrement:hover {
+  background-image: var(--sb-arrow-left-hover, var(--sb-arrow-left));
+}
 ::-webkit-scrollbar-button:horizontal:increment:hover {
-  background-color: var(--primary-dark);
+  background-image: var(--sb-arrow-right-hover, var(--sb-arrow-right));
 }
 
 /* Number inputs: the browser's native spinner arrows are hidden

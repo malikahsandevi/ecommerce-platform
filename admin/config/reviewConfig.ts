@@ -68,7 +68,10 @@ export const reviewConfig = {
   ],
 
   // Search Fields
-  searchFields: ["title", "content", "code"],
+  // product/user are populated references — the list search flattens
+  // them, so product and customer names are searchable too (the
+  // productName/customerName fallbacks cover unpopulated rows).
+  searchFields: ["title", "content", "code", "product", "user", "productName", "customerName"],
 
   // Table Column Labels
   columnHeaders: {

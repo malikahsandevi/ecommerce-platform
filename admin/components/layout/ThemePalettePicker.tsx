@@ -16,12 +16,20 @@ import {
   resolvePaletteId,
   sanitizeLastUsed,
 } from "@/services/palettes";
-import { applyPalette, mix, persistPalette } from "@/services/appearance";
+import {
+  beginPalettePreview,
+  endPalettePreview,
+  mix,
+  persistPalette,
+  revertPalettePreview,
+  usePalettePreview,
+} from "@/services/appearance";
 
-/** The Keep/Revert confirmation window, in seconds (Ahsan's spec).
+/** The preview window, in seconds (Ahsan's spec: 30 — time to walk
+ *  the panel and judge the colors before the Keep/Revert popup).
  *  Tests may shorten it through a window override; the shipped
- *  default is always 15. */
-export const PALETTE_CONFIRM_SECONDS = 15;
+ *  default is always 30. */
+export const PALETTE_CONFIRM_SECONDS = 30;
 
 function confirmSeconds(): number {
   try {
@@ -41,16 +49,20 @@ function confirmSeconds(): number {
  *
  * ONE table: rows are the four color roles (Primary / Secondary /
  * Text / Background), columns are ready-made palettes. Selecting a
- * column only PREVIEWS it — the dummy cards on the right recolor
- * live and the selected column carries a light border. There is no
- * per-color editing. The single palette colours the admin panel AND
- * the storefront together.
+ * column only previews it in the dummy cards on the right — the
+ * selected column carries a light border. There is no per-color
+ * editing. The single palette colours the admin panel AND the
+ * storefront together.
  *
- * Apply puts the previewed palette live on the whole panel and opens
- * the Keep/Revert popup with a 15-second countdown: Keep persists
- * it (Setting doc + device stores + last-used), Revert — or the
- * countdown running out, or a backdrop click — restores the
- * previously kept palette everywhere.
+ * Apply puts the palette on the WHOLE panel as a temporary preview
+ * and starts a 30-second countdown beside the Apply button — no
+ * popup yet, and the preview state lives in services/appearance (not
+ * in this component), so the admin can switch panels and come back
+ * without cancelling it. Nothing is persisted while previewing.
+ * When the countdown completes, the Keep/Revert popup appears: Keep
+ * saves the palette (Setting doc + device stores + last-used) with a
+ * "Theme saved" toast; Revert — or a backdrop click / Escape —
+ * restores the previously kept palette everywhere.
  */
 export default function ThemePalettePicker({
   data,
@@ -62,24 +74,29 @@ export default function ThemePalettePicker({
   // The palette actually KEPT (null = nothing kept yet; the default
   // palette is what the panel shows then).
   const [savedId, setSavedId] = useState<string | null>(() => resolvePaletteId(data));
-  // The column currently selected (preview only, until kept).
+  // The column currently selected (dummy-card preview only, until applied).
   const [selectedId, setSelectedId] = useState<string>(
     () => resolvePaletteId(data) ?? DEFAULT_PALETTE_ID,
   );
   const [lastUsed, setLastUsed] = useState<string[]>(() => sanitizeLastUsed(data?.paletteLastUsed));
-  const [pending, setPending] = useState(false);
   const [keeping, setKeeping] = useState(false);
-  const [remaining, setRemaining] = useState(PALETTE_CONFIRM_SECONDS);
-  const [totalSeconds, setTotalSeconds] = useState(PALETTE_CONFIRM_SECONDS);
 
-  const pendingRef = useRef(false);
-  const endAtRef = useRef(0);
+  // The running Apply-preview (module state in services/appearance —
+  // survives this panel unmounting). counting → inline countdown;
+  // deciding → the Keep/Revert popup.
+  const preview = usePalettePreview();
+  const previewActive = preview !== null;
+  const deciding = preview?.phase === "deciding";
+  const [remaining, setRemaining] = useState(0);
+
   const savedIdRef = useRef(savedId);
   savedIdRef.current = savedId;
+  const previewRef = useRef(preview);
+  previewRef.current = preview;
 
   // Sync the kept palette from the settings document when it changes
   // (initial load, a save elsewhere). A preview in progress is never
-  // stomped; the pending popup owns the screen while it is open.
+  // stomped.
   const dataKey = `${String(data?.palette ?? "")}|${String(data?.adminColor ?? "")}|${String(data?.storefrontColor ?? "")}`;
   const lastDataKeyRef = useRef("");
   useEffect(() => {
@@ -88,75 +105,72 @@ export default function ThemePalettePicker({
     const resolved = resolvePaletteId(data);
     setSavedId(resolved);
     setLastUsed(sanitizeLastUsed(data?.paletteLastUsed));
-    if (!pendingRef.current) setSelectedId(resolved ?? DEFAULT_PALETTE_ID);
+    if (!previewRef.current) setSelectedId(resolved ?? DEFAULT_PALETTE_ID);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dataKey]);
 
-  const revert = () => {
-    // Restore the previously kept palette everywhere: the panel's
-    // variables (clearing every override when nothing was ever kept)
-    // and the table selection.
-    applyPalette(savedIdRef.current);
-    setSelectedId(savedIdRef.current ?? DEFAULT_PALETTE_ID);
-    pendingRef.current = false;
-    setPending(false);
-  };
-  const revertRef = useRef(revert);
-  revertRef.current = revert;
-
-  // The countdown: reaching zero reverts on its own.
+  // While a preview runs, the table selection follows it; when it
+  // ends by Revert, the selection falls back to the kept palette.
+  const lastPreviewIdRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!pending) return;
-    const tick = () => {
-      const left = Math.max(0, Math.ceil((endAtRef.current - Date.now()) / 1000));
-      setRemaining(left);
-      if (left <= 0) revertRef.current();
-    };
+    if (preview) {
+      lastPreviewIdRef.current = preview.previewId;
+      setSelectedId(preview.previewId);
+    } else if (lastPreviewIdRef.current) {
+      lastPreviewIdRef.current = null;
+      setSelectedId(savedIdRef.current ?? DEFAULT_PALETTE_ID);
+    }
+  }, [preview]);
+
+  // The inline countdown ticker (the module owns the deadline and
+  // the phase flip; this only renders the remaining seconds).
+  useEffect(() => {
+    if (!preview || preview.phase !== "counting") return;
+    const tick = () =>
+      setRemaining(Math.max(0, Math.ceil((preview.endAt - Date.now()) / 1000)));
     tick();
     const interval = setInterval(tick, 200);
     return () => clearInterval(interval);
-  }, [pending]);
+  }, [preview]);
 
-  // Escape reverts too (the shared backdrop hook defers Escape to
-  // alertdialogs, so the popup handles its own).
+  const handleRevert = () => {
+    revertPalettePreview();
+    setSelectedId(savedIdRef.current ?? DEFAULT_PALETTE_ID);
+  };
+  const revertRef = useRef(handleRevert);
+  revertRef.current = handleRevert;
+
+  // Escape reverts while the popup is up (the shared backdrop hook
+  // defers Escape to alertdialogs, so the popup handles its own).
   useEffect(() => {
-    if (!pending) return;
+    if (!deciding) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") revertRef.current();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [pending]);
+  }, [deciding]);
 
-  const backdrop = useBackdropClose(() => revertRef.current(), pending && !keeping);
+  const backdrop = useBackdropClose(() => revertRef.current(), deciding && !keeping);
 
   const select = (id: string) => {
-    if (pendingRef.current) return;
+    if (previewRef.current) return;
     setSelectedId(id);
   };
 
   const handleApply = () => {
-    if (pendingRef.current) {
-      // Restart cleanly: restore the kept palette before applying
-      // the new preview on top of it.
-      revertRef.current();
-    }
+    if (previewRef.current) return;
     if (selectedId === savedIdRef.current) return;
-    const seconds = confirmSeconds();
-    // Applied for real — the whole panel recolors — but NOT yet
-    // persisted: Keep is what saves it.
-    applyPalette(selectedId);
-    setTotalSeconds(seconds);
-    setRemaining(seconds);
-    endAtRef.current = Date.now() + seconds * 1000;
-    pendingRef.current = true;
-    setPending(true);
+    // Applied to the whole panel as a preview — NOT persisted. The
+    // countdown runs in module state beside the Apply button; the
+    // Keep/Revert popup appears only when the time completes.
+    beginPalettePreview(selectedId, confirmSeconds(), savedIdRef.current);
   };
 
   const handleKeep = async () => {
-    if (keeping) return;
+    if (keeping || !previewRef.current) return;
     setKeeping(true);
-    const id = selectedId;
+    const id = previewRef.current.previewId;
     const nextLastUsed = [id, ...lastUsed.filter((entry) => entry !== id)].slice(0, 4);
     try {
       await settingsService.updateSection("appearance", {
@@ -167,9 +181,8 @@ export default function ThemePalettePicker({
       setSavedId(id);
       savedIdRef.current = id;
       setLastUsed(nextLastUsed);
-      pendingRef.current = false;
-      setPending(false);
-      toast.success(t("Palette saved."));
+      endPalettePreview();
+      toast.success(t("Theme saved"));
     } catch (error) {
       toast.error(extractApiError(error) || t("Unable to save settings."));
       revertRef.current();
@@ -179,7 +192,7 @@ export default function ThemePalettePicker({
   };
 
   const selected = paletteById(selectedId) ?? PALETTES[0];
-  const applyDisabled = pending || selectedId === savedId;
+  const applyDisabled = previewActive || selectedId === savedId;
   const columnStyle = (id: string): React.CSSProperties =>
     selectedId === id
       ? {
@@ -277,15 +290,33 @@ export default function ThemePalettePicker({
             </table>
           </div>
 
-          <div className="mt-4 flex items-center gap-3">
+          <div className="mt-4 flex flex-wrap items-center gap-3">
             <Button onClick={handleApply} disabled={applyDisabled} data-testid="palette-apply">
               {t("Apply")}
             </Button>
-            {selectedId !== savedId && !pending && (
+            {preview?.phase === "counting" ? (
+              <span className="flex items-center gap-2" data-testid="palette-countdown-inline">
+                <span className="text-sm font-bold tabular-nums text-[var(--text)]">
+                  {remaining}
+                </span>
+                <span className="text-xs text-[var(--text-muted)]">{t("seconds")}</span>
+                <span className="h-1.5 w-28 overflow-hidden rounded-full bg-[var(--surface-muted)]">
+                  <span
+                    className="block h-1.5 rounded-full bg-[var(--primary)] transition-all duration-200"
+                    style={{
+                      width: `${preview.totalSeconds > 0 ? (remaining / preview.totalSeconds) * 100 : 0}%`,
+                    }}
+                  />
+                </span>
+                <span className="text-xs text-[var(--text-muted)]">
+                  {t("Preview applied — look around the panel, nothing is saved yet.")}
+                </span>
+              </span>
+            ) : selectedId !== savedId && !previewActive ? (
               <span className="text-xs text-[var(--text-muted)]">
                 {t("Previewing — apply to use this palette.")}
               </span>
-            )}
+            ) : null}
           </div>
         </div>
 
@@ -347,7 +378,7 @@ export default function ThemePalettePicker({
         </div>
       </div>
 
-      {pending && (
+      {deciding && (
         <div
           className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 p-3 backdrop-blur-sm animate-in fade-in duration-150"
           role="alertdialog"
@@ -361,23 +392,8 @@ export default function ThemePalettePicker({
           >
             <h3 className="text-base font-semibold text-[var(--text)]">{t("Keep this palette?")}</h3>
             <p className="mt-2 text-sm text-[var(--text-muted)]">
-              {t("This palette is applied now. Keep it to save it, or revert to bring the previous palette back. If the time runs out, the previous palette comes back on its own.")}
+              {t("The preview time is complete. Keep this palette to save it as your theme, or revert to bring the previous palette back.")}
             </p>
-            <div className="mt-4 flex items-end justify-center gap-2">
-              <span
-                className="text-4xl font-bold tabular-nums text-[var(--text)]"
-                data-testid="palette-countdown"
-              >
-                {remaining}
-              </span>
-              <span className="pb-1 text-sm text-[var(--text-muted)]">{t("seconds")}</span>
-            </div>
-            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[var(--surface-muted)]">
-              <div
-                className="h-1.5 rounded-full bg-[var(--primary)] transition-all duration-200"
-                style={{ width: `${totalSeconds > 0 ? (remaining / totalSeconds) * 100 : 0}%` }}
-              />
-            </div>
             <div className="mt-5 flex justify-end gap-2">
               <Button variant="outline" onClick={() => revertRef.current()} disabled={keeping}>
                 {t("Revert")}

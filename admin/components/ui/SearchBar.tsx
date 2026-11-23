@@ -94,15 +94,46 @@ export const SearchBar = <TSearchData extends SearchableEntityRecord>({
         return;
       }
 
-      const query = searchQuery.toLowerCase().trim();
+      // Case-insensitive PARTIAL matching across ALL searchable fields
+      // combined. The old matcher tested the WHOLE query against each
+      // single field, so a multi-word query spanning two fields could
+      // never match: searching a customer by the displayed full name
+      // "ahsan ali" failed because no single field holds it (firstName
+      // is "ahsan", lastName is "ali"). Now the query is split into
+      // words and EVERY word must appear somewhere in the record's
+      // combined searchable text. Field values are flattened deeply,
+      // so populated references (an order's user, a product's
+      // category/brand, a review's product/user) contribute their
+      // names/emails too.
+      const tokens = searchQuery.toLowerCase().trim().split(/\s+/).filter(Boolean);
 
-      const filtered = searchSourceData.filter((item) =>
-        searchableFieldsKeys.some((key) => {
-          const val = item[key];
-          if (val === null || val === undefined) return false;
-          return String(val).toLowerCase().includes(query);
-        })
-      );
+      const collect = (val: unknown, out: string[], depth: number) => {
+        if (val === null || val === undefined || depth > 3) return;
+        if (
+          typeof val === "string" ||
+          typeof val === "number" ||
+          typeof val === "boolean"
+        ) {
+          out.push(String(val));
+          return;
+        }
+        if (Array.isArray(val)) {
+          val.forEach((v) => collect(v, out, depth + 1));
+          return;
+        }
+        if (typeof val === "object") {
+          Object.values(val as Record<string, unknown>).forEach((v) =>
+            collect(v, out, depth + 1),
+          );
+        }
+      };
+
+      const filtered = searchSourceData.filter((item) => {
+        const parts: string[] = [];
+        searchableFieldsKeys.forEach((key) => collect(item[key], parts, 0));
+        const haystack = parts.join(" ").toLowerCase();
+        return tokens.every((token) => haystack.includes(token));
+      });
 
       onSearchResultsUpdate(filtered);
     }, debounceDelay);

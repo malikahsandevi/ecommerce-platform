@@ -12,6 +12,7 @@
 import React from "react";
 import { cookies } from "next/headers";
 import AdminShell from "@/components/AdminShell";
+import { adminColorVars, paletteById, paletteVars, scrollbarArrowVars } from "@/services/palettes";
 import "./globals.css";
 
 export default async function RootLayout({
@@ -45,8 +46,44 @@ export default async function RootLayout({
   const languageCookie = (await cookies()).get("language")?.value;
   const ssrLang = (languageCookie && LANGUAGE_CODES[languageCookie]) || "en";
 
+  // The KEPT theme palette, mirrored into cookies by persistPalette,
+  // rendered as inline CSS variables on <html> by the SERVER — so the
+  // kept palette is in the very first painted frame (Ahsan's defect:
+  // a refresh flashed the default orange first, then the kept blue
+  // painted over it). The variables used to reach the page only via
+  // the pre-paint script / the settings fetch, both of which can land
+  // after the first frame on a cold load. The script below still
+  // re-derives them from localStorage before paint (it wins whenever
+  // the cookie and the device store disagree), and the derivations
+  // use the theme cookie's theme (falling back to dark; the script
+  // corrects a wrong-theme derivation pre-paint).
+  const cookieStore = await cookies();
+  const paletteCookie = cookieStore.get("admin-palette")?.value;
+  const ssrPalette = paletteById(paletteCookie ? decodeURIComponent(paletteCookie) : null);
+  const legacyColorCookie = cookieStore.get("admin-color")?.value;
+  const ssrLegacyColor =
+    !ssrPalette && legacyColorCookie && /^#[0-9a-fA-F]{6}$/.test(decodeURIComponent(legacyColorCookie))
+      ? decodeURIComponent(legacyColorCookie)
+      : null;
+  const ssrStyle: Record<string, string> | undefined = ssrPalette
+    ? paletteVars(ssrPalette, ssrTheme ?? "dark")
+    : ssrLegacyColor
+      ? {
+          ...adminColorVars(ssrLegacyColor, ssrTheme ?? "dark"),
+          ...scrollbarArrowVars(
+            ssrLegacyColor,
+            adminColorVars(ssrLegacyColor, ssrTheme ?? "dark")["--primary-dark"],
+          ),
+        }
+      : undefined;
+
   return (
-    <html lang={ssrLang} data-theme={ssrTheme} suppressHydrationWarning>
+    <html
+      lang={ssrLang}
+      data-theme={ssrTheme}
+      style={ssrStyle as React.CSSProperties | undefined}
+      suppressHydrationWarning
+    >
       <head>
         {/* Runs before first paint so the saved theme AND the saved
             sidebar state are applied without a flash. The theme stored
@@ -107,6 +144,16 @@ export default async function RootLayout({
                   styleP.setProperty("--border", toHexC(mixRgb(B, T, 0.18)));
                   styleP.setProperty("--text-soft", toHexC(mixRgb(T, B, 0.25)));
                   styleP.setProperty("--text-muted", toHexC(mixRgb(T, B, 0.45)));
+                  const arrowUriP = (d, fill) => "url(\\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='" + d + "' fill='" + fill.replace("#", "%23") + "'/%3E%3C/svg%3E\\")";
+                  const darkHexP = toHexC(mixRgb(P, BLACK, darkP ? 0.15 : 0.12));
+                  styleP.setProperty("--sb-arrow-up", arrowUriP("M5 2 9 8 H1 Z", paletteColors.primary));
+                  styleP.setProperty("--sb-arrow-down", arrowUriP("M5 8 1 2 H9 Z", paletteColors.primary));
+                  styleP.setProperty("--sb-arrow-left", arrowUriP("M2 5 8 1 V9 Z", paletteColors.primary));
+                  styleP.setProperty("--sb-arrow-right", arrowUriP("M8 5 2 9 V1 Z", paletteColors.primary));
+                  styleP.setProperty("--sb-arrow-up-hover", arrowUriP("M5 2 9 8 H1 Z", darkHexP));
+                  styleP.setProperty("--sb-arrow-down-hover", arrowUriP("M5 8 1 2 H9 Z", darkHexP));
+                  styleP.setProperty("--sb-arrow-left-hover", arrowUriP("M2 5 8 1 V9 Z", darkHexP));
+                  styleP.setProperty("--sb-arrow-right-hover", arrowUriP("M8 5 2 9 V1 Z", darkHexP));
                 }
                 // Legacy fallback: a device that only carries the old
                 // Admin Panel Color hex gets the --primary* family
@@ -123,6 +170,16 @@ export default async function RootLayout({
                   style.setProperty("--primary-dark", toHex(mixTo([0, 0, 0], dark ? 0.15 : 0.12)));
                   style.setProperty("--primary-light", dark ? toHex(mixTo([0, 0, 0], 0.12)) : toHex(mixTo([255, 255, 255], 0.76)));
                   style.setProperty("--primary-soft", dark ? toHex(mixTo([0, 0, 0], 0.8)) : toHex(mixTo([255, 255, 255], 0.93)));
+                  const arrowUriL = (d, fill) => "url(\\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='" + d + "' fill='" + fill.replace("#", "%23") + "'/%3E%3C/svg%3E\\")";
+                  const darkHexL = toHex(mixTo([0, 0, 0], dark ? 0.15 : 0.12));
+                  style.setProperty("--sb-arrow-up", arrowUriL("M5 2 9 8 H1 Z", savedColor));
+                  style.setProperty("--sb-arrow-down", arrowUriL("M5 8 1 2 H9 Z", savedColor));
+                  style.setProperty("--sb-arrow-left", arrowUriL("M2 5 8 1 V9 Z", savedColor));
+                  style.setProperty("--sb-arrow-right", arrowUriL("M8 5 2 9 V1 Z", savedColor));
+                  style.setProperty("--sb-arrow-up-hover", arrowUriL("M5 2 9 8 H1 Z", darkHexL));
+                  style.setProperty("--sb-arrow-down-hover", arrowUriL("M5 8 1 2 H9 Z", darkHexL));
+                  style.setProperty("--sb-arrow-left-hover", arrowUriL("M2 5 8 1 V9 Z", darkHexL));
+                  style.setProperty("--sb-arrow-right-hover", arrowUriL("M8 5 2 9 V1 Z", darkHexL));
                 }
               } catch (e) {}
             `,

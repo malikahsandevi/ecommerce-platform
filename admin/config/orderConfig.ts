@@ -123,7 +123,9 @@ export const orderConfig = {
   ],
 
   // Search Fields (top-level scalar fields of the API records)
-  searchFields: ["orderNumber", "status", "paymentStatus", "trackingNumber", "code"],
+  // `user` is the populated customer object — the list search
+  // flattens it, so the customer name/email are searchable too.
+  searchFields: ["orderNumber", "status", "paymentStatus", "trackingNumber", "code", "user"],
 
   // Table Headers
   // Alignment overrides: the Customer column holds the customer's

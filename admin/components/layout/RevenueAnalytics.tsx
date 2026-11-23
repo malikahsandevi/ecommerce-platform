@@ -172,25 +172,34 @@ export const RevenueAnalytics: React.FC<RevenueAnalyticsProps> = ({
               chart box with air on both sides — with left: 0 the labels
               started flush at the box edge and read as clipped/cramped
               at narrower card widths (Ahsan's mark on the $ labels). */}
-          <LineChart data={data} margin={{ top: 10, right: 6, left: 8, bottom: 0 }}>
+          <LineChart data={data} margin={{ top: 10, right: 6, left: 8, bottom: 4 }}>
             <CartesianGrid
               strokeDasharray="4 4"
               stroke="rgba(148,163,184,0.22)"
               vertical={false}
             />
+            {/* X labels run DIAGONAL (Ahsan's order): rotated -35°,
+                anchored at their end and given a taller axis band so
+                every date shows, fully inside the card — horizontal
+                labels crowded and clipped at narrow widths. */}
             <XAxis
               dataKey="label"
               tick={{ fontSize: 11, fill: "#9ca3af" }}
               axisLine={false}
               tickLine={false}
-              dy={6}
+              dy={4}
               tickMargin={4}
-              interval="preserveStartEnd"
+              interval={0}
+              angle={-35}
+              textAnchor="end"
+              height={52}
             />
+            {/* The amounts sit WITH a border (Ahsan's order): a visible
+                vertical axis line beside the y labels. */}
             <YAxis
               yAxisId="revenue"
               tick={{ fontSize: 11, fill: "#9ca3af" }}
-              axisLine={false}
+              axisLine={{ stroke: "rgba(148,163,184,0.55)", strokeWidth: 1 }}
               tickLine={false}
               width={54}
               tickMargin={6}

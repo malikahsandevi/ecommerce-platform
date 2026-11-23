@@ -4,9 +4,15 @@ import {
   DEFAULT_PALETTE_ID,
   paletteById,
   paletteByPrimary,
+  paletteVars,
   resolvePaletteId,
   type PaletteDef,
 } from './palettes';
+
+// The color math + variable builders live in services/palettes.ts
+// (pure, server-safe — the root layout imports them for the SSR
+// first paint); they are re-exported here for existing consumers.
+export { tint, shade, mix, adminColorVars, paletteVars } from './palettes';
 
 export interface AppearanceSettings {
   theme?: string;
@@ -79,83 +85,12 @@ const ADMIN_COLOR_KEY = 'admin-color';
 
 export const isValidHexColor = (value: string): boolean => /^#[0-9a-fA-F]{6}$/.test(value);
 
-const hexToRgb = (hex: string): [number, number, number] => [
-  parseInt(hex.slice(1, 3), 16),
-  parseInt(hex.slice(3, 5), 16),
-  parseInt(hex.slice(5, 7), 16),
-];
-
-const rgbToHex = (rgb: [number, number, number]): string =>
-  `#${rgb.map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('')}`;
-
-/** Mix a hex color toward white (amount 0..1). */
-export const tint = (hex: string, amount: number): string => {
-  const rgb = hexToRgb(hex);
-  return rgbToHex([rgb[0] + (255 - rgb[0]) * amount, rgb[1] + (255 - rgb[1]) * amount, rgb[2] + (255 - rgb[2]) * amount]);
-};
-
-/** Mix a hex color toward black (amount 0..1). */
-export const shade = (hex: string, amount: number): string => {
-  const rgb = hexToRgb(hex);
-  return rgbToHex([rgb[0] * (1 - amount), rgb[1] * (1 - amount), rgb[2] * (1 - amount)]);
-};
-
-/** Mix one hex color toward another (amount 0..1). */
-export const mix = (from: string, to: string, amount: number): string => {
-  const a = hexToRgb(from);
-  const b = hexToRgb(to);
-  return rgbToHex([
-    a[0] + (b[0] - a[0]) * amount,
-    a[1] + (b[1] - a[1]) * amount,
-    a[2] + (b[2] - a[2]) * amount,
-  ]);
-};
-
-/** The four --primary* values for a base color under a theme. The
- *  root layout's pre-paint script computes these with the same math,
- *  so the first paint and the runtime application always agree. */
-export function adminColorVars(color: string, theme: DeviceTheme): Record<string, string> {
-  if (theme === 'dark') {
-    return {
-      '--primary': color,
-      '--primary-dark': shade(color, 0.15),
-      '--primary-light': shade(color, 0.12),
-      '--primary-soft': shade(color, 0.8),
-    };
-  }
-  return {
-    '--primary': color,
-    '--primary-dark': shade(color, 0.12),
-    '--primary-light': tint(color, 0.76),
-    '--primary-soft': tint(color, 0.93),
-  };
-}
-
-/** Every theme variable a palette drives. The derived surface /
- *  border / text shades come from the palette's own background and
- *  text colors, so a kept palette recolors the panel coherently —
- *  not just its accents. The root layout's pre-paint script computes
- *  these with the same math from the stored colors, so the first
- *  paint and the runtime application always agree. */
-export function paletteVars(palette: PaletteDef, theme: DeviceTheme): Record<string, string> {
-  const { primary, secondary, text, background } = palette.colors;
-  return {
-    ...adminColorVars(primary, theme),
-    '--secondary': secondary,
-    '--text': text,
-    '--background': background,
-    '--surface': mix(background, text, 0.07),
-    '--surface-muted': mix(background, text, 0.12),
-    '--border': mix(background, text, 0.18),
-    '--text-soft': mix(text, background, 0.25),
-    '--text-muted': mix(text, background, 0.45),
-  };
-}
-
 const PALETTE_VARS = [
   '--primary', '--primary-light', '--primary-soft', '--primary-dark',
   '--secondary', '--text', '--background', '--surface', '--surface-muted',
   '--border', '--text-soft', '--text-muted',
+  '--sb-arrow-up', '--sb-arrow-down', '--sb-arrow-left', '--sb-arrow-right',
+  '--sb-arrow-up-hover', '--sb-arrow-down-hover', '--sb-arrow-left-hover', '--sb-arrow-right-hover',
 ];
 
 /** The device's kept palette id. A device that only carries the
@@ -227,6 +162,101 @@ export function persistPalette(paletteId: string): void {
   } catch {
     /* palette is cosmetic — never let it break the panel */
   }
+}
+
+// ── Palette preview (Apply → explore → Keep/Revert) ─────────────
+// Ahsan's flow: Apply puts the chosen palette on the WHOLE panel as
+// a TEMPORARY preview and starts a 30-second countdown shown beside
+// the Apply button — NO popup during the countdown, so the admin can
+// switch panels and judge the colors in place. Only when the time
+// completes does the Keep/Revert popup appear. The state lives HERE,
+// in module state, not in the picker component: unmounting the
+// Appearance panel (navigating away and back) must not cancel the
+// preview or its countdown. NOTHING is persisted while previewing —
+// no Setting write, no device store — so a refresh mid-preview comes
+// back with the previously KEPT palette. Keep persists (the picker
+// does the Setting write + persistPalette + the "Theme saved"
+// toast); Revert restores the kept palette everywhere.
+export const PALETTE_PREVIEW_EVENT = 'admin:palette-preview';
+
+export interface PalettePreviewState {
+  previewId: string;
+  keptId: string | null;
+  endAt: number;
+  totalSeconds: number;
+  phase: 'counting' | 'deciding';
+}
+
+let palettePreview: PalettePreviewState | null = null;
+let palettePreviewTimer: ReturnType<typeof setTimeout> | null = null;
+
+export function getPalettePreview(): PalettePreviewState | null {
+  return palettePreview;
+}
+
+function emitPalettePreview(): void {
+  try {
+    window.dispatchEvent(new CustomEvent(PALETTE_PREVIEW_EVENT, { detail: palettePreview }));
+  } catch {
+    /* cosmetic */
+  }
+}
+
+function clearPalettePreviewTimer(): void {
+  if (palettePreviewTimer) {
+    clearTimeout(palettePreviewTimer);
+    palettePreviewTimer = null;
+  }
+}
+
+export function beginPalettePreview(previewId: string, totalSeconds: number, keptId: string | null): void {
+  if (typeof window === 'undefined') return;
+  clearPalettePreviewTimer();
+  applyPalette(previewId);
+  palettePreview = {
+    previewId,
+    keptId,
+    endAt: Date.now() + totalSeconds * 1000,
+    totalSeconds,
+    phase: 'counting',
+  };
+  palettePreviewTimer = setTimeout(() => {
+    if (!palettePreview) return;
+    palettePreview = { ...palettePreview, phase: 'deciding' };
+    emitPalettePreview();
+  }, totalSeconds * 1000);
+  emitPalettePreview();
+}
+
+/** Revert: restore the previously kept palette everywhere; the
+ *  preview is forgotten and nothing was ever persisted. */
+export function revertPalettePreview(): void {
+  if (typeof window === 'undefined') return;
+  clearPalettePreviewTimer();
+  const keptId = palettePreview?.keptId ?? getDevicePaletteId();
+  palettePreview = null;
+  applyPalette(keptId);
+  emitPalettePreview();
+}
+
+/** Keep path: the caller persists the previewed palette first, then
+ *  ends the preview (the applied vars already match it). */
+export function endPalettePreview(): void {
+  clearPalettePreviewTimer();
+  palettePreview = null;
+  emitPalettePreview();
+}
+
+/** Reactive view of the running palette preview (null when idle). */
+export function usePalettePreview(): PalettePreviewState | null {
+  const [state, setState] = useState<PalettePreviewState | null>(() => palettePreview);
+  useEffect(() => {
+    const sync = () => setState(palettePreview);
+    sync();
+    window.addEventListener(PALETTE_PREVIEW_EVENT, sync);
+    return () => window.removeEventListener(PALETTE_PREVIEW_EVENT, sync);
+  }, []);
+  return state;
 }
 
 const defaultPalette = (): PaletteDef => paletteById(DEFAULT_PALETTE_ID) as PaletteDef;

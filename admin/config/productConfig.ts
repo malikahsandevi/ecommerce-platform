@@ -132,7 +132,9 @@ export const productConfig = {
   ],
 
   // Search Parameters (top-level fields of the API records)
-  searchFields: ["name", "sku", "status", "code"],
+  // category/brand are populated objects — the list search flattens
+  // them, so their names are searchable too.
+  searchFields: ["name", "sku", "status", "code", "category", "brand"],
 
   // Table Column Labels
   columnHeaders: {

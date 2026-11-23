@@ -186,8 +186,10 @@ export const TopBar = <T extends SearchableEntityRecord>({
     // the popup note below), never to their narrow icon buttons.
     <header className="relative w-full min-h-14 bg-(--background) rounded-2xl shadow-sm border border-(--border) px-4 py-3 flex flex-wrap items-center gap-x-2 gap-y-2 select-none">
       {/* Dynamic Page Title & Subtitle — shrinkable: the title block
-          yields (and truncates) before the controls are pushed out. */}
-      <div className="min-w-0 order-1">
+          yields (and truncates) before the controls are pushed out.
+          At md+ it also flexes (flex-1), which is what pushes the
+          search + icon cluster to the RIGHT edge of the header. */}
+      <div className="min-w-0 order-1 md:flex-1">
         {showBreadcrumbs && (
           <nav aria-label={t("Breadcrumb")} className="text-[10px] font-medium text-(--text-muted) leading-tight mb-0.5">
             {t("Home")} <span aria-hidden="true" className="mx-0.5">/</span>{" "}
@@ -204,13 +206,17 @@ export const TopBar = <T extends SearchableEntityRecord>({
         )}
       </div>
 
-      {/* Search — its own flex child so the layout normalises: at md+
-          it sits on the single header row between the title and the
-          icon cluster, flexible width capped at 480px; below md it
+      {/* Search — at md+ it sits on the RIGHT of the header row,
+          directly before the icon cluster (Ahsan's order: "search
+          bar ko right side karo" — it used to sit in the centre):
+          the title block flexes, so this fixed-width (480px, capped
+          at 45% of the row) box lands against the icons, shrinking
+          rather than overflowing as the row tightens. Below md it
           wraps onto its OWN full-width row under the title row (the
-          icons stay up with the title, grouped — they no longer ride
-          the search row or stretch across it). */}
-      <div className="order-3 basis-full min-w-0 md:order-2 md:basis-auto md:flex-1 md:max-w-[480px]">
+          icons stay up with the title, grouped). The results panel
+          anchors to the search box itself, so it follows the move
+          automatically. */}
+      <div className="order-3 basis-full min-w-0 md:order-2 md:basis-auto md:flex-none md:w-[480px] md:max-w-[45%]">
         {/* Global search (all sources) or the legacy page-local bar */}
         {globalSearch ? (
           <GlobalSearch />
@@ -237,7 +243,7 @@ export const TopBar = <T extends SearchableEntityRecord>({
           (at 440px the button sits ~110px from the right edge, so a
           right-0 popup on it started off-screen). */}
       <div
-        className="order-2 md:order-3 ml-auto flex items-center gap-1 min-w-0"
+        className="order-2 md:order-3 ml-auto md:ml-0 flex items-center gap-1 min-w-0 shrink-0"
         ref={containerRef}
       >
         {/* Action Icons With Popups */}

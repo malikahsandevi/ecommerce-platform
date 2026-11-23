@@ -2,7 +2,8 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import Image from "next/image";
-import { Check, ChevronDown, ChevronUp, Copy, Eye, EyeOff, KeyRound, LoaderCircle, Play, Plus, Save, ShieldCheck, Trash2, Code2, Globe } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Copy, Eye, EyeOff, KeyRound, LoaderCircle, Play, Plus, Save, ShieldCheck, Trash2, Code2 } from "lucide-react";
+import ServiceIcon from "@/components/ui/ServiceIcon";
 import {
   SERVICE_CATALOGUE,
   categoryById,
@@ -1874,7 +1875,7 @@ function ServiceBuilderPanel({
             <div key={index} className={`rounded-xl border border-[var(--border)] bg-[var(--surface)]/30 ${isOpen ? "p-5 space-y-4" : "px-5 py-4"}`}>
               <div className={`flex items-center justify-between ${isOpen ? "border-b border-[var(--border)] pb-3" : ""}`}>
                 <div className="flex items-center gap-2">
-                  <Globe className="h-4 w-4 text-[var(--primary)]" />
+                  <ServiceIcon subService={item.subService} className="h-4 w-4 shrink-0 text-[var(--primary)]" />
                   <span className="font-semibold text-sm text-[var(--text)]">
                     {item.title || t("New Service")}
                   </span>
