@@ -65,9 +65,13 @@ const GB = 1024 * 1024 * 1024;
  *     the ACCOUNT usage each provider reports (that is what consumes
  *     quota), falling back to library-measured bytes per entry,
  *  3. every configured storage entry with its connected status,
- *  4. this LIBRARY's space per entry — database truth, so the per-entry
- *     figures sum exactly to the library total; where an account holds
- *     more than this library, its account total is shown distinctly.
+ *  4. space per provider — the same account-usage total as card 2,
+ *     broken down per entry: each entry leads with its ACCOUNT's usage
+ *     (the space that provider has actually consumed) and keeps this
+ *     library's own bytes + file count as the secondary detail.
+ * Entries that point at the SAME provider account (same Cloudinary
+ * cloud name) report one and the same account usage — it is counted
+ * ONCE in every total, and their lines note the shared account.
  * Below the cards, when more than one entry can receive uploads, a
  * control chooses which one new uploads go to.
  * Everything is computed from the API — nothing is hard-coded.
@@ -127,31 +131,54 @@ export default function MediaStats({ items, isLoading = false }: { items: Row[];
 
     // Card 2 — account usage across entries. On Cloudinary's credit
     // plans 1 credit covers 1 GB of storage, so the credit limit is
-    // the storage ceiling. An entry whose account API did not answer
+    // the storage ceiling. An account whose API did not answer
     // contributes its library-measured bytes to the used total, and
-    // the quota line only appears when every entry reported a quota.
+    // the quota line only appears when every account reported a quota.
     const accountUsedOf = (entry: StorageEntryView) => entry.usage?.storageUsedBytes ?? null;
     const entrySlugs = new Set(entries.map((entry) => entry.slug));
     const legacyBytes = Object.entries(storage?.providers || {})
       .filter(([key]) => !entrySlugs.has(key))
       .reduce((sum, [, bucket]) => sum + (bucket?.usedBytes || 0), 0);
-    const totalUsed =
-      entries.reduce(
-        (sum, entry) => sum + (accountUsedOf(entry) ?? entry.usedBytes ?? 0),
-        0,
-      ) + legacyBytes;
+
+    // Entries pointing at the SAME provider account (same Cloudinary
+    // cloud name) report one and the same account usage — group them
+    // so the shared account is counted once in every total below.
+    const accountKeyOf = (entry: StorageEntryView) =>
+      entry.subService === "cloudinary" && entry.cloudName
+        ? `cloudinary:${entry.cloudName}`
+        : `entry:${entry.slug}`;
+    const accountGroups = new Map<string, StorageEntryView[]>();
+    for (const entry of entries) {
+      const key = accountKeyOf(entry);
+      const group = accountGroups.get(key);
+      if (group) group.push(entry);
+      else accountGroups.set(key, [entry]);
+    }
+    const groups = [...accountGroups.values()];
+    // The one usage record that speaks for a group (any member's —
+    // same account, so the figures are identical).
+    const groupUsage = (group: StorageEntryView[]) =>
+      group.map((entry) => entry.usage).find((usage) => usage != null) ?? null;
+    // A group's contribution to the totals: its account usage when
+    // the provider reports it, else the group's library bytes.
+    const groupFigure = (group: StorageEntryView[]) =>
+      groupUsage(group)?.storageUsedBytes ??
+      group.reduce((sum, entry) => sum + (entry.usedBytes || 0), 0);
+
+    const totalUsed = groups.reduce((sum, group) => sum + groupFigure(group), 0) + legacyBytes;
     const quotaKnown =
-      entries.length > 0 &&
-      entries.every((entry) => entry.usage?.creditsLimit != null);
+      groups.length > 0 &&
+      groups.every((group) => groupUsage(group)?.creditsLimit != null);
     const totalQuota = quotaKnown
-      ? entries.reduce((sum, entry) => sum + (entry.usage!.creditsLimit as number) * GB, 0)
+      ? groups.reduce((sum, group) => sum + (groupUsage(group)!.creditsLimit as number) * GB, 0)
       : null;
     const quotaUsed = quotaKnown
-      ? entries.reduce((sum, entry) => sum + (accountUsedOf(entry) ?? 0), 0)
+      ? groups.reduce((sum, group) => sum + (groupUsage(group)?.storageUsedBytes ?? 0), 0)
       : null;
     const totalAvailable =
       totalQuota != null && quotaUsed != null ? Math.max(0, totalQuota - quotaUsed) : null;
-    const singlePlan = entries.length === 1 ? entries[0]?.usage?.plan : null;
+    const singleGroup = groups.length === 1 ? groups[0] : undefined;
+    const singlePlan = singleGroup ? groupUsage(singleGroup)?.plan ?? null : null;
 
     // Card 3 — every configured entry with its status.
     const targetEntry =
@@ -172,17 +199,29 @@ export default function MediaStats({ items, isLoading = false }: { items: Row[];
           .join(" · ")
       : t("Connected · AWS S3 & Firebase not configured");
 
-    // Card 4 — this library's bytes per entry (sums to the library
-    // total), every entry listed; an account that holds more than the
-    // library shows its account total distinctly beside its figure.
+    // Card 4 — space per provider: the SAME account-usage total as
+    // card 2, broken down per entry. Each entry leads with its
+    // ACCOUNT's usage — the space that provider has actually
+    // consumed; this library's bytes + file count on the entry stay
+    // visible as the secondary detail. An entry whose provider
+    // reports no account usage falls back to its library bytes as
+    // the figure. Entries sharing one account show that account's
+    // figure on each of their lines (noted as a shared account),
+    // while the headline counts the account only once.
     const providerSummary = [
       ...entries.map((entry) => {
         const account = accountUsedOf(entry);
-        const note =
-          account != null && account !== entry.usedBytes
-            ? ` (${t("account")} ${formatBytes(account)})`
-            : "";
-        return `${entry.title} ${formatBytes(entry.usedBytes)}${note}`;
+        if (account == null) {
+          return `${entry.title} ${formatBytes(entry.usedBytes)} (${entry.files} ${t("files")})`;
+        }
+        const detail = [
+          `${t("library")} ${formatBytes(entry.usedBytes)}`,
+          `${entry.files} ${t("files")}`,
+        ];
+        if ((accountGroups.get(accountKeyOf(entry))?.length || 0) > 1) {
+          detail.push(t("shared account"));
+        }
+        return `${entry.title} ${formatBytes(account)} (${detail.join(" · ")})`;
       }),
       ...Object.entries(storage?.providers || {})
         .filter(([key]) => !entrySlugs.has(key))
@@ -206,9 +245,9 @@ export default function MediaStats({ items, isLoading = false }: { items: Row[];
         isPositive: true,
         period:
           totalQuota != null
-            ? entries.length <= 1
+            ? groups.length <= 1
               ? t("{available} available of {total} ({plan} plan)").replace("{available}", formatBytes(totalAvailable)).replace("{total}", formatBytes(totalQuota)).replace("{plan}", singlePlan || "Cloudinary")
-              : `${formatBytes(totalAvailable)} ${t("available of")} ${formatBytes(totalQuota)} (${entries.length} ${t("storage accounts")})`
+              : `${formatBytes(totalAvailable)} ${t("available of")} ${formatBytes(totalQuota)} (${groups.length} ${t("storage accounts")})`
             : t("Cloudinary usage unavailable"),
         icon: HardDrive,
         theme: "green",
@@ -224,7 +263,7 @@ export default function MediaStats({ items, isLoading = false }: { items: Row[];
       },
       {
         title: t("Space by Provider"),
-        value: placeholder ?? formatBytes(storage?.library.usedBytes ?? 0),
+        value: placeholder ?? formatBytes(storage ? totalUsed : undefined),
         change: "",
         isPositive: true,
         period: providerSummary,
