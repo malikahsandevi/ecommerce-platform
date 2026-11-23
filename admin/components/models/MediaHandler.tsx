@@ -900,6 +900,8 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
                 {
                   url: uploaded.secure_url,
                   publicId: uploaded.public_id,
+                  cloudName: uploaded.cloudName,
+                  entry: uploaded.entry,
                   size: uploaded.bytes,
                   mimeType: mime,
                   format: uploaded.format,

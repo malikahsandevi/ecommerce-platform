@@ -5,7 +5,18 @@ const genericController = require('../controllers/genericController')(Media);
 const cloudinary = require('../config/cloudinary');
 const { protect } = require('../middleware/auth');
 const { requireStaff } = require('../middleware/admin');
-const { getCloudinaryCredentials, isCloudinaryActive } = require('../utils/credentials');
+const {
+    getCloudinaryCredentials,
+    isCloudinaryActive,
+    currentCredentials,
+    getStorageEntries,
+    getDefaultStorageEntry,
+    getStorageEntryBySlug,
+    getStorageEntryByCloudName,
+    resolveUploadTarget,
+    setUploadTarget,
+} = require('../utils/credentials');
+const cloudinaryClient = require('../utils/cloudinaryClient');
 const { requirePermission } = require('../middleware/permissions');
 const {
     parseCloudinaryUrl,
@@ -47,6 +58,66 @@ const refuseIfCloudinaryOff = async (res) => {
     return true;
 };
 
+// --- Per-entry storage -----------------------------------------------------
+// Media no longer assumes ONE Cloudinary account: every record is
+// stamped with the storage ENTRY (Settings integrations serviceSlug)
+// it lives on, uploads go to the admin-chosen target entry, and asset
+// operations run against the entry that owns the asset. The original
+// (first) Cloudinary entry keeps the SDK-singleton code paths; other
+// entries go through the per-entry REST client (utils/cloudinaryClient).
+
+const credsOf = (entry) =>
+    entry
+        ? { cloudName: entry.cloudName, apiKey: entry.apiKey, apiSecret: entry.apiSecret }
+        : null;
+
+const isDefaultEntry = async (entry) => {
+    if (!entry) return false;
+    const fallback = await getDefaultStorageEntry();
+    return Boolean(fallback) && entry.slug === fallback.slug;
+};
+
+/** The entry a media record lives on (its stamp, else its URL's cloud,
+ *  else the original entry — pre-stamp records belong to the original). */
+const entryForMedia = async (media) => {
+    const bySlug = await getStorageEntryBySlug(media?.storageEntry);
+    if (bySlug) return bySlug;
+    const parts = parseCloudinaryUrl(media?.url || '');
+    const byCloud = parts ? await getStorageEntryByCloudName(parts.cloudName) : null;
+    if (byCloud) return byCloud;
+    return getDefaultStorageEntry();
+};
+
+/** Read one asset's facts from the account of the given entry. */
+const fetchResource = async (entry, publicId, resourceType, type) => {
+    if (await isDefaultEntry(entry)) {
+        return cloudinary.api.resource(publicId, { resource_type: resourceType, type });
+    }
+    return cloudinaryClient.resource(credsOf(entry), publicId, { resourceType, type });
+};
+
+/**
+ * Gate for upload flows: resolves the upload target and refuses when
+ * there is nothing configured to receive uploads or the target entry
+ * is switched off. Returns the target entry, or null after responding.
+ */
+const requireUploadTarget = async (res) => {
+    const target = await resolveUploadTarget();
+    if (!target || !target.configured) {
+        res.status(400).json({
+            message: 'No storage is configured for uploads — add a Cloudinary entry with its credentials in Settings → API / Integrations first.',
+        });
+        return null;
+    }
+    if (!target.isConnected) {
+        res.status(403).json({
+            message: `${target.title} is switched off in Settings → API / Integrations — media operations are unavailable until it is switched back on.`,
+        });
+        return null;
+    }
+    return target;
+};
+
 // Mime types the Media schema accepts.
 const ALLOWED_MIME_TYPES = [
     'image/jpeg',
@@ -61,55 +132,121 @@ const ALLOWED_MIME_TYPES = [
     'application/msword',
 ];
 
-// GET /api/media/storage — real storage picture for the Media page cards:
-// this library's usage grouped by provider, plus the Cloudinary account's
-// own usage/quota straight from the Cloudinary Admin API.
+// GET /api/media/storage — real storage picture for the Media page cards,
+// measured PER STORAGE ENTRY: for every configured entry, this library's
+// bytes + file count on it (database truth — the per-entry figures sum
+// exactly to the library total) and, for Cloudinary entries, the
+// ACCOUNT's own usage/quota from that account's Admin API (an account
+// can hold assets beyond this library, so account usage is reported
+// distinctly from library usage — never blended into one number).
 router.get('/storage', protect, requirePermission('Media', 'view'), async (req, res) => {
     try {
-        const records = await Media.find().select('size url storageType').lean();
+        const entries = await getStorageEntries();
+        const defaultEntry = entries.find((entry) => entry.subService === 'cloudinary') || null;
+        const defaultSlug = defaultEntry?.slug || 'cloudinary';
 
-        const providerOf = (record) => {
+        // One-time, idempotent backfill: records created before
+        // per-entry storage carry no stamp — they all live on the
+        // original entry, so stamp them with its slug.
+        await Media.updateMany(
+            {
+                storageType: 'cloud',
+                $or: [
+                    { storageEntry: { $exists: false } },
+                    { storageEntry: '' },
+                    { storageEntry: null },
+                ],
+            },
+            { $set: { storageEntry: defaultSlug } },
+        );
+
+        const records = await Media.find().select('size url storageType storageEntry').lean();
+
+        // Non-cloud records (legacy local files) keep the old URL-based
+        // buckets; cloud records group by their entry stamp.
+        const legacyProviderOf = (record) => {
             const url = record.url || '';
-            if (url.includes('res.cloudinary.com')) return 'cloudinary';
             if (url.includes('amazonaws.com')) return 'aws';
             if (url.includes('firebasestorage') || url.includes('storage.googleapis.com')) return 'firebase';
-            if (record.storageType === 'cloud') return 'cloudinary';
             return 'local';
         };
 
         const providers = {};
         let libraryBytes = 0;
         for (const record of records) {
-            const name = providerOf(record);
+            const name =
+                record.storageType === 'cloud'
+                    ? record.storageEntry || defaultSlug
+                    : legacyProviderOf(record);
             if (!providers[name]) providers[name] = { usedBytes: 0, files: 0 };
             providers[name].usedBytes += record.size || 0;
             providers[name].files += 1;
             libraryBytes += record.size || 0;
         }
 
-        let cloudinaryUsage = null;
-        try {
-            // Gate: with Cloudinary toggled OFF the account usage is
-            // not fetched at all — the panel shows library-only numbers.
-            if (!(await isCloudinaryActive())) throw new Error('cloudinary-off');
-            const usage = await cloudinary.api.usage();
-            cloudinaryUsage = {
-                plan: usage.plan || null,
-                storageUsedBytes: usage.storage?.usage ?? null,
-                creditsUsed: usage.credits?.usage ?? null,
-                creditsLimit: usage.credits?.limit ?? null,
-                creditsUsedPercent: usage.credits?.used_percent ?? null,
-                resources: usage.resources ?? null,
-            };
-        } catch {
-            cloudinaryUsage = null; // panel falls back to library-only numbers
-        }
+        // Account usage per Cloudinary entry — fetched in parallel,
+        // each with its own credentials and a short timeout; a failed
+        // or slow call leaves that entry's usage null and the panel
+        // falls back to the library-measured bytes for it.
+        const entryViews = await Promise.all(
+            entries.map(async (entry) => {
+                const bucket = providers[entry.slug] || { usedBytes: 0, files: 0 };
+                let usage = null;
+                if (entry.subService === 'cloudinary' && entry.configured && entry.isConnected) {
+                    try {
+                        usage = await cloudinaryClient.usage(credsOf(entry));
+                    } catch {
+                        usage = null;
+                    }
+                }
+                return {
+                    slug: entry.slug,
+                    title: entry.title,
+                    subService: entry.subService,
+                    isConnected: entry.isConnected,
+                    configured: entry.configured,
+                    ...(entry.subService === 'cloudinary' ? { cloudName: entry.cloudName } : {}),
+                    usedBytes: bucket.usedBytes,
+                    files: bucket.files,
+                    usage,
+                };
+            }),
+        );
+
+        const target = await resolveUploadTarget();
 
         res.json({
             library: { files: records.length, usedBytes: libraryBytes },
             providers,
-            cloudinary: cloudinaryUsage,
+            entries: entryViews,
+            uploadTarget: target?.slug || defaultSlug,
+            // Back-compat: the original entry's account usage, as before.
+            cloudinary: entryViews.find((view) => view.slug === defaultSlug)?.usage ?? null,
         });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+});
+
+// PUT /api/media/storage/target — choose which configured storage entry
+// receives NEW uploads. Persisted in the Setting document; existing
+// media stay on the entry they already live on.
+router.put('/storage/target', protect, requirePermission('Media', 'edit'), async (req, res) => {
+    try {
+        const slug = String(req.body?.slug || '');
+        const entry = (await getStorageEntries()).find((item) => item.slug === slug);
+        if (!entry || entry.subService !== 'cloudinary' || !entry.configured) {
+            return res.status(400).json({
+                message: 'That storage entry cannot receive uploads — it must be a fully configured Cloudinary entry.',
+            });
+        }
+        if (!entry.isConnected) {
+            return res.status(400).json({
+                message: `${entry.title} is switched off in Settings → API / Integrations — switch it on before sending uploads to it.`,
+            });
+        }
+        await setUploadTarget(slug);
+        res.json({ uploadTarget: slug });
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
@@ -120,7 +257,8 @@ router.get('/storage', protect, requirePermission('Media', 'view'), async (req, 
 // is never treated as a document id.
 router.post('/upload', protect, requirePermission('Media', 'create'), express.json({ limit: '15mb' }), async (req, res) => {
     try {
-        if (await refuseIfCloudinaryOff(res)) return;
+        const target = await requireUploadTarget(res);
+        if (!target) return;
         const { dataUrl, filename, altText, title, description, status } = req.body || {};
 
         if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:')) {
@@ -142,14 +280,17 @@ router.post('/upload', protect, requirePermission('Media', 'create'), express.js
             uploadedBy = admin._id;
         }
 
-        const result = await cloudinary.uploader.upload(dataUrl, {
+        const uploadParams = {
             folder: folderForPurpose(req.body?.purpose),
             resource_type: 'auto',
             // Asset protection: new uploads are authenticated-type
             // assets — they only load through signed URLs (see
             // utils/cloudinaryUrl.js).
             type: 'authenticated',
-        });
+        };
+        const result = (await isDefaultEntry(target))
+            ? await cloudinary.uploader.upload(dataUrl, uploadParams)
+            : await cloudinaryClient.upload(credsOf(target), dataUrl, uploadParams);
 
         const originalName = filename || result.original_filename || 'file';
         const extension = (result.format || originalName.split('.').pop() || '').toLowerCase();
@@ -161,6 +302,7 @@ router.post('/upload', protect, requirePermission('Media', 'create'), express.js
                 resourceType: result.resource_type,
                 publicId: result.public_id,
                 format: result.format || extension,
+                cloudName: target.cloudName,
             }),
             path: result.public_id,
             mimeType,
@@ -170,6 +312,7 @@ router.post('/upload', protect, requirePermission('Media', 'create'), express.js
                 ? { width: result.width, height: result.height }
                 : undefined,
             storageType: 'cloud',
+            storageEntry: target.slug,
             uploadedBy,
             title: title || originalName,
             // No alt written → the file's name becomes the alt text.
@@ -191,16 +334,18 @@ router.post('/upload', protect, requirePermission('Media', 'create'), express.js
 // straight to Cloudinary with this one-time signature and only the small
 // registration JSON (below) ever touches the serverless function.
 router.get('/upload-signature', protect, requireStaff, requirePermission('Media', 'create'), async (req, res) => {
-    if (await refuseIfCloudinaryOff(res)) return;
+    const target = await requireUploadTarget(res);
+    if (!target) return;
     const timestamp = Math.round(Date.now() / 1000);
     // The caller's purpose picks the destination folder (storage
     // organization); only the fixed purpose keys are honoured.
     const folder = folderForPurpose(req.query.purpose);
-    // Credentials come from the DB store (Settings →
-    // API / Integrations; environment is only the seed/fallback) — a
-    // key rotated in the panel signs the very next upload, no redeploy
-    // needed.
-    const { cloudName, apiKey, apiSecret } = await getCloudinaryCredentials();
+    // Credentials come from the UPLOAD TARGET entry in the DB store
+    // (Settings → API / Integrations; environment is only the
+    // seed/fallback for the original entry) — the signature is issued
+    // for the account that will actually receive the file, and a key
+    // rotated in the panel signs the very next upload, no redeploy.
+    const { cloudName, apiKey, apiSecret } = credsOf(target);
     // The delivery type is part of the signed parameters: the browser's
     // direct upload lands as an authenticated-type asset (asset
     // protection — see utils/cloudinaryUrl.js).
@@ -215,6 +360,7 @@ router.get('/upload-signature', protect, requireStaff, requirePermission('Media'
         cloudName,
         folder,
         type: 'authenticated',
+        entry: target.slug,
     });
 });
 
@@ -225,12 +371,29 @@ router.get('/upload-signature', protect, requireStaff, requirePermission('Media'
 // register a record that lies about the file.
 router.post('/register', protect, requireStaff, requirePermission('Media', 'create'), async (req, res) => {
     try {
-        if (await refuseIfCloudinaryOff(res)) return;
-        const { publicId, resourceType, originalName, mimeType, title, altText, description, status } = req.body || {};
+        const { publicId, resourceType, originalName, mimeType, title, altText, description, status, cloudName, entry: entrySlug } = req.body || {};
 
         if (!publicId || typeof publicId !== 'string') {
             return res.status(400).json({ message: 'publicId is required.' });
         }
+
+        // The file was uploaded with a signature issued for one entry —
+        // the browser reports that entry's slug (and its cloud name),
+        // and verification runs against THAT entry. Fallback: the
+        // current upload target.
+        const entry =
+            (await getStorageEntryBySlug(entrySlug)) ||
+            (await getStorageEntryByCloudName(cloudName)) ||
+            (await resolveUploadTarget());
+        if (!entry || !entry.configured) {
+            return res.status(400).json({ message: 'The uploaded file could not be verified on Cloudinary.' });
+        }
+        if (!entry.isConnected) {
+            return res.status(403).json({
+                message: `${entry.title} is switched off in Settings → API / Integrations — media operations are unavailable until it is switched back on.`,
+            });
+        }
+        const entryCreds = credsOf(entry);
 
         const lookupType = ['image', 'video', 'raw'].includes(resourceType) ? resourceType : 'image';
         // Asset protection: uploads now land as authenticated-type
@@ -239,20 +402,15 @@ router.post('/register', protect, requireStaff, requirePermission('Media', 'crea
         // library never holds a publicly reachable file.
         let resource;
         try {
-            resource = await cloudinary.api.resource(publicId, {
-                resource_type: lookupType,
-                type: 'authenticated',
-            });
+            resource = await fetchResource(entry, publicId, lookupType, 'authenticated');
         } catch {
             try {
-                const pub = await cloudinary.api.resource(publicId, {
-                    resource_type: lookupType,
-                    type: 'upload',
-                });
+                const pub = await fetchResource(entry, publicId, lookupType, 'upload');
                 resource = await ensureAuthenticatedAsset({
                     publicId,
                     resourceType: lookupType,
                     sourceUrl: pub.secure_url,
+                    creds: entryCreds,
                 });
             } catch {
                 return res.status(400).json({ message: 'The uploaded file could not be verified on Cloudinary.' });
@@ -283,7 +441,7 @@ router.post('/register', protect, requireStaff, requirePermission('Media', 'crea
             // A type the library does not accept — remove the orphaned
             // asset instead of leaving it on Cloudinary forever.
             try {
-                await destroyAsset(publicId, resource.resource_type);
+                await destroyAsset(publicId, resource.resource_type, entryCreds);
             } catch { /* best effort */ }
             return res.status(400).json({ message: `Unsupported file type: ${finalMime || 'unknown'}` });
         }
@@ -297,6 +455,7 @@ router.post('/register', protect, requireStaff, requirePermission('Media', 'crea
                 resourceType: resource.resource_type || lookupType,
                 publicId,
                 format,
+                cloudName: entry.cloudName,
             }),
             path: publicId,
             mimeType: finalMime,
@@ -306,6 +465,7 @@ router.post('/register', protect, requireStaff, requirePermission('Media', 'crea
                 ? { width: resource.width, height: resource.height }
                 : undefined,
             storageType: 'cloud',
+            storageEntry: entry.slug,
             uploadedBy: req.user._id,
             title: title || originalName || fallbackName,
             // No alt written → the file's name becomes the alt text.
@@ -482,17 +642,34 @@ router.get('/:id/usage', async (req, res) => {
 // new URL, and the old Cloudinary asset is destroyed.
 router.put('/:id/file', protect, requirePermission('Media', 'edit'), async (req, res) => {
     try {
-        if (await refuseIfCloudinaryOff(res)) return;
         const media = await Media.findById(req.params.id);
         if (!media) return res.status(404).json({ message: 'Not found' });
 
-        const { publicId, size, mimeType, format, dimensions, filename } = req.body || {};
+        const { publicId, size, mimeType, format, dimensions, filename, cloudName, entry: entrySlug } = req.body || {};
         if (!publicId || typeof publicId !== 'string') {
             return res.status(400).json({ message: 'The new file publicId is required.' });
         }
         if (mimeType && !ALLOWED_MIME_TYPES.includes(mimeType)) {
             return res.status(400).json({ message: `Unsupported file type: ${mimeType}` });
         }
+
+        // The replacement was uploaded with a signature for the current
+        // upload target's account — verify it against THAT entry. The
+        // record then lives on that entry; the OLD asset is destroyed
+        // through the entry the record used to live on (below).
+        const newEntry =
+            (await getStorageEntryBySlug(entrySlug)) ||
+            (await getStorageEntryByCloudName(cloudName)) ||
+            (await resolveUploadTarget());
+        if (!newEntry || !newEntry.configured) {
+            return res.status(400).json({ message: 'The replacement file could not be verified on Cloudinary.' });
+        }
+        if (!newEntry.isConnected) {
+            return res.status(403).json({
+                message: `${newEntry.title} is switched off in Settings → API / Integrations — media operations are unavailable until it is switched back on.`,
+            });
+        }
+        const newEntryCreds = credsOf(newEntry);
 
         // Asset protection: the stored URL is derived from Cloudinary's
         // own record of the new asset (never trusted from the client)
@@ -507,20 +684,15 @@ router.put('/:id/file', protect, requirePermission('Media', 'edit'), async (req,
         const newResourceType = resourceTypeOf(mimeType || media.mimeType);
         let resource;
         try {
-            resource = await cloudinary.api.resource(publicId, {
-                resource_type: newResourceType,
-                type: 'authenticated',
-            });
+            resource = await fetchResource(newEntry, publicId, newResourceType, 'authenticated');
         } catch {
             try {
-                const pub = await cloudinary.api.resource(publicId, {
-                    resource_type: newResourceType,
-                    type: 'upload',
-                });
+                const pub = await fetchResource(newEntry, publicId, newResourceType, 'upload');
                 resource = await ensureAuthenticatedAsset({
                     publicId,
                     resourceType: newResourceType,
                     sourceUrl: pub.secure_url,
+                    creds: newEntryCreds,
                 });
             } catch {
                 return res.status(400).json({ message: 'The replacement file could not be verified on Cloudinary.' });
@@ -530,14 +702,19 @@ router.put('/:id/file', protect, requirePermission('Media', 'edit'), async (req,
             resourceType: resource.resource_type || newResourceType,
             publicId,
             format: String(resource.format || format || '').toLowerCase(),
+            cloudName: newEntry.cloudName,
         });
 
         const oldUrl = media.url;
         const oldPath = media.path;
         const oldMimeType = media.mimeType;
+        // The entry the OLD asset lives on — its destroy must run
+        // against that account, not the replacement's.
+        const oldEntry = await entryForMedia(media);
 
         media.url = url;
         media.path = publicId;
+        media.storageEntry = newEntry.slug;
         if (typeof resource.bytes === 'number') media.size = resource.bytes;
         else if (typeof size === 'number' && size >= 0) media.size = size;
         if (mimeType) media.mimeType = mimeType;
@@ -577,12 +754,13 @@ router.put('/:id/file', protect, requirePermission('Media', 'edit'), async (req,
         }
 
         // Best effort: remove the replaced file from Cloudinary (in
-        // whichever delivery type it exists). The record already points
-        // at the new asset, so a failure here only leaves an orphan
-        // behind — it must not fail the save.
+        // whichever delivery type it exists), through the OLD asset's
+        // own entry. The record already points at the new asset, so a
+        // failure here only leaves an orphan behind — it must not fail
+        // the save.
         if (oldPath && oldPath !== publicId) {
             try {
-                await destroyAsset(oldPath, resourceTypeOf(oldMimeType));
+                await destroyAsset(oldPath, resourceTypeOf(oldMimeType), credsOf(oldEntry));
             } catch {
                 /* orphan cleanup is best effort */
             }
@@ -621,6 +799,9 @@ router.post('/protect-migration', protect, requirePermission('Media', 'edit'), a
         const noteValue = (value) => {
             const parts = parseCloudinaryUrl(value);
             if (!parts) return;
+            // This migration runs on the original entry's account only —
+            // assets living on other storage entries are left alone.
+            if (parts.cloudName !== currentCredentials().cloudinaryCloudName) return;
             const key = assetKey(parts);
             if (!assets.has(key)) assets.set(key, { parts, refs: new Set() });
             assets.get(key).refs.add(value);
@@ -815,6 +996,8 @@ router.post('/folder-migration', protect, requirePermission('Media', 'edit'), as
         for (const doc of mediaDocs) {
             const parts = parseCloudinaryUrl(doc.url);
             if (!parts) continue;
+            // Original entry's account only — see the protection migration.
+            if (parts.cloudName !== currentCredentials().cloudinaryCloudName) continue;
             const key = assetKey(parts);
             if (planByKey.has(key)) continue;
             const folder = ownerOf.get(key) || 'library';
@@ -1020,7 +1203,8 @@ router.route('/:id')
             if (!media) return res.status(404).json({ message: 'Not found' });
 
             // Best effort: remove the file from Cloudinary too, so deleting
-            // in the panel does not leave orphaned assets behind.
+            // in the panel does not leave orphaned assets behind. The
+            // destroy runs against the entry THIS record lives on.
             if (media.storageType === 'cloud' && media.path) {
                 try {
                     const resourceType = media.mimeType?.startsWith('video/')
@@ -1028,7 +1212,8 @@ router.route('/:id')
                         : media.mimeType === 'application/pdf' || media.mimeType === 'application/msword'
                           ? 'raw'
                           : 'image';
-                    await destroyAsset(media.path, resourceType);
+                    const entry = await entryForMedia(media);
+                    await destroyAsset(media.path, resourceType, credsOf(entry));
                 } catch {
                     /* the record is still deleted below */
                 }

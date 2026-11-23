@@ -451,7 +451,7 @@ export const mediaService = {
     const sigRes = await apiClient.get('/media/upload-signature', {
       params: purpose ? { purpose } : undefined,
     });
-    const { signature, timestamp, apiKey, cloudName, folder, type } = sigRes.data;
+    const { signature, timestamp, apiKey, cloudName, folder, type, entry } = sigRes.data;
 
     const form = new FormData();
     form.append('file', file);
@@ -469,7 +469,10 @@ export const mediaService = {
         form,
         { timeout: 120000 },
       );
-      return res.data;
+      // The entry + cloud this asset landed on (the upload target's
+      // account) travel with the facts — registration and replace
+      // verify the asset against that same entry.
+      return { ...res.data, cloudName, entry };
     } catch (uploadError) {
       // Surface Cloudinary's own explanation when it provides one.
       const cloudinaryMessage = (
@@ -490,6 +493,8 @@ export const mediaService = {
     const res = await apiClient.post('/media/register', {
       publicId: uploaded.public_id,
       resourceType: uploaded.resource_type,
+      cloudName: uploaded.cloudName,
+      entry: uploaded.entry,
       originalName: file.name,
       mimeType: file.type || '',
       altText: data.altText || '',
@@ -511,6 +516,8 @@ export const mediaService = {
     facts: {
       url: string;
       publicId: string;
+      cloudName?: string;
+      entry?: string;
       size?: number;
       mimeType?: string;
       format?: string;
@@ -534,9 +541,15 @@ export const mediaService = {
     return res.data;
   },
 
-  /** Real storage usage for the Media page cards (Cloudinary + library). */
+  /** Real storage usage for the Media page cards (per storage entry). */
   storage: async () => {
     const res = await apiClient.get('/media/storage');
+    return res.data;
+  },
+
+  /** Choose which configured storage entry receives new uploads. */
+  setUploadTarget: async (slug: string) => {
+    const res = await apiClient.put('/media/storage/target', { slug });
     return res.data;
   },
 

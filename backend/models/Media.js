@@ -48,6 +48,16 @@ const mediaSchema = new mongoose.Schema({
     enum: ['local', 'cloud', 'gridfs'], 
     default: 'local' 
   },
+
+  // Storage ENTRY this file lives on — the serviceSlug of the Settings
+  // integrations entry (e.g. "cloudinary", "cloudinary-2") whose account
+  // holds the asset. Empty on records created before per-entry storage:
+  // those are read as belonging to the original (first) Cloudinary entry
+  // and are backfilled with its slug by the storage stats endpoint.
+  storageEntry: {
+    type: String,
+    default: ''
+  },
   
   // GridFS Reference (if using GridFS)
   gridFsFileId: { 

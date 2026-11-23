@@ -156,6 +156,14 @@ const settingSchema = new mongoose.Schema(
       },
     ],
 
+    // 6b. Storage management — which configured storage entry receives
+    // NEW uploads (the serviceSlug of an integrations entry). Empty =
+    // the original (first) Cloudinary entry, so behaviour is unchanged
+    // until the admin picks another entry on the Media page.
+    storage: {
+      uploadTarget: { type: String, default: "" },
+    },
+
     // 7. Appearance
     appearance: {
       theme: {

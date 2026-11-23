@@ -55,7 +55,32 @@ const envValues = () => ({
 // readers (utils/cloudinaryUrl.js) work before the first DB read.
 // The two activation flags mirror the entries' isConnected toggles:
 // both default ON so a settings read failure can never lock the store.
-let snapshot = { ...envValues(), cloudinaryActive: true, jwtSigningActive: true };
+// cloudSecrets maps EVERY configured Cloudinary entry's cloud name to
+// its API secret, so response signing works per entry (an asset that
+// lives on "Cloudinary 2" is signed with that account's secret).
+let snapshot = {
+    ...envValues(),
+    cloudinaryActive: true,
+    jwtSigningActive: true,
+    cloudSecrets: {},
+};
+if (snapshot.cloudinaryCloudName && snapshot.cloudinaryApiSecret) {
+    snapshot.cloudSecrets = {
+        [snapshot.cloudinaryCloudName]: snapshot.cloudinaryApiSecret,
+    };
+}
+
+// Every STORAGE entry from the integrations array, in saved order, with
+// its credential triple resolved (the FIRST Cloudinary entry — the
+// original one — keeps the per-field environment fallback the primary
+// resolver has always had; later entries use their stored values only).
+// Rebuilt by refreshCredentials alongside the primary snapshot.
+let storageEntriesCache = [];
+
+// The admin's chosen upload target (Setting.storage.uploadTarget): the
+// serviceSlug of the storage entry that receives NEW uploads. Empty =
+// the original Cloudinary entry.
+let uploadTargetCache = '';
 
 // What the Cloudinary SDK singleton is currently configured with —
 // starts as the environment values (config/cloudinary.js did that at
@@ -234,7 +259,52 @@ const refreshCredentials = async (force = false) => {
             jwtSecret: jwtFields.jwtSecret || env.jwtSecret,
             cloudinaryActive: cloudinaryEntry ? cloudinaryEntry.isConnected !== false : true,
             jwtSigningActive: jwtEntry ? jwtEntry.isConnected !== false : true,
+            cloudSecrets: {},
         };
+        if (snapshot.cloudinaryCloudName && snapshot.cloudinaryApiSecret) {
+            snapshot.cloudSecrets[snapshot.cloudinaryCloudName] = snapshot.cloudinaryApiSecret;
+        }
+
+        // Per-entry storage resolution: EVERY storage entry the admin
+        // configured (any count — two, three, more), each with its own
+        // credentials, so uploads, measurement and asset operations can
+        // be routed per entry instead of assuming one account.
+        let firstCloudinarySeen = false;
+        storageEntriesCache = integrations
+            .filter((entry) => entry && entry.usageType === 'STORAGE' && entry.serviceSlug)
+            .map((entry) => {
+                const fields = entryFields(entry);
+                const isCloudinary = entry.subService === 'cloudinary';
+                const isFirstCloudinary = isCloudinary && !firstCloudinarySeen;
+                if (isCloudinary) firstCloudinarySeen = true;
+                const cloudName = isCloudinary
+                    ? fields.cloudName || (isFirstCloudinary ? env.cloudinaryCloudName : '')
+                    : '';
+                const apiKey = isCloudinary
+                    ? fields.apiKey || (isFirstCloudinary ? env.cloudinaryApiKey : '')
+                    : '';
+                const apiSecret = isCloudinary
+                    ? fields.apiSecret || (isFirstCloudinary ? env.cloudinaryApiSecret : '')
+                    : '';
+                if (isCloudinary && cloudName && apiSecret && !snapshot.cloudSecrets[cloudName]) {
+                    snapshot.cloudSecrets[cloudName] = apiSecret;
+                }
+                return {
+                    slug: entry.serviceSlug,
+                    title: entry.title || entry.serviceSlug,
+                    subService: entry.subService || '',
+                    isConnected: entry.isConnected !== false,
+                    cloudName,
+                    apiKey,
+                    apiSecret,
+                    configured: isCloudinary
+                        ? Boolean(cloudName && apiKey && apiSecret)
+                        : Object.keys(fields).length > 0 ||
+                          (Array.isArray(entry.customFields) && entry.customFields.length > 0),
+                };
+            });
+        uploadTargetCache = setting?.storage?.uploadTarget || '';
+
         applyCloudinary(snapshot);
         cache = { loadedAt: Date.now() };
     } catch {
@@ -285,6 +355,63 @@ const getCloudinaryCredentials = async () => {
     };
 };
 
+// --- Per-entry storage -----------------------------------------------------
+
+/** Every configured STORAGE entry (saved order), credentials resolved.
+ *  Internal use only — API responses must strip the secret fields. */
+const getStorageEntries = async () => {
+    await refreshCredentials();
+    return storageEntriesCache;
+};
+
+/** The original storage entry: the first Cloudinary entry, if any. */
+const getDefaultStorageEntry = async () => {
+    const entries = await getStorageEntries();
+    return entries.find((entry) => entry.subService === 'cloudinary') || null;
+};
+
+const getStorageEntryBySlug = async (slug) => {
+    if (!slug) return null;
+    const entries = await getStorageEntries();
+    return entries.find((entry) => entry.slug === slug) || null;
+};
+
+const getStorageEntryByCloudName = async (cloudName) => {
+    if (!cloudName) return null;
+    const entries = await getStorageEntries();
+    return entries.find((entry) => entry.cloudName && entry.cloudName === cloudName) || null;
+};
+
+/**
+ * The entry that receives NEW uploads: the admin's stored choice when
+ * it still names a configured + active Cloudinary entry; otherwise the
+ * first configured + active Cloudinary entry; otherwise the original
+ * entry (so the media gate can refuse with its name when it is off or
+ * unconfigured); otherwise null.
+ */
+const resolveUploadTarget = async () => {
+    const entries = await getStorageEntries();
+    const cloudinaryEntries = entries.filter((entry) => entry.subService === 'cloudinary');
+    if (!cloudinaryEntries.length) return null;
+    if (uploadTargetCache) {
+        const chosen = cloudinaryEntries.find((entry) => entry.slug === uploadTargetCache);
+        if (chosen && chosen.configured && chosen.isConnected) return chosen;
+    }
+    return (
+        cloudinaryEntries.find((entry) => entry.configured && entry.isConnected) ||
+        cloudinaryEntries[0]
+    );
+};
+
+/** Persist the admin's upload-target choice in the Setting document. */
+const setUploadTarget = async (slug) => {
+    const setting = await Setting.findOne().sort({ createdAt: 1 });
+    if (!setting) throw new Error('Settings document not found.');
+    setting.storage = { ...(setting.storage || {}), uploadTarget: slug };
+    await setting.save();
+    await refreshCredentials(true);
+};
+
 module.exports = {
     SECRET_MASK,
     ensureMigrated,
@@ -294,4 +421,10 @@ module.exports = {
     getJwtSignSecret,
     isCloudinaryActive,
     getCloudinaryCredentials,
+    getStorageEntries,
+    getDefaultStorageEntry,
+    getStorageEntryBySlug,
+    getStorageEntryByCloudName,
+    resolveUploadTarget,
+    setUploadTarget,
 };
