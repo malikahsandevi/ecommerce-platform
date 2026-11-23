@@ -46,8 +46,10 @@ function confirmSeconds(): number {
 /**
  * Settings → Appearance → Theme Colors (Ahsan's redesign).
  *
- * ONE row of compact palette BOXES (the old 8×8 swatch table was
- * too big — Ahsan's order): the palette name sits above its box,
+ * Palette BOXES in TWO rows of FOUR (the old 8×8 swatch table was
+ * too big — Ahsan's order; the boxes later grew bigger, 4 + 4 in
+ * two lines — "color cards thory bary karo aur inko 4 4 krky do
+ * lines me karo", 2026-11-23): the palette name sits above its box,
  * the box is split by a vertical line into a LIGHT half and a DARK
  * half, and the caption under the box reads "Light | Dark" instead
  * of hex codes. Each half is a miniature preview of its set
@@ -225,7 +227,7 @@ export default function ThemePalettePicker({
     return (
       <span
         data-palette-half={`${palette.id}:${mode}`}
-        className="flex flex-1 flex-col justify-center gap-[3px] px-1.5"
+        className="flex flex-1 flex-col justify-center gap-1.5 px-2.5"
         style={{
           backgroundColor: set.background,
           ...(mode === "dark"
@@ -235,7 +237,7 @@ export default function ThemePalettePicker({
       >
         <span
           data-palette-swatch={`${palette.id}:${mode}:text`}
-          className="text-[10px] font-semibold leading-none"
+          className="text-sm font-semibold leading-none"
           style={{ color: set.text }}
         >
           Aa
@@ -243,12 +245,12 @@ export default function ThemePalettePicker({
         <span
           data-palette-dot={`${palette.id}:${mode}`}
           data-palette-swatch={`${palette.id}:${mode}:primary`}
-          className="h-[7px] w-4/5 rounded-full"
+          className="h-2.5 w-4/5 rounded-full"
           style={{ backgroundColor: set.primary }}
         />
         <span
           data-palette-swatch={`${palette.id}:${mode}:secondary`}
-          className="h-[5px] w-3/5 rounded-full"
+          className="h-[7px] w-3/5 rounded-full"
           style={{ backgroundColor: set.secondary }}
         />
       </span>
@@ -290,10 +292,12 @@ export default function ThemePalettePicker({
 
       <div className="mt-4 flex flex-col gap-6 xl:flex-row">
         <div className="min-w-0 flex-1">
-          {/* Compact palette boxes (Ahsan's sketch): one box per
-              palette in a single row of 8 equal-width grid columns
-              (wrapping to 4, then 2, on narrow widths, so every box
-              stays the SAME width — "brabar karo"). The name sits
+          {/* Palette boxes (Ahsan's layout): one box per palette
+              in a grid of FOUR equal-width columns — two rows of
+              four (2026-11-23: bigger cards, "4 4 krky do lines me
+              karo") — wrapping to 2 per row on narrow widths, so
+              every box stays the SAME width — "brabar karo". The
+              name sits
               above the box; the box is split by a vertical line —
               LEFT half is the LIGHT presentation, RIGHT half the
               DARK presentation, both from the palette's real sets;
@@ -303,7 +307,7 @@ export default function ThemePalettePicker({
               caption under the box reads "Light | Dark" where hex
               codes used to be. */}
           <div
-            className="grid grid-cols-2 gap-3 min-[560px]:grid-cols-4 xl:grid-cols-8"
+            className="grid grid-cols-2 gap-4 min-[560px]:grid-cols-4"
             data-testid="palette-boxes"
           >
             {PALETTES.map((palette) => (
@@ -315,22 +319,22 @@ export default function ThemePalettePicker({
                 aria-pressed={selectedId === palette.id}
                 className="flex min-w-0 cursor-pointer flex-col text-center"
               >
-                <span className="truncate px-1 pb-1.5 text-xs font-medium text-[var(--text)]">
+                <span className="truncate px-1 pb-2 text-[13px] font-medium text-[var(--text)]">
                   {t(palette.name)}
                 </span>
                 <span
                   data-palette-box={palette.id}
-                  className="block rounded-lg p-[3px] transition"
+                  className="block rounded-lg p-1 transition"
                   style={boxStyle(palette.id)}
                 >
-                  <span className="flex h-11 overflow-hidden rounded-md">
+                  <span className="flex h-20 overflow-hidden rounded-md">
                     {renderHalf(palette, "light")}
                     {renderHalf(palette, "dark")}
                   </span>
                 </span>
                 <span
                   data-palette-caption={palette.id}
-                  className="px-1 pt-1.5 text-[10px] text-[var(--text-muted)]"
+                  className="px-1 pt-2 text-[11px] text-[var(--text-muted)]"
                 >
                   {t("Light")} | {t("Dark")}
                 </span>
