@@ -17,6 +17,12 @@ export { tint, shade, mix, adminColorVars, paletteVars } from './palettes';
 
 export interface AppearanceSettings {
   theme?: string;
+  /** Universal theme mode ('dark' | 'light'): the Setting doc is
+   *  the single source of truth for the admin theme across every
+   *  browser and device — the device stores are only a cache of
+   *  it. Written by the TopBar theme toggle; wins over the legacy
+   *  `theme` field whenever both are present. */
+  mode?: string;
   compactSidebar?: boolean;
   showBreadcrumbs?: boolean;
   enableAnimations?: boolean;
@@ -37,7 +43,10 @@ export const BREADCRUMBS_PREF_EVENT = 'admin:breadcrumbs-pref';
 
 export type DeviceTheme = 'dark' | 'light';
 
-/** The device's stored theme — the single source of truth for the theme. */
+/** The device's cached theme — a mirror of the Setting doc's
+ *  universal mode (the doc is the source of truth; this cache is
+ *  what paints before the appearance fetch lands, and the fetch
+ *  rewrites it from the doc — see fetchAndApplyAppearance). */
 export function getDeviceTheme(): DeviceTheme | null {
   try {
     const stored = localStorage.getItem('theme');
@@ -76,11 +85,12 @@ export function persistTheme(theme: DeviceTheme): void {
 // (services/palettes.ts) colours the whole panel: its four role
 // colors drive the theme variables through inline custom properties
 // on <html> (inline properties beat the stylesheet's :root /
-// [data-theme] rules), persisted exactly like the theme: localStorage
-// + cookie for the pre-paint script in the root layout, Setting doc
-// for other devices. No kept palette → no inline override → the
-// stylesheet's current orange rules, so nothing changes until a
-// palette is kept.
+// [data-theme] rules). The Setting doc is the source of truth for
+// the kept palette; localStorage + cookie are this device's cache
+// of it for the pre-paint script in the root layout, rewritten
+// whenever the doc value is applied. No kept palette → no inline
+// override → the stylesheet's current orange rules, so nothing
+// changes until a palette is kept.
 export const DEFAULT_ADMIN_COLOR = '#f97316';
 export const PALETTE_EVENT = 'admin:palette';
 const PALETTE_KEY = 'admin-palette';
@@ -317,9 +327,11 @@ export function useAdminColor(): string {
 }
 
 /**
- * Re-asserts the stored device theme onto <html>. Used as a safety net
- * after hydration and after the appearance fetch: whatever the DOM
- * attribute currently says, the device store wins.
+ * Re-asserts the cached device theme onto <html>. Used as a safety
+ * net after hydration, before the appearance fetch lands: it keeps
+ * the pre-paint theme in place for the first frames. The fetch that
+ * follows converges the panel on the Setting doc's universal
+ * palette + mode — the doc wins (see fetchAndApplyAppearance).
  */
 export function reassertDeviceTheme(): void {
   if (typeof window === 'undefined') return;
@@ -338,9 +350,17 @@ export function applyAppearance(appearance: AppearanceSettings | undefined): voi
   if (!appearance || typeof window === 'undefined') return;
 
   try {
-    // Theme — routed through persistTheme so the attribute, localStorage
-    // and the SSR cookie always move together.
-    if (appearance.theme === 'Dark') {
+    // Theme mode — the universal `mode` field wins over the legacy
+    // `theme` select value whenever both are present: mode is what
+    // the TopBar toggle writes and what every device converges on.
+    // Routed through persistTheme so the attribute, localStorage
+    // and the SSR cookie always move together — the device stores
+    // are a cache of the doc, rewritten by this application.
+    const mode =
+      appearance.mode === 'dark' || appearance.mode === 'light' ? appearance.mode : null;
+    if (mode) {
+      persistTheme(mode);
+    } else if (appearance.theme === 'Dark') {
       persistTheme('dark');
     } else if (appearance.theme === 'Light') {
       persistTheme('light');
@@ -392,17 +412,27 @@ export async function fetchAndApplyAppearance(): Promise<void> {
     const appearance = data?.appearance as AppearanceSettings | undefined;
     if (!appearance) return;
 
-    // Device precedence — the device store is the single source of truth,
-    // for the SIDEBAR as well as the theme. The server-side Appearance
-    // values may only SEED a device that has no stored choice of its own;
-    // they must never overwrite one. (The theme had this protection; the
-    // sidebar did not, so a server compactSidebar that disagreed with
-    // the admin's own toggle flipped the sidebar after every login —
-    // the fetch is the last writer in the load sequence.) When a device
-    // theme exists it is also actively RE-ASSERTED onto <html> here:
-    // the pre-paint script paints it, and this fetch ends the load with
-    // the attribute exactly as the device store says.
-    const deviceTheme = getDeviceTheme();
+    // SERVER precedence for the THEME (kept palette + mode): the
+    // Setting doc is the single source of truth, universal across
+    // every browser and device (Ahsan: the theme he set was right
+    // only on the browser he set it on — a fresh login elsewhere
+    // showed a different theme, because the per-device copy ruled).
+    // Whatever this device cached (localStorage, cookies) is only
+    // a cache: applyAppearance applies the doc's palette + mode and
+    // persistPalette/persistTheme rewrite the cache from them, so a
+    // stale device copy can never survive a load once the settings
+    // have arrived. (A brand-new browser may paint the default for
+    // its very first load, until this fetch lands — then it snaps
+    // to the server theme and caches it.)
+    // The ONE exception is a running palette PREVIEW: it stays
+    // local-until-Keep by design, so the palette fields are held
+    // back while one is active. Keep writes the doc — and from that
+    // moment the kept palette is universal anyway.
+    // The SIDEBAR keeps device precedence (unchanged, not part of
+    // the theme): the server value may only seed a device with no
+    // stored choice of its own — a server compactSidebar that
+    // disagreed with the admin's own toggle flipped the sidebar
+    // after every login, the fetch being the last writer.
     let deviceSidebar: string | null = null;
     try {
       deviceSidebar = localStorage.getItem('admin-sidebar');
@@ -410,21 +440,13 @@ export async function fetchAndApplyAppearance(): Promise<void> {
       /* storage unavailable — the server value may seed */
     }
     const toApply: AppearanceSettings = { ...appearance };
-    if (deviceTheme) delete toApply.theme;
     if (deviceSidebar) delete toApply.compactSidebar;
-    // Same device precedence for the palette: a palette this device
-    // already kept wins; the server value only seeds a fresh device.
-    // (The legacy hexes are deleted too — palette resolution would
-    // otherwise re-derive a server palette from them.)
-    const devicePalette = getDevicePaletteId();
-    if (devicePalette) {
+    if (getPalettePreview()) {
       delete toApply.palette;
       delete toApply.adminColor;
       delete toApply.storefrontColor;
     }
     applyAppearance(toApply);
-    if (deviceTheme) persistTheme(deviceTheme);
-    if (devicePalette) applyPalette(devicePalette);
   } catch {
     /* settings may be unreachable — the panel keeps its local defaults */
   }

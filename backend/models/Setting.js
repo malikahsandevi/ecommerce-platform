@@ -182,6 +182,13 @@ const settingSchema = new mongoose.Schema(
       // The palettes actually KEPT most recently (ids, most recent
       // first, max 4) — the Appearance "Last used" circles.
       paletteLastUsed: { type: [String], default: [] },
+      // Universal theme MODE ("dark" | "light"; empty = unset): the
+      // Setting doc is the single source of truth for the admin
+      // theme across every browser and device — the on-load
+      // appearance fetch applies this mode (and the kept palette)
+      // over whatever a device has cached locally, then rewrites
+      // the cache from the doc. Written by the TopBar theme toggle.
+      mode: { type: String, enum: ["dark", "light", ""], default: "" },
     },
   },
   {

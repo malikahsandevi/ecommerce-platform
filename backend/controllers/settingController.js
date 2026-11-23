@@ -350,6 +350,27 @@ const normalizeSection = (section, value, currentValue) => {
                 return true;
             }).slice(0, 4);
         }
+        // Universal theme mode: only "dark" / "light" (or empty =
+        // unset) may be stored — this doc value is the admin theme's
+        // single source of truth on every browser and device.
+        if (value.mode !== undefined) {
+            const text = String(value.mode ?? '').trim();
+            if (text !== '' && text !== 'dark' && text !== 'light') {
+                throw new Error('mode must be "dark" or "light"');
+            }
+            normalized.mode = text;
+        }
+        // The legacy theme select and the universal mode describe
+        // the same choice — an explicit theme write (the TopBar
+        // toggle also sends mode itself; the Appearance form sends
+        // only theme) keeps mode in agreement, so the two can never
+        // fight on the next load. "System" clears the mode: no
+        // universal mode is forced then.
+        if (value.theme !== undefined && value.mode === undefined) {
+            if (value.theme === 'Dark') normalized.mode = 'dark';
+            else if (value.theme === 'Light') normalized.mode = 'light';
+            else if (value.theme === 'System') normalized.mode = '';
+        }
     }
     if (section === 'general' && value.monthlyTarget !== undefined) {
         normalized.monthlyTarget = parseCurrencyNumber(value.monthlyTarget, 'monthlyTarget');

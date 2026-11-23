@@ -26,18 +26,31 @@ export default function ThemeToggle() {
   }, []);
 
   const toggleTheme = () => {
-    const nextTheme = theme === "light" ? "dark" : "light";
+    // Compute from the LIVE attribute, not this component's state:
+    // the universal theme can also change behind the toggle (the
+    // on-load appearance fetch applies the Setting doc's mode), and
+    // the toggle's next step must follow what is actually painted.
+    const current =
+      (typeof document !== "undefined" &&
+        (document.documentElement.getAttribute("data-theme") as "light" | "dark" | null)) ||
+      theme;
+    const nextTheme = current === "light" ? "dark" : "light";
     setTheme(nextTheme);
-    // One write path for every store: <html> attribute, localStorage and
-    // the SSR theme cookie all move together.
+    // One write path for every device store: <html> attribute,
+    // localStorage and the SSR theme cookie all move together.
     persistTheme(nextTheme);
-    // Keep the server-side Appearance setting in agreement (the section
-    // update merges, so only the theme field changes). Otherwise the
-    // on-login appearance fetch would seed this older server value on a
-    // fresh device. Fire-and-forget — the local change already applied.
+    // Persist the mode to the Setting doc (the section update
+    // merges, so only these fields change): the doc is the single
+    // source of truth for the theme, so this choice becomes
+    // universal — every browser/device applies it on load, over
+    // any stale local cache. Fire-and-forget — the local change
+    // already applied; if the write is refused (a session without
+    // settings permission), the catch keeps this device's toggle
+    // local, silently.
     void settingsService
       .updateSection("appearance", {
         theme: nextTheme === "dark" ? "Dark" : "Light",
+        mode: nextTheme,
       })
       .catch(() => {
         /* the local preference is already saved */

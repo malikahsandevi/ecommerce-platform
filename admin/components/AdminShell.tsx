@@ -20,11 +20,14 @@ import { LanguageProvider, fetchAndApplyLanguage } from "@/services/i18n";
 function AdminShellInner({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isRestoring, sessionNotice, clearNotice } = useAdminAuth();
 
-  // The stored device theme is the single source of truth for the theme.
-  // Re-assert it onto <html> in a layout effect — synchronously after the
-  // hydration commit, before the browser paints the hydrated tree — so the
-  // attribute the pre-paint script set can never be lost between first
-  // paint and the (auth-gated, network-bound) appearance fetch.
+  // The Setting doc is the single source of truth for the theme
+  // (universal palette + mode); the device store is only its cache.
+  // Re-assert the cached theme onto <html> in a layout effect —
+  // synchronously after the hydration commit, before the browser
+  // paints the hydrated tree — so the attribute the pre-paint
+  // script set can never be lost between first paint and the
+  // (auth-gated, network-bound) appearance fetch that converges
+  // the panel on the doc's values.
   useLayoutEffect(() => {
     reassertDeviceTheme();
   }, []);

@@ -10,8 +10,6 @@ import {
   PALETTES,
   PALETTE_MODES,
   PALETTE_MODE_LABELS,
-  PALETTE_ROLES,
-  PALETTE_ROLE_LABELS,
   paletteById,
   resolvePaletteId,
   sanitizeLastUsed,
@@ -47,13 +45,17 @@ function confirmSeconds(): number {
 /**
  * Settings → Appearance → Theme Colors (Ahsan's redesign).
  *
- * ONE table: rows are the eight color roles — each palette's DARK
- * set (Primary / Secondary / Text / Background) followed by its
- * LIGHT set — columns are ready-made palettes. Selecting a column
- * only previews it in the dummy cards on the right (one dark card
- * and one light card, both recoloring live) — the selected column
- * carries a light border. There is no per-color editing. The single
- * palette colours the admin panel AND the storefront together.
+ * ONE row of compact palette BOXES (the old 8×8 swatch table was
+ * too big — Ahsan's order): the palette name sits above its box,
+ * the box is split by a vertical line into a LIGHT half (the light
+ * set's background with its primary as a filled dot) and a DARK
+ * half (the dark set's background with its primary dot), and the
+ * caption under the box reads "Light | Dark" instead of hex codes.
+ * Selecting a box only previews it in the dummy cards on the right
+ * (one dark card and one light card, both recoloring live) — the
+ * selected box carries a light border. There is no per-color
+ * editing. The single palette colours the admin panel AND the
+ * storefront together.
  *
  * Apply puts the palette on the WHOLE panel as a temporary preview
  * and starts a 30-second countdown beside the Apply button — no
@@ -113,7 +115,7 @@ export default function ThemePalettePicker({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dataKey]);
 
-  // While a preview runs, the table selection follows it; when it
+  // While a preview runs, the box selection follows it; when it
   // ends by Revert, the selection falls back to the kept palette.
   const lastPreviewIdRef = useRef<string | null>(null);
   useEffect(() => {
@@ -189,7 +191,9 @@ export default function ThemePalettePicker({
 
   const selected = paletteById(selectedId) ?? PALETTES[0];
   const applyDisabled = previewActive || selectedId === savedId;
-  const columnStyle = (id: string): React.CSSProperties =>
+  // The selected box carries the same light border the selected
+  // table column had; every other box gets the plain hairline.
+  const boxStyle = (id: string): React.CSSProperties =>
     selectedId === id
       ? {
           boxShadow: "inset 0 0 0 2px rgba(255, 255, 255, 0.85)",
@@ -232,71 +236,73 @@ export default function ThemePalettePicker({
 
       <div className="mt-4 flex flex-col gap-6 xl:flex-row">
         <div className="min-w-0 flex-1">
-          <div className="overflow-x-auto">
-            {/* Fixed layout + an equal-fraction colgroup: every
-                palette column is the SAME width (Ahsan: "kuch box
-                bary or kuch choty hain, brabar karo") — content
-                (name/hex length) can never stretch a column, and at
-                narrower widths all columns shrink together. */}
-            <table
-              className="w-full table-fixed border-separate"
-              style={{ borderSpacing: 4 }}
-              data-testid="palette-table"
-            >
-              <colgroup>
-                <col style={{ width: "10%" }} />
-                {PALETTES.map((palette) => (
-                  <col key={palette.id} style={{ width: "11.25%" }} />
-                ))}
-              </colgroup>
-              <thead>
-                <tr>
-                  <th className="px-1 text-left text-xs font-medium text-[var(--text-muted)]">
-                    {t("Palette")}
-                  </th>
-                  {PALETTES.map((palette) => (
-                    <th
-                      key={palette.id}
-                      onClick={() => select(palette.id)}
-                      data-palette-header={palette.id}
-                      aria-pressed={selectedId === palette.id}
-                      className="cursor-pointer rounded-lg px-2 py-2 text-center text-xs font-medium text-[var(--text)] transition"
-                      style={columnStyle(palette.id)}
+          {/* Compact palette boxes (Ahsan's sketch): one box per
+              palette in a single row of 8 equal-width grid columns
+              (wrapping to 4, then 2, on narrow widths, so every box
+              stays the SAME width — "brabar karo"). The name sits
+              above the box; the box is split by a vertical line —
+              LEFT half is the LIGHT presentation (light background,
+              light primary dot), RIGHT half the DARK presentation
+              (dark background, dark primary dot), both from the
+              palette's real sets; the caption under the box reads
+              "Light | Dark" where hex codes used to be. */}
+          <div
+            className="grid grid-cols-2 gap-3 min-[560px]:grid-cols-4 xl:grid-cols-8"
+            data-testid="palette-boxes"
+          >
+            {PALETTES.map((palette) => (
+              <button
+                key={palette.id}
+                type="button"
+                onClick={() => select(palette.id)}
+                data-palette-header={palette.id}
+                aria-pressed={selectedId === palette.id}
+                className="flex min-w-0 cursor-pointer flex-col text-center"
+              >
+                <span className="truncate px-1 pb-1.5 text-xs font-medium text-[var(--text)]">
+                  {t(palette.name)}
+                </span>
+                <span
+                  data-palette-box={palette.id}
+                  className="block rounded-lg p-[3px] transition"
+                  style={boxStyle(palette.id)}
+                >
+                  <span className="flex h-11 overflow-hidden rounded-md">
+                    <span
+                      data-palette-half={`${palette.id}:light`}
+                      className="flex flex-1 items-center justify-center"
+                      style={{ backgroundColor: palette.light.background }}
                     >
-                      {t(palette.name)}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {PALETTE_MODES.map((mode) =>
-                  PALETTE_ROLES.map((role) => (
-                    <tr key={`${mode}-${role}`}>
-                      <th className="px-1 text-left text-sm font-medium text-[var(--text)]">
-                        {t(`${PALETTE_MODE_LABELS[mode]} ${PALETTE_ROLE_LABELS[role]}`)}
-                      </th>
-                      {PALETTES.map((palette) => (
-                        <td
-                          key={palette.id}
-                          onClick={() => select(palette.id)}
-                          data-palette-cell={`${palette.id}:${mode}:${role}`}
-                          className="cursor-pointer rounded-lg p-1.5 transition"
-                          style={columnStyle(palette.id)}
-                        >
-                          <div
-                            className="h-9 rounded-md border border-black/20"
-                            style={{ backgroundColor: palette[mode][role] }}
-                          />
-                          <div className="mt-1 truncate text-center text-[10px] text-[var(--text-muted)]">
-                            {palette[mode][role]}
-                          </div>
-                        </td>
-                      ))}
-                    </tr>
-                  )),
-                )}
-              </tbody>
-            </table>
+                      <span
+                        data-palette-dot={`${palette.id}:light`}
+                        className="h-4 w-4 rounded-full border border-black/20"
+                        style={{ backgroundColor: palette.light.primary }}
+                      />
+                    </span>
+                    <span
+                      data-palette-half={`${palette.id}:dark`}
+                      className="flex flex-1 items-center justify-center"
+                      style={{
+                        backgroundColor: palette.dark.background,
+                        borderLeft: "1px solid rgba(140, 140, 140, 0.45)",
+                      }}
+                    >
+                      <span
+                        data-palette-dot={`${palette.id}:dark`}
+                        className="h-4 w-4 rounded-full border border-black/20"
+                        style={{ backgroundColor: palette.dark.primary }}
+                      />
+                    </span>
+                  </span>
+                </span>
+                <span
+                  data-palette-caption={palette.id}
+                  className="px-1 pt-1.5 text-[10px] text-[var(--text-muted)]"
+                >
+                  {t("Light")} | {t("Dark")}
+                </span>
+              </button>
+            ))}
           </div>
 
           <div className="mt-4 flex flex-wrap items-center gap-3">
