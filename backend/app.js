@@ -6,7 +6,9 @@ const connectDB = require('./config/db');
 const app = express();
 
 // Middleware
-app.use(cors());
+// Content-Disposition is exposed so the admin panel can read the
+// export filename the server sets on .xlsx downloads.
+app.use(cors({ exposedHeaders: ['Content-Disposition'] }));
 // 15mb: media uploads travel as base64 data URLs in JSON bodies. The
 // default 100kb limit silently rejected any real photo before the media
 // route's own parser ever saw the request.
@@ -70,6 +72,7 @@ app.use('/api/reviews', require('./routes/reviews'));
 app.use('/api/settings', require('./routes/settings'));
 app.use('/api/storefront', require('./routes/storefront'));
 app.use('/api/media', require('./routes/media'));
+app.use('/api/export', require('./routes/export'));
 
 // Anything under /api that matched no route is a JSON 404, not HTML.
 app.use('/api', (req, res) => {

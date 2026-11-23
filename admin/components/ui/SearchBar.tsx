@@ -46,6 +46,9 @@ export interface SearchBarProps<TSearchData extends SearchableEntityRecord>
   searchSourceData: TSearchData[];
   searchableFieldsKeys: (keyof TSearchData)[];
   onSearchResultsUpdate: (filteredSearchData: TSearchData[]) => void;
+  /** Optional: reports the raw query text whenever it changes (the
+   * Data Export flow mirrors the current search server-side). */
+  onQueryChange?: (query: string) => void;
   searchPlaceholder?: string;
   searchVariant?: SearchBarVariant;
   searchSize?: SearchBarSize;
@@ -65,6 +68,7 @@ export const SearchBar = <TSearchData extends SearchableEntityRecord>({
   searchSourceData,
   searchableFieldsKeys,
   onSearchResultsUpdate,
+  onQueryChange,
   searchPlaceholder = "Search...",
   searchVariant = "secondary",
   searchSize = "md",
@@ -108,6 +112,7 @@ export const SearchBar = <TSearchData extends SearchableEntityRecord>({
   const searchKeysHash = JSON.stringify(searchableFieldsKeys);
 
   useEffect(() => {
+    onQueryChange?.(searchQuery);
     const handler = setTimeout(() => {
       if (!searchQuery.trim()) {
         onSearchResultsUpdate(searchSourceData);
@@ -159,7 +164,7 @@ export const SearchBar = <TSearchData extends SearchableEntityRecord>({
     }, debounceDelay);
 
     return () => clearTimeout(handler);
-  }, [searchQuery, searchKeysHash, searchSourceData, debounceDelay]);
+  }, [searchQuery, searchKeysHash, searchSourceData, debounceDelay, onQueryChange]);
 
   const activeSize = sizeStyles[searchSize] || sizeStyles.md;
 

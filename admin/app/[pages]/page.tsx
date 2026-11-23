@@ -22,7 +22,7 @@ import { toast } from "@/components/ui/Toast";
 
 import { getRouteConfigByPath } from "@/config";
 import { getPageIcon } from "@/config/navItems";
-import { extractApiError, PaginationMeta } from "@/services/api";
+import { apiClient, extractApiError, PaginationMeta } from "@/services/api";
 import { useAdminAuth } from "@/services/authContext";
 import { useStoreCurrency } from "@/services/currency";
 import { useLanguage } from "@/services/i18n";
@@ -241,6 +241,15 @@ const PageLayout: React.FC = () => {
   // (clearActive) and performs the reset when clearSignal increments.
   const [clearActive, setClearActive] = useState(false);
   const [clearSignal, setClearSignal] = useState(0);
+  // Data Export: the FilterBar's current search + filters + date
+  // range, reported as they change — Export sends them to the server,
+  // which re-applies the same criteria over ALL records (not just the
+  // visible page) and returns an .xlsx.
+  const [exportCriteria, setExportCriteria] = useState<{
+    search: string;
+    filters: Record<string, string>;
+    dateRange: { from: string; to: string } | null;
+  }>({ search: "", filters: {}, dateRange: null });
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(DEFAULT_PAGE_SIZE);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -472,29 +481,62 @@ const PageLayout: React.FC = () => {
     [formMapper, Route],
   );
 
-  const handleExport = useCallback(() => {
-    const columns = Object.keys(currentConfig.columnHeaders || {});
-    if (columns.length === 0) return;
-
-    const csvRows = displayItems.map((item) => {
-      const mapped = tableMapper ? tableMapper(item) : item;
-      return columns
-        .map((column) => {
-          const value = mapped[column] ?? "";
-          return `"${String(value).replace(/"/g, '""')}"`;
-        })
-        .join(",");
-    });
-
-    const csv = [columns.join(","), ...csvRows].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${Route.toLowerCase()}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
-  }, [currentConfig, displayItems, tableMapper, Route]);
+  // Data Export (Ahsan's order): server-side .xlsx of ALL records
+  // matching the current search + filters + date range. Only Super
+  // Admin and Admin may export — the button stays visible for every
+  // role (show, don't remove); other roles get the notice here and a
+  // 403 from the API if they ever reach it.
+  const handleExport = useCallback(async () => {
+    const role = user?.role;
+    if (role !== "Super Admin" && role !== "Admin") {
+      toast.error(t("Only Super Admin and Admin can export data."));
+      return;
+    }
+    const segment =
+      pathname.split("/").filter(Boolean).pop()?.toLowerCase() ||
+      Route.toLowerCase();
+    try {
+      const response = await apiClient.get(`/export/${segment}`, {
+        params: {
+          search: exportCriteria.search || undefined,
+          filters: JSON.stringify(exportCriteria.filters || {}),
+          from: exportCriteria.dateRange?.from || undefined,
+          to: exportCriteria.dateRange?.to || undefined,
+        },
+        responseType: "blob",
+      });
+      const disposition = String(
+        response.headers?.["content-disposition"] || "",
+      );
+      const match = /filename="?([^"]+)"?/.exec(disposition);
+      const fallbackDay = new Date();
+      const fallback = `${segment}-export-${fallbackDay.getFullYear()}-${String(
+        fallbackDay.getMonth() + 1,
+      ).padStart(2, "0")}-${String(fallbackDay.getDate()).padStart(2, "0")}.xlsx`;
+      const url = URL.createObjectURL(response.data as Blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = match ? match[1] : fallback;
+      link.click();
+      URL.revokeObjectURL(url);
+      toast.success(t("Export downloaded."));
+    } catch (error) {
+      // With responseType "blob" an API error body arrives as a Blob —
+      // read it back to JSON so the server's own message is what shows.
+      let message = extractApiError(error);
+      const data = (error as { response?: { data?: unknown } })?.response
+        ?.data;
+      if (typeof Blob !== "undefined" && data instanceof Blob) {
+        try {
+          const parsed = JSON.parse(await data.text());
+          if (parsed?.message) message = parsed.message;
+        } catch {
+          /* keep the generic message */
+        }
+      }
+      toast.error(message);
+    }
+  }, [user, pathname, Route, exportCriteria, t]);
 
   const handleBtnClick = useCallback(
     (btnId: string) => {
@@ -1023,6 +1065,7 @@ const PageLayout: React.FC = () => {
                 searchPlaceholder={t("Search {route}...").replace("{route}", t(Route).toLowerCase())}
                 filtersData={filtersData}
                 onDataChange={setDisplayItems}
+                onCriteriaChange={setExportCriteria}
                 searchHandoff={searchHandoff}
                 clearSignal={clearSignal}
                 onClearActiveChange={setClearActive}

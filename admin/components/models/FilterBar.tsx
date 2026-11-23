@@ -33,6 +33,14 @@ export interface FilterConfigItem {
   matchValue?: (item: any) => string;
 }
 
+/** The bar's current criteria, reported for the Data Export flow:
+ * the server re-applies exactly this search + filters + date range. */
+export interface FilterCriteria {
+  search: string;
+  filters: Record<string, string>;
+  dateRange: DateRange | null;
+}
+
 export interface FilterBarProps<TSearchData extends SearchableEntityRecord> {
   // Raw Data source
   sourceData: TSearchData[];
@@ -57,6 +65,10 @@ export interface FilterBarProps<TSearchData extends SearchableEntityRecord> {
 
   // Consolidated Emission Callback
   onDataChange: (filteredData: TSearchData[]) => void;
+
+  /** Optional: reports the current search + filter + date criteria
+   * whenever any of them changes (Data Export mirrors them server-side). */
+  onCriteriaChange?: (criteria: FilterCriteria) => void;
 
   /**
    * The Clear button itself lives in the page header row (Ahsan's
@@ -87,6 +99,7 @@ export const FilterBar = <TSearchData extends SearchableEntityRecord>({
   filtersData,
   dateField = "createdAt",
   onDataChange,
+  onCriteriaChange,
   clearSignal = 0,
   onClearActiveChange,
   searchHandoff = null,
@@ -95,6 +108,9 @@ export const FilterBar = <TSearchData extends SearchableEntityRecord>({
 
   // Internal State
   const [searchedData, setSearchedData] = useState<TSearchData[]>(sourceData);
+  // The raw search text (SearchBar owns it; reported here so the
+  // export criteria can carry it to the server).
+  const [searchQuery, setSearchQuery] = useState("");
   const [filterValues, setFilterValues] = useState<Record<string, string>>(
     () => {
       const initial: Record<string, string> = {};
@@ -144,6 +160,17 @@ export const FilterBar = <TSearchData extends SearchableEntityRecord>({
   useEffect(() => {
     setSearchedData(sourceData);
   }, [sourceData]);
+
+  // Report the current criteria (search + dropdowns + date range)
+  // whenever any part of it changes — Data Export re-applies the
+  // same criteria server-side.
+  useEffect(() => {
+    onCriteriaChange?.({
+      search: searchQuery,
+      filters: filterValues,
+      dateRange,
+    });
+  }, [searchQuery, filterValues, dateRange, onCriteriaChange]);
 
   // Handle single dropdown change
   const handleFilterChange = (filterId: string, selectedValue: string) => {
@@ -242,6 +269,7 @@ export const FilterBar = <TSearchData extends SearchableEntityRecord>({
         searchSourceData={sourceData}
         searchableFieldsKeys={searchableFieldsKeys}
         onSearchResultsUpdate={setSearchedData}
+        onQueryChange={setSearchQuery}
         searchPlaceholder={t(searchPlaceholder)}
         searchVariant={searchVariant}
         searchSize={searchSize}
