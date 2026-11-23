@@ -46,7 +46,7 @@ export const RecentOrdersCard: React.FC<RecentOrdersProps> = ({ orders }) => {
           href="/orders"
           className="inline-flex items-center gap-1 text-xs font-semibold text-(--primary) hover:text-(--primary-dark) transition-colors"
         >
-          {t("View all")}
+          {t("See All")}
           <ArrowRight className="w-3.5 h-3.5" />
         </Link>
       </div>

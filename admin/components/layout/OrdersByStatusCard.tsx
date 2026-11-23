@@ -1,5 +1,6 @@
 import React from "react";
-import { Ellipsis, ReceiptText } from "lucide-react";
+import Link from "next/link";
+import { ReceiptText } from "lucide-react";
 import { useLanguage } from "@/services/i18n";
 import { DEFAULT_ADMIN_COLOR, getDeviceAdminColor, shade, tint } from "@/services/appearance";
 
@@ -77,7 +78,12 @@ export const OrdersByStatusCard: React.FC<OrdersByStatusCardProps> = ({ data }) 
     <div className="p-5 w-full h-full bg-(--background) rounded-2xl shadow-sm border border-(--border) flex flex-col">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-base font-bold text-(--text)">{t("Orders by Status")}</h3>
-        <Ellipsis className="w-5 h-5 text-(--text-muted)" />
+        <Link
+          href="/orders"
+          className="text-xs font-semibold text-(--primary) hover:text-(--primary-dark) transition-colors"
+        >
+          {t("See All")}
+        </Link>
       </div>
 
       {total === 0 ? (

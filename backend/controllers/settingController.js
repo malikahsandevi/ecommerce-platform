@@ -6,6 +6,7 @@ const {
     isConfigured,
     findEntry,
 } = require('../config/services');
+const { PALETTES, paletteById } = require('../config/palettes');
 const { executeEntryCall, runConfigTest } = require('../utils/integrationRunner');
 const { SECRET_MASK, refreshCredentials } = require('../utils/credentials');
 const mongoose = require('mongoose');
@@ -313,9 +314,10 @@ const normalizeSection = (section, value, currentValue) => {
 
     const normalized = { ...(currentValue?.toObject?.() || currentValue || {}), ...value };
     if (section === 'appearance') {
-        // Theme colors: empty = built-in default; anything else must
-        // be a full #rrggbb hex — an invalid color is rejected, never
-        // stored (the panel also validates and toasts before saving).
+        // Legacy theme-color hexes: empty = built-in default; anything
+        // else must be a full #rrggbb hex — an invalid color is
+        // rejected, never stored. (Kept writable: they are the
+        // migration source for palette resolution.)
         for (const key of ['adminColor', 'storefrontColor']) {
             if (value[key] !== undefined) {
                 const text = String(value[key] ?? '').trim();
@@ -324,6 +326,29 @@ const normalizeSection = (section, value, currentValue) => {
                 }
                 normalized[key] = text.toLowerCase();
             }
+        }
+        // Theme palette: only a known palette id (or empty) may be
+        // stored — the palettes themselves live in config/palettes.js,
+        // never in the document.
+        if (value.palette !== undefined) {
+            const text = String(value.palette ?? '').trim();
+            if (text !== '' && !paletteById(text)) {
+                throw new Error(`palette must be one of: ${PALETTES.map((palette) => palette.id).join(', ')}`);
+            }
+            normalized.palette = text;
+        }
+        // Last-used palettes: known ids only, de-duplicated, capped
+        // at 4, most recent first.
+        if (value.paletteLastUsed !== undefined) {
+            if (!Array.isArray(value.paletteLastUsed)) {
+                throw new Error('paletteLastUsed must be an array of palette ids');
+            }
+            const seen = new Set();
+            normalized.paletteLastUsed = value.paletteLastUsed.filter((id) => {
+                if (typeof id !== 'string' || !paletteById(id) || seen.has(id)) return false;
+                seen.add(id);
+                return true;
+            }).slice(0, 4);
         }
     }
     if (section === 'general' && value.monthlyTarget !== undefined) {

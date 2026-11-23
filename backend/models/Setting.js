@@ -166,14 +166,22 @@ const settingSchema = new mongoose.Schema(
       compactSidebar: { type: Boolean, default: false },
       showBreadcrumbs: { type: Boolean, default: true },
       enableAnimations: { type: Boolean, default: true },
-      // Theme colors (Ahsan's order): two INDEPENDENT hex colors —
-      // adminColor drives the admin panel's primary/accent, and
-      // storefrontColor is reserved for the customer storefront
-      // (served publicly at GET /api/storefront/theme). Empty string
-      // means "the built-in default" (#f97316). Changing one never
-      // touches the other.
+      // Theme colors — LEGACY per-target hexes, kept readable as the
+      // migration source only: palette resolution falls back to the
+      // palette whose primary matches adminColor (then
+      // storefrontColor) when no palette id is stored yet.
       adminColor: { type: String, default: "" },
       storefrontColor: { type: String, default: "" },
+      // Theme palette (Ahsan's redesign): ONE ready-made palette —
+      // a whole set of primary/secondary/text/background colors from
+      // backend/config/palettes.js — colours BOTH the admin panel
+      // and the storefront together ("dono ko aik hi colors apply
+      // hongy"). Empty string = nothing kept yet (resolution falls
+      // back to the legacy hexes, then the default palette).
+      palette: { type: String, default: "" },
+      // The palettes actually KEPT most recently (ids, most recent
+      // first, max 4) — the Appearance "Last used" circles.
+      paletteLastUsed: { type: [String], default: [] },
     },
   },
   {

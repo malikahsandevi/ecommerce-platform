@@ -6,7 +6,6 @@ import {
   RadialBarChart,
   ResponsiveContainer,
 } from "recharts";
-import { Ellipsis } from "lucide-react";
 import { formatMoney, useStoreCurrency } from "@/services/currency";
 import { useLanguage } from "@/services/i18n";
 
@@ -74,7 +73,12 @@ export const MonthlyTargetCard: React.FC<MonthlyTargetCardProps> = ({ data }) =>
     <div className="p-5 w-full h-full bg-(--background) rounded-2xl shadow-sm border border-(--border) flex flex-col">
       <div className="flex items-center justify-between">
         <h3 className="text-base font-bold text-(--text)">{t("Monthly Target")}</h3>
-        <Ellipsis className="w-5 h-5 text-(--text-muted)" />
+        <Link
+          href="/orders"
+          className="text-xs font-semibold text-(--primary) hover:text-(--primary-dark) transition-colors"
+        >
+          {t("See All")}
+        </Link>
       </div>
 
       {/* Middle block (gauge + percentage + status text) is vertically
@@ -147,14 +151,14 @@ export const MonthlyTargetCard: React.FC<MonthlyTargetCardProps> = ({ data }) =>
         {encouragement ? (
           <>
             <p className="text-[13px] font-bold text-(--text)">{encouragement.title}</p>
-            <p className="text-[11px] text-(--text-muted) mt-1 leading-relaxed">
+            <p className="text-[11px] text-(--text-muted) mt-0.5 leading-relaxed">
               {encouragement.body}
             </p>
           </>
         ) : (
           <>
             <p className="text-[13px] font-bold text-(--text)">{t("No target set")}</p>
-            <p className="text-[11px] text-(--text-muted) mt-1 leading-relaxed">
+            <p className="text-[11px] text-(--text-muted) mt-0.5 leading-relaxed">
               {t("Set a monthly target in")}{" "}
               <Link href="/setting" className="font-semibold text-(--primary) hover:text-(--primary-dark)">
                 {t("Settings")}
@@ -169,17 +173,17 @@ export const MonthlyTargetCard: React.FC<MonthlyTargetCardProps> = ({ data }) =>
       {/* Target | Revenue boxes — pinned to the END of the card by
           margin-top: auto, whatever the card's height: the strip
           stays flush at the bottom and the flex-1 middle block above
-          absorbs the extra height. The wrapper's pt-4 keeps a minimum
+          absorbs the extra height. The wrapper's pt-3 keeps a minimum
           gap between the status text and the strip. */}
-      <div className="mt-auto pt-4">
+      <div className="mt-auto pt-3">
       <div className="grid grid-cols-2 rounded-xl overflow-hidden bg-(--primary-soft)">
-        <div className="py-2.5 text-center border-r border-(--background)">
+        <div className="py-2 text-center border-r border-(--background)">
           <p className="text-[11px] font-medium text-(--text-muted)">{t("Target")}</p>
           <p className="text-sm font-bold text-(--text) mt-0.5">
             {hasTarget ? fmtMoney(data.target) : t("Not set")}
           </p>
         </div>
-        <div className="py-2.5 text-center">
+        <div className="py-2 text-center">
           <p className="text-[11px] font-medium text-(--text-muted)">{t("Revenue")}</p>
           <p className="text-sm font-bold text-(--text) mt-0.5">
             {fmtMoney(data.revenueThisMonth)}

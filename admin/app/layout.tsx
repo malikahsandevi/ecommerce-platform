@@ -74,14 +74,45 @@ export default async function RootLayout({
                 if (sidebar === "collapsed" || (sidebar === null && window.innerWidth < 1024)) {
                   document.documentElement.setAttribute("data-sidebar", "collapsed");
                 }
-                // The saved Admin Panel Color (Settings → Appearance):
-                // applied as inline --primary* properties before first
-                // paint, with the same shade math as
-                // services/appearance.ts (adminColorVars), and mirrored
-                // into its cookie. No saved color → no override → the
-                // stylesheet's default orange.
+                // The kept Theme Palette (Settings → Appearance →
+                // Theme Colors): its four role colors are applied as
+                // inline theme variables before first paint, with the
+                // same derivation math as services/appearance.ts
+                // (paletteVars), from the colors JSON persistPalette
+                // stored. No kept palette → the legacy admin-color
+                // fallback below → no override → the stylesheet's
+                // default orange.
+                let paletteColors = null;
+                let paletteApplied = false;
+                try { paletteColors = JSON.parse(localStorage.getItem("admin-palette-colors") || "null"); } catch (e) {}
+                if (paletteColors && /^#[0-9a-fA-F]{6}$/.test(paletteColors.primary || "")) {
+                  paletteApplied = true;
+                  document.cookie = "admin-palette=" + (localStorage.getItem("admin-palette") || "") + "; path=/; max-age=31536000; SameSite=Lax";
+                  const rgbOf = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+                  const mixRgb = (a, b, amt) => a.map((v, i) => v + (b[i] - v) * amt);
+                  const toHexC = (a) => "#" + a.map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, "0")).join("");
+                  const P = rgbOf(paletteColors.primary), T = rgbOf(paletteColors.text), B = rgbOf(paletteColors.background);
+                  const BLACK = [0, 0, 0], WHITE = [255, 255, 255];
+                  const darkP = resolved === "dark";
+                  const styleP = document.documentElement.style;
+                  styleP.setProperty("--primary", paletteColors.primary);
+                  styleP.setProperty("--primary-dark", toHexC(mixRgb(P, BLACK, darkP ? 0.15 : 0.12)));
+                  styleP.setProperty("--primary-light", darkP ? toHexC(mixRgb(P, BLACK, 0.12)) : toHexC(mixRgb(P, WHITE, 0.76)));
+                  styleP.setProperty("--primary-soft", darkP ? toHexC(mixRgb(P, BLACK, 0.8)) : toHexC(mixRgb(P, WHITE, 0.93)));
+                  styleP.setProperty("--secondary", paletteColors.secondary);
+                  styleP.setProperty("--text", paletteColors.text);
+                  styleP.setProperty("--background", paletteColors.background);
+                  styleP.setProperty("--surface", toHexC(mixRgb(B, T, 0.07)));
+                  styleP.setProperty("--surface-muted", toHexC(mixRgb(B, T, 0.12)));
+                  styleP.setProperty("--border", toHexC(mixRgb(B, T, 0.18)));
+                  styleP.setProperty("--text-soft", toHexC(mixRgb(T, B, 0.25)));
+                  styleP.setProperty("--text-muted", toHexC(mixRgb(T, B, 0.45)));
+                }
+                // Legacy fallback: a device that only carries the old
+                // Admin Panel Color hex gets the --primary* family
+                // from it (the runtime migrates it to a palette).
                 const savedColor = localStorage.getItem("admin-color");
-                if (savedColor && /^#[0-9a-fA-F]{6}$/.test(savedColor)) {
+                if (!paletteApplied && savedColor && /^#[0-9a-fA-F]{6}$/.test(savedColor)) {
                   document.cookie = "admin-color=" + savedColor + "; path=/; max-age=31536000; SameSite=Lax";
                   const rgb = [parseInt(savedColor.slice(1, 3), 16), parseInt(savedColor.slice(3, 5), 16), parseInt(savedColor.slice(5, 7), 16)];
                   const mixTo = (target, amt) => rgb.map((v, i) => Math.round(v + (target[i] - v) * amt));

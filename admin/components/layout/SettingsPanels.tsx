@@ -40,7 +40,7 @@ import type {
 } from "@/services/settingsService";
 import { choiceDialog, confirmDialog } from "@/components/ui/ConfirmDialog";
 import { LANGUAGE_OPTIONS, applyLanguage, useLanguage } from "@/services/i18n";
-import { DEFAULT_ADMIN_COLOR, isValidHexColor } from "@/services/appearance";
+import ThemePalettePicker from "./ThemePalettePicker";
 
 type ObjectData = Record<string, unknown>;
 
@@ -2249,99 +2249,6 @@ function ServiceBuilderPanel({
   );
 }
 
-const THEME_COLOR_PRESETS = [
-  "#f97316", "#2563eb", "#4f46e5", "#7c3aed",
-  "#059669", "#0d9488", "#e11d48", "#475569",
-];
-
-/** One theme-color picker: preset swatches + a native color input +
- *  a hex text field. The hex field only commits a VALID #rrggbb —
- *  anything else is rejected with a toast and the text reverts. An
- *  empty stored value means the built-in default color. */
-function ThemeColorControl({
-  label,
-  description,
-  value,
-  onChange,
-}: {
-  label: string;
-  description: string;
-  value: string;
-  onChange: (hex: string) => void;
-}) {
-  const { t } = useLanguage();
-  const effective = value || DEFAULT_ADMIN_COLOR;
-  const [hexText, setHexText] = useState(effective);
-  useEffect(() => {
-    setHexText(value || DEFAULT_ADMIN_COLOR);
-  }, [value]);
-
-  const commitHexText = () => {
-    const raw = hexText.trim();
-    const normalized = raw.startsWith("#") ? raw : `#${raw}`;
-    if (isValidHexColor(normalized)) {
-      onChange(normalized.toLowerCase());
-    } else {
-      toast.error(t("Please enter a valid hex color, e.g. #f97316"));
-      setHexText(effective);
-    }
-  };
-
-  return (
-    <div className="rounded-lg border border-[var(--border)] p-4">
-      <h3 className="text-sm font-medium text-[var(--text)]">{t(label)}</h3>
-      <p className="mt-1 text-xs text-[var(--text-muted)]">{t(description)}</p>
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        {THEME_COLOR_PRESETS.map((preset) => (
-          <button
-            key={preset}
-            type="button"
-            title={preset}
-            aria-label={`${t("Color")} ${preset}`}
-            onClick={() => onChange(preset)}
-            className={`h-8 w-8 rounded-full border border-black/10 transition ${
-              effective === preset
-                ? "ring-2 ring-[var(--text)] ring-offset-2 ring-offset-[var(--background)]"
-                : "hover:scale-110"
-            }`}
-            style={{ backgroundColor: preset }}
-          />
-        ))}
-      </div>
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <input
-          type="color"
-          autoComplete="off"
-          value={effective}
-          onChange={(event) => onChange(event.target.value)}
-          aria-label={t("Custom color")}
-          className="h-10 w-14 cursor-pointer rounded-lg border border-[var(--border)] bg-[var(--background)] p-1"
-        />
-        <input
-          type="text"
-          value={hexText}
-          onChange={(event) => setHexText(event.target.value)}
-          onBlur={commitHexText}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") commitHexText();
-          }}
-          autoComplete="off"
-          spellCheck={false}
-          autoCorrect="off"
-          autoCapitalize="off"
-          aria-label={t("Hex color")}
-          className="h-10 w-32 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-sm text-[var(--text)] outline-none transition focus:border-[var(--primary)] focus:ring-2 focus:ring-[var(--primary-light)]"
-        />
-        {value && (
-          <Button variant="outline" size="sm" onClick={() => onChange("")}>
-            {t("Reset to default")}
-          </Button>
-        )}
-      </div>
-    </div>
-  );
-}
-
 function AppearancePanel({ data, saving, onSave }: SectionPanelProps<ObjectData>) {
   const { t } = useLanguage();
   const [form, setForm] = useState({
@@ -2349,8 +2256,6 @@ function AppearancePanel({ data, saving, onSave }: SectionPanelProps<ObjectData>
     compactSidebar: Boolean(data?.compactSidebar),
     showBreadcrumbs: data?.showBreadcrumbs !== false,
     enableAnimations: data?.enableAnimations !== false,
-    adminColor: String(data?.adminColor ?? ""),
-    storefrontColor: String(data?.storefrontColor ?? ""),
   });
 
   const setBoolean = (
@@ -2359,15 +2264,9 @@ function AppearancePanel({ data, saving, onSave }: SectionPanelProps<ObjectData>
   ) => setForm({ ...form, [key]: value });
 
   const handleSave = () => {
-    // Belt-and-braces: the hex fields validate on commit, but a color
-    // that is not a valid #rrggbb must never reach the API.
-    for (const key of ["adminColor", "storefrontColor"] as const) {
-      const value = form[key];
-      if (value && !isValidHexColor(value)) {
-        toast.error(t("Please enter a valid hex color, e.g. #f97316"));
-        return;
-      }
-    }
+    // The theme palette is NOT part of this form: the picker below
+    // persists it through its own Apply → Keep flow, and the backend
+    // merge leaves the stored palette untouched by this save.
     onSave(form);
   };
 
@@ -2379,19 +2278,8 @@ function AppearancePanel({ data, saving, onSave }: SectionPanelProps<ObjectData>
         options={["Light", "Dark", "System"]}
         onChange={(theme) => setForm({ ...form, theme })}
       />
-      <div className="mt-5 space-y-3">
-        <ThemeColorControl
-          label="Admin Panel Color"
-          description="The accent color used across this admin panel — buttons, active states, toggles and charts."
-          value={form.adminColor}
-          onChange={(adminColor) => setForm({ ...form, adminColor })}
-        />
-        <ThemeColorControl
-          label="Storefront Color"
-          description="The accent color for the customer storefront. It is stored separately and never changes the admin panel."
-          value={form.storefrontColor}
-          onChange={(storefrontColor) => setForm({ ...form, storefrontColor })}
-        />
+      <div className="mt-5">
+        <ThemePalettePicker data={data} />
       </div>
       <div className="mt-5 space-y-3">
         {(

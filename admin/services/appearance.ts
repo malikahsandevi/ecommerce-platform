@@ -1,17 +1,28 @@
 import { useEffect, useState } from 'react';
 import { apiClient } from './api';
+import {
+  DEFAULT_PALETTE_ID,
+  paletteById,
+  paletteByPrimary,
+  resolvePaletteId,
+  type PaletteDef,
+} from './palettes';
 
 export interface AppearanceSettings {
   theme?: string;
   compactSidebar?: boolean;
   showBreadcrumbs?: boolean;
   enableAnimations?: boolean;
-  /** Settings → Appearance theme colors: two INDEPENDENT hex colors.
-   *  adminColor drives THIS panel's primary/accent; storefrontColor
-   *  is only stored (the storefront reads it from the public
-   *  /api/storefront/theme endpoint) and never affects the panel. */
+  /** Legacy per-target theme-color hexes — migration source only:
+   *  palette resolution falls back to the palette whose primary
+   *  matches adminColor (then storefrontColor). */
   adminColor?: string;
   storefrontColor?: string;
+  /** Settings → Appearance → Theme Colors: the ONE kept palette id
+   *  (services/palettes.ts) colouring the admin panel AND the
+   *  storefront together, plus the last-used palette ids. */
+  palette?: string;
+  paletteLastUsed?: string[];
 }
 
 export const SIDEBAR_PREF_EVENT = 'admin:sidebar-pref';
@@ -42,24 +53,28 @@ export function persistTheme(theme: DeviceTheme): void {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('theme', theme);
     document.cookie = `theme=${theme}; path=/; max-age=31536000; SameSite=Lax`;
-    // The admin color's derived shades depend on the theme (light
-    // tints vs dark shades) — re-apply them for the new theme.
-    applyAdminColor(getDeviceAdminColor());
+    // The palette's derived shades depend on the theme (light tints
+    // vs dark shades) — re-apply them for the new theme.
+    applyPalette(getDevicePaletteId());
   } catch {
     /* theme is cosmetic — never let it break the panel */
   }
 }
 
-// ── Admin theme color ────────────────────────────────────────────────
-// Settings → Appearance → "Admin Panel Color". The saved hex drives
-// the panel's --primary family through inline custom properties on
-// <html> (inline properties beat the stylesheet's :root / [data-theme]
-// rules), persisted exactly like the theme: localStorage + cookie for
-// the pre-paint script in the root layout, Setting doc for other
-// devices. No saved color → no inline override → the stylesheet's
-// current orange rules, so nothing changes until a color is picked.
+// ── Theme palette ────────────────────────────────────────────────────
+// Settings → Appearance → Theme Colors. ONE ready-made palette
+// (services/palettes.ts) colours the whole panel: its four role
+// colors drive the theme variables through inline custom properties
+// on <html> (inline properties beat the stylesheet's :root /
+// [data-theme] rules), persisted exactly like the theme: localStorage
+// + cookie for the pre-paint script in the root layout, Setting doc
+// for other devices. No kept palette → no inline override → the
+// stylesheet's current orange rules, so nothing changes until a
+// palette is kept.
 export const DEFAULT_ADMIN_COLOR = '#f97316';
-export const ADMIN_COLOR_EVENT = 'admin:color';
+export const PALETTE_EVENT = 'admin:palette';
+const PALETTE_KEY = 'admin-palette';
+const PALETTE_COLORS_KEY = 'admin-palette-colors';
 const ADMIN_COLOR_KEY = 'admin-color';
 
 export const isValidHexColor = (value: string): boolean => /^#[0-9a-fA-F]{6}$/.test(value);
@@ -85,6 +100,17 @@ export const shade = (hex: string, amount: number): string => {
   return rgbToHex([rgb[0] * (1 - amount), rgb[1] * (1 - amount), rgb[2] * (1 - amount)]);
 };
 
+/** Mix one hex color toward another (amount 0..1). */
+export const mix = (from: string, to: string, amount: number): string => {
+  const a = hexToRgb(from);
+  const b = hexToRgb(to);
+  return rgbToHex([
+    a[0] + (b[0] - a[0]) * amount,
+    a[1] + (b[1] - a[1]) * amount,
+    a[2] + (b[2] - a[2]) * amount,
+  ]);
+};
+
 /** The four --primary* values for a base color under a theme. The
  *  root layout's pre-paint script computes these with the same math,
  *  so the first paint and the runtime application always agree. */
@@ -105,10 +131,54 @@ export function adminColorVars(color: string, theme: DeviceTheme): Record<string
   };
 }
 
-const ADMIN_COLOR_VARS = ['--primary', '--primary-light', '--primary-soft', '--primary-dark'];
+/** Every theme variable a palette drives. The derived surface /
+ *  border / text shades come from the palette's own background and
+ *  text colors, so a kept palette recolors the panel coherently —
+ *  not just its accents. The root layout's pre-paint script computes
+ *  these with the same math from the stored colors, so the first
+ *  paint and the runtime application always agree. */
+export function paletteVars(palette: PaletteDef, theme: DeviceTheme): Record<string, string> {
+  const { primary, secondary, text, background } = palette.colors;
+  return {
+    ...adminColorVars(primary, theme),
+    '--secondary': secondary,
+    '--text': text,
+    '--background': background,
+    '--surface': mix(background, text, 0.07),
+    '--surface-muted': mix(background, text, 0.12),
+    '--border': mix(background, text, 0.18),
+    '--text-soft': mix(text, background, 0.25),
+    '--text-muted': mix(text, background, 0.45),
+  };
+}
 
-/** The device's stored admin color (null = built-in default). */
+const PALETTE_VARS = [
+  '--primary', '--primary-light', '--primary-soft', '--primary-dark',
+  '--secondary', '--text', '--background', '--surface', '--surface-muted',
+  '--border', '--text-soft', '--text-muted',
+];
+
+/** The device's kept palette id. A device that only carries the
+ *  legacy admin-color hex resolves to the palette whose primary
+ *  matches it (the migration path); null = nothing kept yet. */
+export function getDevicePaletteId(): string | null {
+  try {
+    const stored = localStorage.getItem(PALETTE_KEY);
+    if (stored && paletteById(stored)) return stored;
+    const legacy = localStorage.getItem(ADMIN_COLOR_KEY);
+    const migrated = paletteByPrimary(legacy && isValidHexColor(legacy) ? legacy : null);
+    return migrated ? migrated.id : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The device's current primary color — the kept palette's primary,
+ *  or the legacy stored hex. Kept for the dashboard chart ramps,
+ *  which read a single base color imperatively. */
 export function getDeviceAdminColor(): string | null {
+  const palette = paletteById(getDevicePaletteId());
+  if (palette) return palette.colors.primary;
   try {
     const stored = localStorage.getItem(ADMIN_COLOR_KEY);
     return stored && isValidHexColor(stored) ? stored : null;
@@ -117,58 +187,72 @@ export function getDeviceAdminColor(): string | null {
   }
 }
 
-/** Applies a color (or clears the override for the default) to <html>
- *  for the CURRENT theme. Does not persist — persistAdminColor does. */
-export function applyAdminColor(color: string | null): void {
+/** Applies a palette (or clears every palette override for null) to
+ *  <html> for the CURRENT theme. Does not persist — persistPalette
+ *  does. The Appearance picker's Apply/Revert flow uses this to
+ *  preview and restore without touching any store. */
+export function applyPalette(paletteId: string | null): void {
   if (typeof window === 'undefined') return;
   try {
     const root = document.documentElement;
-    if (!color || !isValidHexColor(color)) {
-      for (const name of ADMIN_COLOR_VARS) root.style.removeProperty(name);
+    const palette = paletteById(paletteId);
+    if (!palette) {
+      for (const name of PALETTE_VARS) root.style.removeProperty(name);
       return;
     }
     const theme: DeviceTheme = root.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
-    const vars = adminColorVars(color, theme);
+    const vars = paletteVars(palette, theme);
     for (const [name, value] of Object.entries(vars)) root.style.setProperty(name, value);
   } catch {
-    /* color is cosmetic — never let it break the panel */
+    /* palette is cosmetic — never let it break the panel */
   }
 }
 
-/** Writes an admin color choice to every store at once (inline vars,
- *  localStorage, the SSR/pre-paint cookie) and notifies consumers. */
-export function persistAdminColor(color: string): void {
+/** Writes a kept palette to every device store at once (inline vars,
+ *  localStorage id + colors for the pre-paint script, the cookie) and
+ *  notifies consumers. The legacy admin-color store is kept in sync
+ *  with the palette's primary so older readers stay consistent. */
+export function persistPalette(paletteId: string): void {
   if (typeof window === 'undefined') return;
   try {
-    if (color && isValidHexColor(color)) {
-      localStorage.setItem(ADMIN_COLOR_KEY, color);
-      document.cookie = `${ADMIN_COLOR_KEY}=${encodeURIComponent(color)}; path=/; max-age=31536000; SameSite=Lax`;
-      applyAdminColor(color);
-    } else {
-      localStorage.removeItem(ADMIN_COLOR_KEY);
-      document.cookie = `${ADMIN_COLOR_KEY}=; path=/; max-age=0; SameSite=Lax`;
-      applyAdminColor(null);
-    }
-    window.dispatchEvent(new CustomEvent(ADMIN_COLOR_EVENT, { detail: color || '' }));
+    const palette = paletteById(paletteId);
+    if (!palette) return;
+    localStorage.setItem(PALETTE_KEY, palette.id);
+    localStorage.setItem(PALETTE_COLORS_KEY, JSON.stringify(palette.colors));
+    localStorage.setItem(ADMIN_COLOR_KEY, palette.colors.primary);
+    document.cookie = `${PALETTE_KEY}=${encodeURIComponent(palette.id)}; path=/; max-age=31536000; SameSite=Lax`;
+    document.cookie = `${ADMIN_COLOR_KEY}=${encodeURIComponent(palette.colors.primary)}; path=/; max-age=31536000; SameSite=Lax`;
+    applyPalette(palette.id);
+    window.dispatchEvent(new CustomEvent(PALETTE_EVENT, { detail: palette.id }));
   } catch {
-    /* color is cosmetic — never let it break the panel */
+    /* palette is cosmetic — never let it break the panel */
   }
 }
 
-/** The panel's current admin color (the saved one, or the default) —
- *  reactive: chart accents and ramps re-derive when it changes. */
-export function useAdminColor(): string {
-  const [color, setColor] = useState<string>(() => getDeviceAdminColor() ?? DEFAULT_ADMIN_COLOR);
+const defaultPalette = (): PaletteDef => paletteById(DEFAULT_PALETTE_ID) as PaletteDef;
+
+/** The panel's current palette (the kept one, or the default) —
+ *  reactive: consumers re-derive when a palette is kept. */
+export function usePalette(): PaletteDef {
+  const [palette, setPalette] = useState<PaletteDef>(() => paletteById(getDevicePaletteId()) ?? defaultPalette());
   useEffect(() => {
-    setColor(getDeviceAdminColor() ?? DEFAULT_ADMIN_COLOR);
+    const sync = () => setPalette(paletteById(getDevicePaletteId()) ?? defaultPalette());
+    sync();
     const onChange = (event: Event) => {
       const detail = (event as CustomEvent<string>).detail;
-      setColor(detail && isValidHexColor(detail) ? detail : (getDeviceAdminColor() ?? DEFAULT_ADMIN_COLOR));
+      setPalette(paletteById(detail) ?? paletteById(getDevicePaletteId()) ?? defaultPalette());
     };
-    window.addEventListener(ADMIN_COLOR_EVENT, onChange);
-    return () => window.removeEventListener(ADMIN_COLOR_EVENT, onChange);
+    window.addEventListener(PALETTE_EVENT, onChange);
+    return () => window.removeEventListener(PALETTE_EVENT, onChange);
   }, []);
-  return color;
+  return palette;
+}
+
+/** The panel's current primary color (the kept palette's primary, or
+ *  the default) — reactive: chart accents and ramps re-derive when
+ *  the palette changes. */
+export function useAdminColor(): string {
+  return usePalette().colors.primary;
 }
 
 /**
@@ -227,11 +311,13 @@ export function applyAppearance(appearance: AppearanceSettings | undefined): voi
       );
     }
 
-    // Admin theme color — persisted to the device stores and applied
-    // as inline --primary* overrides. (storefrontColor is NOT applied
-    // here: it belongs to the customer storefront only.)
-    if (typeof appearance.adminColor === 'string') {
-      persistAdminColor(appearance.adminColor);
+    // Theme palette — the ONE kept palette colours the whole panel
+    // (and the storefront, which reads the same palette from the
+    // public endpoint). Resolution migrates the legacy per-target
+    // hexes — admin color first — when no palette id is stored yet.
+    const paletteId = resolvePaletteId(appearance);
+    if (paletteId) {
+      persistPalette(paletteId);
     }
   } catch {
     /* appearance is cosmetic — never let it break the panel */
@@ -265,13 +351,19 @@ export async function fetchAndApplyAppearance(): Promise<void> {
     const toApply: AppearanceSettings = { ...appearance };
     if (deviceTheme) delete toApply.theme;
     if (deviceSidebar) delete toApply.compactSidebar;
-    // Same device precedence for the admin color: a color this device
-    // already chose wins; the server value only seeds a fresh device.
-    const deviceColor = getDeviceAdminColor();
-    if (deviceColor) delete toApply.adminColor;
+    // Same device precedence for the palette: a palette this device
+    // already kept wins; the server value only seeds a fresh device.
+    // (The legacy hexes are deleted too — palette resolution would
+    // otherwise re-derive a server palette from them.)
+    const devicePalette = getDevicePaletteId();
+    if (devicePalette) {
+      delete toApply.palette;
+      delete toApply.adminColor;
+      delete toApply.storefrontColor;
+    }
     applyAppearance(toApply);
     if (deviceTheme) persistTheme(deviceTheme);
-    if (deviceColor) applyAdminColor(deviceColor);
+    if (devicePalette) applyPalette(devicePalette);
   } catch {
     /* settings may be unreachable — the panel keeps its local defaults */
   }

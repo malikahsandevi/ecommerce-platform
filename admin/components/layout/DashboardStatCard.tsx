@@ -28,12 +28,12 @@ export const DashboardStatCard: React.FC<DashboardStatCardProps> = ({
   const { t } = useLanguage();
   if (loading) {
     return (
-      <div className="w-full min-w-0 p-5 bg-(--background) rounded-2xl shadow-sm border border-(--border) animate-pulse flex flex-col justify-between min-h-30">
+      <div className="w-full min-w-0 p-5 bg-(--background) rounded-2xl shadow-sm border border-(--border) animate-pulse flex flex-col justify-start min-h-[104px]">
         <div className="flex items-center justify-between">
           <div className="h-3.5 bg-(--primary-soft) rounded w-24"></div>
           <div className="h-9 w-9 bg-(--primary-soft) rounded-lg"></div>
         </div>
-        <div className="h-8 bg-(--primary-soft) rounded w-32 mt-4"></div>
+        <div className="h-8 bg-(--primary-soft) rounded w-32 mt-2"></div>
       </div>
     );
   }
@@ -43,7 +43,7 @@ export const DashboardStatCard: React.FC<DashboardStatCardProps> = ({
 
   return (
     <div
-      className="w-full min-w-0 p-5 rounded-2xl shadow-sm border flex flex-col justify-between min-h-30 transition-colors"
+      className="w-full min-w-0 p-5 rounded-2xl shadow-sm border flex flex-col justify-start min-h-[104px] transition-colors"
       style={
         highlighted
           ? {
@@ -73,7 +73,7 @@ export const DashboardStatCard: React.FC<DashboardStatCardProps> = ({
         </span>
       </div>
 
-      <div className="flex items-end justify-between gap-2 mt-3">
+      <div className="flex items-end justify-between gap-2 mt-2">
         <h3 className="text-[26px] leading-8 font-bold tracking-tight text-(--text) truncate">
           {value}
         </h3>
@@ -95,7 +95,7 @@ export const DashboardStatCard: React.FC<DashboardStatCardProps> = ({
           ) : (
             <span className="text-xs font-bold text-(--text-muted)">—</span>
           )}
-          <p className="text-[10px] text-(--text-muted) mt-0.5">{t("vs last week")}</p>
+          <p className="text-[10px] text-(--text-muted)">{t("vs last week")}</p>
         </div>
       </div>
     </div>

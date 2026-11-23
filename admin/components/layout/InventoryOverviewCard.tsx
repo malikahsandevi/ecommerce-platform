@@ -83,19 +83,19 @@ export const InventoryOverviewCard: React.FC<InventoryOverviewCardProps> = ({ da
           </p>
         </div>
       ) : (
-        <div className="flex items-stretch gap-2 sm:gap-3 mt-4 flex-1">
+        <div className="flex items-stretch gap-2 sm:gap-3 mt-3 flex-1">
           {stages.map((stage, index) => (
             <div key={t(stage.label)} className="flex-1 min-w-0 flex flex-col">
-              <p className="text-[11px] font-medium text-(--text-muted) leading-tight min-h-7">
+              <p className="text-[11px] font-medium text-(--text-muted) leading-tight min-h-7 flex items-center">
                 {t(stage.label)}
               </p>
-              <p className="text-xl sm:text-2xl font-bold text-(--text) mt-1">
+              <p className="text-xl sm:text-2xl font-bold text-(--text) mt-0.5">
                 {stage.value.toLocaleString()}
               </p>
-              <p className="text-[10px] font-semibold text-(--primary-dark) mt-0.5">
+              <p className="text-[10px] font-semibold text-(--primary-dark)">
                 {index === 0 ? t("catalog") : t("{percent}% of catalog").replace("{percent}", String(share(stage.value)))}
               </p>
-              <div className="flex-1 flex items-end mt-3 min-h-16">
+              <div className="flex-1 flex items-end mt-2 min-h-16">
                 <div
                   className="w-full rounded-t-lg transition-all"
                   style={{

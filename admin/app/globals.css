@@ -143,13 +143,24 @@ html[data-sidebar="collapsed"] .admin-sidebar .sb-center {
    at the bottom end, and their horizontal twins) is hidden so each
    end carries exactly one arrow. Firefox has no scrollbar-button
    support and ignores these rules; the sidebar nav above keeps its
-   fully hidden scrollbar. */
+   fully hidden scrollbar.
+   The triangles are MASKS, not colored images: the button's
+   background-color — the theme's --primary — shows through the
+   triangle's alpha shape, so the arrows follow whatever palette is
+   applied, exactly like the thumb. (They used to be SVG data URIs
+   with a hard-coded orange fill, so they stayed orange under every
+   other palette — Ahsan flagged that: "jo color apply ho usme
+   change ho sab".) Geometry is unchanged: 12px buttons, 6px
+   glyphs, solid triangles. */
 ::-webkit-scrollbar-button {
   display: block;
-  background-color: transparent;
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size: 6px 6px;
+  background-color: var(--primary);
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: 6px 6px;
+  mask-size: 6px 6px;
 }
 ::-webkit-scrollbar-button:vertical:increment:start,
 ::-webkit-scrollbar-button:vertical:decrement:end,
@@ -159,31 +170,29 @@ html[data-sidebar="collapsed"] .admin-sidebar .sb-center {
 }
 ::-webkit-scrollbar-button:vertical:decrement {
   height: 12px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M5 2 9 8 H1 Z' fill='%23f97316'/%3E%3C/svg%3E");
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M5 2 9 8 H1 Z' fill='%23000000'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M5 2 9 8 H1 Z' fill='%23000000'/%3E%3C/svg%3E");
 }
 ::-webkit-scrollbar-button:vertical:increment {
   height: 12px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M5 8 1 2 H9 Z' fill='%23f97316'/%3E%3C/svg%3E");
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M5 8 1 2 H9 Z' fill='%23000000'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M5 8 1 2 H9 Z' fill='%23000000'/%3E%3C/svg%3E");
 }
 ::-webkit-scrollbar-button:horizontal:decrement {
   width: 12px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2 5 8 1 V9 Z' fill='%23f97316'/%3E%3C/svg%3E");
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2 5 8 1 V9 Z' fill='%23000000'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2 5 8 1 V9 Z' fill='%23000000'/%3E%3C/svg%3E");
 }
 ::-webkit-scrollbar-button:horizontal:increment {
   width: 12px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M8 5 2 9 V1 Z' fill='%23f97316'/%3E%3C/svg%3E");
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M8 5 2 9 V1 Z' fill='%23000000'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M8 5 2 9 V1 Z' fill='%23000000'/%3E%3C/svg%3E");
 }
-::-webkit-scrollbar-button:vertical:decrement:hover {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M5 2 9 8 H1 Z' fill='%23ea580c'/%3E%3C/svg%3E");
-}
-::-webkit-scrollbar-button:vertical:increment:hover {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M5 8 1 2 H9 Z' fill='%23ea580c'/%3E%3C/svg%3E");
-}
-::-webkit-scrollbar-button:horizontal:decrement:hover {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2 5 8 1 V9 Z' fill='%23ea580c'/%3E%3C/svg%3E");
-}
+::-webkit-scrollbar-button:vertical:decrement:hover,
+::-webkit-scrollbar-button:vertical:increment:hover,
+::-webkit-scrollbar-button:horizontal:decrement:hover,
 ::-webkit-scrollbar-button:horizontal:increment:hover {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M8 5 2 9 V1 Z' fill='%23ea580c'/%3E%3C/svg%3E");
+  background-color: var(--primary-dark);
 }
 
 /* Number inputs: the browser's native spinner arrows are hidden

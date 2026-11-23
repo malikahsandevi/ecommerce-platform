@@ -1,23 +1,22 @@
 const express = require('express');
 const Setting = require('../models/Setting');
+const { paletteById, resolvePaletteId } = require('../config/palettes');
 
 const router = express.Router();
 
-// The storefront's brand color default — the same orange the admin
-// ships with. Used until an admin picks a Storefront Color in
-// Settings → Appearance.
-const DEFAULT_STOREFRONT_COLOR = '#f97316';
-
-// PUBLIC (no auth): the customer storefront reads its theme color
-// from here. Returns exactly one non-sensitive value — the saved
-// Settings → Appearance → Storefront Color, or the default. This is
-// the consumption point the future storefront build will call on
-// load; nothing else about the settings document is exposed.
+// PUBLIC (no auth): the customer storefront reads its theme palette
+// from here. ONE palette colours the storefront AND the admin panel
+// together (Settings → Appearance → Theme Colors), so this returns
+// the same palette the panel resolved: its id and its four role
+// colors. Resolution: the kept palette id wins; the legacy
+// storefront/admin hexes migrate by primary-color match; otherwise
+// the default palette. Nothing else about the settings document is
+// exposed — palette ids and brand colors are not sensitive.
 router.get('/theme', async (req, res) => {
     try {
-        const settings = await Setting.findOne().sort({ createdAt: 1 }).select('appearance.storefrontColor').lean();
-        const saved = settings?.appearance?.storefrontColor;
-        res.json({ storefrontColor: /^#[0-9a-fA-F]{6}$/.test(saved || '') ? saved : DEFAULT_STOREFRONT_COLOR });
+        const settings = await Setting.findOne().sort({ createdAt: 1 }).select('appearance').lean();
+        const palette = paletteById(resolvePaletteId(settings?.appearance));
+        res.json({ palette: palette.id, colors: { ...palette.colors } });
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
