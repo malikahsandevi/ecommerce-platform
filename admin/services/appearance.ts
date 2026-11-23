@@ -6,6 +6,7 @@ import {
   paletteByPrimary,
   paletteVars,
   resolvePaletteId,
+  sanitizeLastUsed,
   type PaletteDef,
 } from './palettes';
 
@@ -174,9 +175,10 @@ export function persistPalette(paletteId: string): void {
 // Appearance panel (navigating away and back) must not cancel the
 // preview or its countdown. NOTHING is persisted while previewing —
 // no Setting write, no device store — so a refresh mid-preview comes
-// back with the previously KEPT palette. Keep persists (the picker
-// does the Setting write + persistPalette + the "Theme saved"
-// toast); Revert restores the kept palette everywhere.
+// back with the previously KEPT palette. Keeping — via the picker's
+// Confirm during the countdown, or the global popup's Keep after it
+// — persists through keepPreviewedPalette(); Revert restores the
+// kept palette everywhere.
 export const PALETTE_PREVIEW_EVENT = 'admin:palette-preview';
 
 export interface PalettePreviewState {
@@ -245,6 +247,31 @@ export function endPalettePreview(): void {
   clearPalettePreviewTimer();
   palettePreview = null;
   emitPalettePreview();
+}
+
+/**
+ * THE persist path for a previewed palette — shared by both ways a
+ * preview can be kept: the picker's Confirm button (clicked during
+ * the countdown) and the global popup's Keep (clicked after it).
+ * Writes the Setting doc (palette + last-used, newest first,
+ * de-duplicated, capped at 4), persists to the device stores, and
+ * ends the preview — which also clears the countdown timer, so the
+ * deciding phase can never fire afterwards. Resolves with the kept
+ * palette id; throws on API failure (callers toast + revert).
+ */
+export async function keepPreviewedPalette(): Promise<string> {
+  const preview = palettePreview;
+  if (!preview) throw new Error('No palette preview is running.');
+  const id = preview.previewId;
+  const { data } = await apiClient.get('/settings');
+  const currentLastUsed = sanitizeLastUsed(data?.appearance?.paletteLastUsed);
+  const nextLastUsed = [id, ...currentLastUsed.filter((entry) => entry !== id)].slice(0, 4);
+  await apiClient.put('/settings', {
+    appearance: { palette: id, paletteLastUsed: nextLastUsed },
+  });
+  persistPalette(id);
+  endPalettePreview();
+  return id;
 }
 
 /** Reactive view of the running palette preview (null when idle). */

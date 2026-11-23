@@ -4,6 +4,7 @@ import React, { useEffect, useLayoutEffect } from "react";
 import Sidebar from "@/components/layout/Sidebar";
 import MobileNav from "@/components/layout/MobileNav";
 import AdminLoginPopup from "@/components/Login";
+import PaletteDecisionPopup from "@/components/layout/PaletteDecisionPopup";
 import { ConfirmDialogHost } from "@/components/ui/ConfirmDialog";
 import { ToastHost } from "@/components/ui/Toast";
 import { AuthProvider, useAdminAuth } from "@/services/authContext";
@@ -84,6 +85,11 @@ function AdminShellInner({ children }: { children: React.ReactNode }) {
       {/* The panel's single confirmation-dialog host (replaces every
           native confirm()/alert()). */}
       <ConfirmDialogHost />
+
+      {/* The palette Keep/Revert decision popup lives HERE, not in the
+          Appearance picker: the 30s preview can expire while the admin
+          is on any page, and the popup must appear wherever they are. */}
+      <PaletteDecisionPopup />
 
       {/* Transient success/error/info messages — bottom-right toasts,
           never an inline banner. */}

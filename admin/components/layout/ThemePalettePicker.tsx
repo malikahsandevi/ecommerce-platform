@@ -3,10 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import Button from "@/components/ui/Button";
 import { toast } from "@/components/ui/Toast";
-import { useBackdropClose } from "@/hooks/useBackdropClose";
 import { extractApiError } from "@/services/api";
 import { useLanguage } from "@/services/i18n";
-import { settingsService } from "@/services/settingsService";
 import {
   DEFAULT_PALETTE_ID,
   PALETTES,
@@ -17,10 +15,10 @@ import {
   sanitizeLastUsed,
 } from "@/services/palettes";
 import {
+  PALETTE_EVENT,
   beginPalettePreview,
-  endPalettePreview,
+  keepPreviewedPalette,
   mix,
-  persistPalette,
   revertPalettePreview,
   usePalettePreview,
 } from "@/services/appearance";
@@ -59,10 +57,15 @@ function confirmSeconds(): number {
  * popup yet, and the preview state lives in services/appearance (not
  * in this component), so the admin can switch panels and come back
  * without cancelling it. Nothing is persisted while previewing.
- * When the countdown completes, the Keep/Revert popup appears: Keep
- * saves the palette (Setting doc + device stores + last-used) with a
- * "Theme saved" toast; Revert — or a backdrop click / Escape —
- * restores the previously kept palette everywhere.
+ * During the countdown the Apply button becomes an ENABLED Confirm:
+ * clicking it means "satisfied" — the timer dies, the palette
+ * persists at once (keepPreviewedPalette) with a "Theme applied"
+ * toast, and no popup ever appears. If the time completes instead,
+ * the Keep/Revert popup appears — rendered GLOBALLY by the shell
+ * (components/layout/PaletteDecisionPopup), because the admin may
+ * be on any page by then; this picker only mirrors the outcome (a
+ * Keep fires PALETTE_EVENT, which re-syncs the kept palette +
+ * last-used below).
  */
 export default function ThemePalettePicker({
   data,
@@ -79,14 +82,12 @@ export default function ThemePalettePicker({
     () => resolvePaletteId(data) ?? DEFAULT_PALETTE_ID,
   );
   const [lastUsed, setLastUsed] = useState<string[]>(() => sanitizeLastUsed(data?.paletteLastUsed));
-  const [keeping, setKeeping] = useState(false);
 
   // The running Apply-preview (module state in services/appearance —
   // survives this panel unmounting). counting → inline countdown;
-  // deciding → the Keep/Revert popup.
+  // deciding → the shell's global Keep/Revert popup.
   const preview = usePalettePreview();
   const previewActive = preview !== null;
-  const deciding = preview?.phase === "deciding";
   const [remaining, setRemaining] = useState(0);
 
   const savedIdRef = useRef(savedId);
@@ -133,25 +134,21 @@ export default function ThemePalettePicker({
     return () => clearInterval(interval);
   }, [preview]);
 
-  const handleRevert = () => {
-    revertPalettePreview();
-    setSelectedId(savedIdRef.current ?? DEFAULT_PALETTE_ID);
-  };
-  const revertRef = useRef(handleRevert);
-  revertRef.current = handleRevert;
-
-  // Escape reverts while the popup is up (the shared backdrop hook
-  // defers Escape to alertdialogs, so the popup handles its own).
+  // A Keep completed in the shell's global popup persists through
+  // persistPalette, which fires PALETTE_EVENT — mirror the new kept
+  // palette + last-used here so this panel never shows a stale kept
+  // palette after a decision made on another page (or this one).
   useEffect(() => {
-    if (!deciding) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") revertRef.current();
+    const onKept = (event: Event) => {
+      const id = (event as CustomEvent<string>).detail;
+      if (!id || !paletteById(id)) return;
+      setSavedId(id);
+      savedIdRef.current = id;
+      setLastUsed((current) => [id, ...current.filter((entry) => entry !== id)].slice(0, 4));
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [deciding]);
-
-  const backdrop = useBackdropClose(() => revertRef.current(), deciding && !keeping);
+    window.addEventListener(PALETTE_EVENT, onKept);
+    return () => window.removeEventListener(PALETTE_EVENT, onKept);
+  }, []);
 
   const select = (id: string) => {
     if (previewRef.current) return;
@@ -167,27 +164,23 @@ export default function ThemePalettePicker({
     beginPalettePreview(selectedId, confirmSeconds(), savedIdRef.current);
   };
 
-  const handleKeep = async () => {
-    if (keeping || !previewRef.current) return;
-    setKeeping(true);
-    const id = previewRef.current.previewId;
-    const nextLastUsed = [id, ...lastUsed.filter((entry) => entry !== id)].slice(0, 4);
+  // Confirm (Ahsan's refinement): during the countdown the Apply
+  // button becomes an ENABLED Confirm — the admin is satisfied, so
+  // the timer dies at once, the palette persists through the same
+  // path the popup's Keep uses, a "Theme applied" toast shows, and
+  // no popup ever appears for this preview.
+  const [confirming, setConfirming] = useState(false);
+  const handleConfirm = async () => {
+    if (confirming || !previewRef.current) return;
+    setConfirming(true);
     try {
-      await settingsService.updateSection("appearance", {
-        palette: id,
-        paletteLastUsed: nextLastUsed,
-      });
-      persistPalette(id);
-      setSavedId(id);
-      savedIdRef.current = id;
-      setLastUsed(nextLastUsed);
-      endPalettePreview();
-      toast.success(t("Theme saved"));
+      await keepPreviewedPalette();
+      toast.success(t("Theme applied"));
     } catch (error) {
       toast.error(extractApiError(error) || t("Unable to save settings."));
-      revertRef.current();
+      revertPalettePreview();
     } finally {
-      setKeeping(false);
+      setConfirming(false);
     }
   };
 
@@ -237,11 +230,22 @@ export default function ThemePalettePicker({
       <div className="mt-4 flex flex-col gap-6 xl:flex-row">
         <div className="min-w-0 flex-1">
           <div className="overflow-x-auto">
+            {/* Fixed layout + an equal-fraction colgroup: every
+                palette column is the SAME width (Ahsan: "kuch box
+                bary or kuch choty hain, brabar karo") — content
+                (name/hex length) can never stretch a column, and at
+                narrower widths all columns shrink together. */}
             <table
-              className="w-full border-separate"
+              className="w-full table-fixed border-separate"
               style={{ borderSpacing: 4 }}
               data-testid="palette-table"
             >
+              <colgroup>
+                <col style={{ width: "10%" }} />
+                {PALETTES.map((palette) => (
+                  <col key={palette.id} style={{ width: "11.25%" }} />
+                ))}
+              </colgroup>
               <thead>
                 <tr>
                   <th className="px-1 text-left text-xs font-medium text-[var(--text-muted)]">
@@ -279,7 +283,7 @@ export default function ThemePalettePicker({
                           className="h-9 rounded-md border border-black/20"
                           style={{ backgroundColor: palette.colors[role] }}
                         />
-                        <div className="mt-1 text-center text-[10px] text-[var(--text-muted)]">
+                        <div className="mt-1 truncate text-center text-[10px] text-[var(--text-muted)]">
                           {palette.colors[role]}
                         </div>
                       </td>
@@ -291,9 +295,15 @@ export default function ThemePalettePicker({
           </div>
 
           <div className="mt-4 flex flex-wrap items-center gap-3">
-            <Button onClick={handleApply} disabled={applyDisabled} data-testid="palette-apply">
-              {t("Apply")}
-            </Button>
+            {preview?.phase === "counting" ? (
+              <Button onClick={handleConfirm} disabled={confirming} data-testid="palette-apply">
+                {t("Confirm")}
+              </Button>
+            ) : (
+              <Button onClick={handleApply} disabled={applyDisabled} data-testid="palette-apply">
+                {t("Apply")}
+              </Button>
+            )}
             {preview?.phase === "counting" ? (
               <span className="flex items-center gap-2" data-testid="palette-countdown-inline">
                 <span className="text-sm font-bold tabular-nums text-[var(--text)]">
@@ -378,33 +388,9 @@ export default function ThemePalettePicker({
         </div>
       </div>
 
-      {deciding && (
-        <div
-          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 p-3 backdrop-blur-sm animate-in fade-in duration-150"
-          role="alertdialog"
-          aria-modal="true"
-          aria-label={t("Keep this palette?")}
-          {...backdrop}
-        >
-          <div
-            className="w-full max-w-sm rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-2xl"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <h3 className="text-base font-semibold text-[var(--text)]">{t("Keep this palette?")}</h3>
-            <p className="mt-2 text-sm text-[var(--text-muted)]">
-              {t("The preview time is complete. Keep this palette to save it as your theme, or revert to bring the previous palette back.")}
-            </p>
-            <div className="mt-5 flex justify-end gap-2">
-              <Button variant="outline" onClick={() => revertRef.current()} disabled={keeping}>
-                {t("Revert")}
-              </Button>
-              <Button onClick={handleKeep} disabled={keeping} data-testid="palette-keep">
-                {keeping ? t("Saving...") : t("Keep")}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* No Keep/Revert popup here on purpose: it renders globally
+          from the shell (PaletteDecisionPopup) so it appears on
+          whatever page the admin is on when the countdown ends. */}
     </div>
   );
 }

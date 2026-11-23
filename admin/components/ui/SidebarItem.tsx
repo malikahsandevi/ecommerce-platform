@@ -39,7 +39,12 @@ const SidebarItem: React.FC<SidebarItemProps> = ({
         <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-1 rounded-r-full bg-(--primary)" />
       )}
       <Icon size={20} className={active ? "text-(--primary)" : ""} />
-      {!collapsed && <span className="sb-label truncate">{label}</span>}
+      {/* Nav labels are pure WHITE for every item, active or not
+          (Ahsan's order) — the colour sits on the label span only,
+          so icon colours (which inherit the link colour) and the
+          active pill background stay exactly as they were; the
+          active item is told apart by its pill, bar and weight. */}
+      {!collapsed && <span className="sb-label truncate text-white">{label}</span>}
     </Link>
   );
 };
