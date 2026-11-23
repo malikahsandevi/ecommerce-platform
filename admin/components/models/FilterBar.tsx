@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronDown } from "lucide-react";
 import SearchBar, { SearchableEntityRecord } from "@/components/ui/SearchBar";
 import Select, {
   SelectOption,
@@ -103,10 +102,43 @@ export const FilterBar = <TSearchData extends SearchableEntityRecord>({
       return initial;
     },
   );
-  // By-Date filter state: the applied range (null = all dates) and
-  // whether the shared DateRangePicker popup is open.
+  // By-Date filter state (Ahsan's order: presets in a dropdown —
+  // All Dates · Last 7 Days · Last 30 Days · Last 90 Days · Custom).
+  // `datePreset` is the dropdown's selection; `dateRange` is the
+  // effective range the pipeline below tests — a preset computes it
+  // on selection, Custom takes it from the shared DateRangePicker.
+  // Null range = all dates.
+  const [datePreset, setDatePreset] = useState<string>("all");
   const [dateRange, setDateRange] = useState<DateRange | null>(null);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
+
+  // "Last N Days" = today − (N−1) days through today, inclusive —
+  // the same local ISO days the pipeline compares against.
+  const presetRange = (days: number): DateRange => {
+    const to = new Date();
+    const from = new Date();
+    from.setDate(from.getDate() - (days - 1));
+    return { from: toIsoDay(from), to: toIsoDay(to) };
+  };
+
+  // Date dropdown change: a preset applies immediately; "All Dates"
+  // clears the range; "Custom" never switches by itself — it opens
+  // the shared DateRangePicker (starting from the currently applied
+  // range) and only its Apply commits, exactly like the Dashboard's
+  // Revenue range control.
+  const handleDatePresetChange = (value: string) => {
+    if (value === "custom") {
+      setDatePickerOpen(true);
+      return;
+    }
+    if (value === "all") {
+      setDatePreset("all");
+      setDateRange(null);
+      return;
+    }
+    setDatePreset(value);
+    setDateRange(presetRange(Number(value)));
+  };
 
   // Source data change sync
   useEffect(() => {
@@ -128,8 +160,10 @@ export const FilterBar = <TSearchData extends SearchableEntityRecord>({
     filtersData.forEach((f) => (resetValues[f.id] = "all"));
     setFilterValues(resetValues);
     setSearchedData(sourceData);
-    // The date range is part of the same reset: the control returns
-    // to its empty "All Dates" state with everything else.
+    // The date selection is part of the same reset: the control
+    // returns to "All Dates" (preset and range cleared) with
+    // everything else.
+    setDatePreset("all");
     setDateRange(null);
   }, [filtersData, sourceData]);
 
@@ -238,30 +272,40 @@ export const FilterBar = <TSearchData extends SearchableEntityRecord>({
             direction={item.direction || "bottom"}
           />
         ))}
-        {/* By-Date filter (Ahsan's order): a trigger in the same
-            group and the same dress as the dropdowns — primary,
-            size md, label + chevron — opening the SHARED
+        {/* By-Date filter (Ahsan's order): a dropdown in the same
+            group and the same dress as the other filters — the house
+            Select, primary, size md — with presets All Dates ·
+            Last 7 Days · Last 30 Days · Last 90 Days · Custom. A
+            preset applies at once; Custom opens the SHARED
             DateRangePicker popup, the very component the Dashboard's
-            Revenue Analytics Custom period uses (not a fork). Empty
-            it reads "All Dates"; applied it shows the range in the
-            component's short format, like the dashboard trigger. */}
-        <div className="relative flex-1 text-left">
-          <button
-            type="button"
-            data-testid="date-filter-trigger"
-            onClick={() => setDatePickerOpen(true)}
-            className="inline-flex w-full cursor-pointer items-center justify-between gap-1 rounded-lg bg-[var(--primary)] px-2 py-1.5 text-sm font-semibold text-[var(--primary-text,#ffffff)] shadow-2xs transition-colors hover:opacity-90 focus:shadow-2xl"
-          >
-            <span className="inline-flex items-center gap-1.5 truncate">
-              <span className="truncate font-medium">
-                {dateRange
-                  ? `${formatRangeDayShort(dateRange.from)} – ${formatRangeDayShort(dateRange.to)}`
-                  : t("All Dates")}
-              </span>
-            </span>
-            <ChevronDown className="ml-0.5 h-3 w-3 shrink-0 opacity-70" />
-          </button>
-        </div>
+            Revenue Analytics Custom period uses (not a fork). The
+            trigger shows the preset's name while one is active, the
+            applied custom range in the component's short format
+            (via triggerLabel, like the dashboard trigger), and
+            "All Dates" when nothing is applied. */}
+        <Select
+          fullWidth={true}
+          menuWide={true}
+          className="flex-1 border-[var(--border)] bg-[var(--surface)] text-[var(--text)]"
+          data-testid="date-filter-trigger"
+          value={datePreset}
+          options={[
+            { label: t("All Dates"), value: "all" },
+            { label: t("Last 7 Days"), value: "7" },
+            { label: t("Last 30 Days"), value: "30" },
+            { label: t("Last 90 Days"), value: "90" },
+            { label: t("Custom"), value: "custom" },
+          ]}
+          onChange={handleDatePresetChange}
+          variant="primary"
+          size="md"
+          direction="bottom"
+          triggerLabel={
+            datePreset === "custom" && dateRange
+              ? `${formatRangeDayShort(dateRange.from)} – ${formatRangeDayShort(dateRange.to)}`
+              : undefined
+          }
+        />
 
         {/* The Clear button moved up into the page header row — this
             row now ends with the last dropdown, nothing in its place. */}
@@ -271,7 +315,11 @@ export const FilterBar = <TSearchData extends SearchableEntityRecord>({
         open={datePickerOpen}
         value={dateRange}
         onApply={(range) => {
+          // Applying in the picker commits a CUSTOM range: the
+          // dropdown selection switches to "custom" and the trigger
+          // shows the range itself (see triggerLabel above).
           setDateRange(range);
+          setDatePreset("custom");
           setDatePickerOpen(false);
         }}
         onClose={() => setDatePickerOpen(false)}
