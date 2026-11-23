@@ -42,6 +42,10 @@ import type {
   SettingsUser,
 } from "@/services/settingsService";
 import { choiceDialog, confirmDialog } from "@/components/ui/ConfirmDialog";
+import {
+  securityCheckDialog,
+  isSecurityCheckCancelled,
+} from "@/components/ui/SecurityCheckDialog";
 import { LANGUAGE_OPTIONS, applyLanguage, useLanguage } from "@/services/i18n";
 import ThemePalettePicker from "./ThemePalettePicker";
 
@@ -624,8 +628,12 @@ function UsersPanel({
       });
       setShowAddForm(false);
     } catch (createError) {
-      // The page rethrows with the API's message (e.g. duplicate email).
-      setFormError(createError instanceof Error ? createError.message : t("Unable to create the user."));
+      // A cancelled security check is not an error — the form simply
+      // stays open, unsaved. Real failures rethrow with the API's
+      // message (e.g. duplicate email).
+      if (!isSecurityCheckCancelled(createError)) {
+        setFormError(createError instanceof Error ? createError.message : t("Unable to create the user."));
+      }
     } finally {
       setCreating(false);
     }
@@ -665,6 +673,8 @@ function UsersPanel({
   // like the create flow surfaces errors to the Add User form.
   const inlineUpdate = (id: string, values: UpdateUserValues) => {
     void onUpdateUser(id, values).catch((updateError: unknown) => {
+      // A cancelled security check saves nothing and says nothing.
+      if (isSecurityCheckCancelled(updateError)) return;
       toast.error(
         updateError instanceof Error ? updateError.message : t("Unable to update user."),
       );
@@ -768,9 +778,13 @@ function UsersPanel({
       });
       setEditingUser(null);
     } catch (updateError) {
-      setEditError(
-        updateError instanceof Error ? updateError.message : t("Unable to update user."),
-      );
+      // A cancelled security check leaves the form open and unsaved,
+      // with no error shown.
+      if (!isSecurityCheckCancelled(updateError)) {
+        setEditError(
+          updateError instanceof Error ? updateError.message : t("Unable to update user."),
+        );
+      }
     } finally {
       setSavingEdit(false);
     }
@@ -1206,9 +1220,15 @@ function RolePermissionsPanel({
   };
 
   const saveMatrix = async () => {
+    // Settings Lock: the matrix save verifies the admin's own
+    // password first (the API re-verifies it for this save).
+    const securityPassword = await securityCheckDialog({
+      message: t("Enter your own account password to save the role permissions."),
+    });
+    if (!securityPassword) return;
     setSaving(true);
     try {
-      const saved = await settingsService.updatePermissions(matrix);
+      const saved = await settingsService.updatePermissions(matrix, securityPassword);
       setMatrix(saved);
       toast.success(t("Role permissions saved."));
     } catch (saveError) {
@@ -1233,13 +1253,19 @@ function RolePermissionsPanel({
       confirmLabel: t("Restore Defaults"),
     });
     if (!confirmed) return;
+    // Settings Lock: restoring defaults is the same matrix write —
+    // same per-save password verification.
+    const securityPassword = await securityCheckDialog({
+      message: t("Enter your own account password to restore the default permissions."),
+    });
+    if (!securityPassword) return;
     setRestoring(true);
     try {
       const payload: PermissionMatrixData = {
         ...matrix,
         ...JSON.parse(JSON.stringify(data.defaults)) as PermissionMatrixData,
       };
-      const saved = await settingsService.updatePermissions(payload);
+      const saved = await settingsService.updatePermissions(payload, securityPassword);
       setMatrix(saved);
       toast.success(t("Role permissions restored to defaults."));
     } catch (restoreError) {
@@ -1269,9 +1295,16 @@ function RolePermissionsPanel({
       variant: "danger",
     });
     if (!confirmed) return;
+    // Settings Lock: the role deletion verifies the admin's own
+    // password after the danger confirmation.
+    const securityPassword = await securityCheckDialog({
+      message: t("Enter your own account password to delete this role."),
+      confirmLabel: t("Verify & Delete"),
+    });
+    if (!securityPassword) return;
     setDeletingRole(true);
     try {
-      await settingsService.deleteRole(selectedRole);
+      await settingsService.deleteRole(selectedRole, securityPassword);
       setSelectedRole("Admin");
       await loadPermissions();
       toast.success(t("Role deleted."));
@@ -1317,10 +1350,16 @@ function RolePermissionsPanel({
       setRoleError(t("A role with this name already exists."));
       return;
     }
+    // Settings Lock: creating a role is a Settings save — verify
+    // first; a cancel leaves the form open with no error.
+    const securityPassword = await securityCheckDialog({
+      message: t("Enter your own account password to create this role."),
+    });
+    if (!securityPassword) return;
     setCreatingRole(true);
     setRoleError("");
     try {
-      const created = await settingsService.createRole(name);
+      const created = await settingsService.createRole(name, securityPassword);
       await loadPermissions();
       setSelectedRole(created.role);
       setShowAddRole(false);
@@ -2127,11 +2166,20 @@ function ServiceBuilderPanel({
       toast.error(problem);
       return false;
     }
+    // Settings Lock: every entry save verifies the admin's own
+    // password for that save (the Test flow's save-first step passes
+    // through here too — the test execution itself is not a save and
+    // asks for nothing).
+    const securityPassword = await securityCheckDialog({
+      message: t("Enter your own account password to save this service."),
+    });
+    if (!securityPassword) return false;
     setBusy((current) => ({ ...current, [index]: "save" }));
     try {
       const result = await settingsService.saveIntegration(
         entryToApi(item),
         item.persisted ? item.persistedSlug : undefined,
+        securityPassword,
       );
       if (result.integration) {
         const saved = entryFromApi(result.integration);
@@ -2193,10 +2241,16 @@ function ServiceBuilderPanel({
       toast.error(problem);
       return false;
     }
+    // Settings Lock: the clone is a save like any other — same
+    // per-save password verification.
+    const securityPassword = await securityCheckDialog({
+      message: t("Enter your own account password to save this service."),
+    });
+    if (!securityPassword) return false;
     setBusy((current) => ({ ...current, [index]: "save" }));
     try {
       const payload = { ...entryToApi(clone), cloneFromSlug: item.persistedSlug };
-      const result = await settingsService.saveIntegration(payload, undefined);
+      const result = await settingsService.saveIntegration(payload, undefined, securityPassword);
       if (result.integration) {
         const savedClone = entryFromApi(result.integration);
         savedClone.uiId = clone.uiId;
@@ -2313,9 +2367,16 @@ function ServiceBuilderPanel({
       variant: "danger",
     });
     if (!confirmed) return;
+    // Settings Lock: removing a saved entry is a Settings save —
+    // verify after the danger confirmation.
+    const securityPassword = await securityCheckDialog({
+      message: t("Enter your own account password to remove this service."),
+      confirmLabel: t("Verify & Remove"),
+    });
+    if (!securityPassword) return;
     setBusy((current) => ({ ...current, [index]: "delete" }));
     try {
-      const result = await settingsService.deleteIntegration(item.serviceSlug);
+      const result = await settingsService.deleteIntegration(item.serviceSlug, securityPassword);
       setEntries((current) => current.filter((_, idx) => idx !== index));
       onSync(result.integrations);
       toast.success(t("{title} removed.").replace("{title}", item.title));

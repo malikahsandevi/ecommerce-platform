@@ -21,6 +21,22 @@ apiClient.interceptors.request.use((config) => {
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    // Settings Lock: the full Settings reads require the short-lived
+    // unlock proof minted by POST /settings/verify-password (see
+    // services/settingsLock.ts, which owns the storage keys). Present
+    // it on settings requests only — the server enforces it; an
+    // absent/expired proof simply earns a 403 SETTINGS_LOCKED.
+    if ((config.url || '').includes('/settings')) {
+      try {
+        const unlock = sessionStorage.getItem('settings-unlock-token');
+        const exp = Number(sessionStorage.getItem('settings-unlock-exp') || 0);
+        if (unlock && (!exp || Date.now() <= exp)) {
+          config.headers['X-Settings-Unlock'] = unlock;
+        }
+      } catch {
+        /* storage unavailable — the request goes without the proof */
+      }
+    }
   }
   return config;
 });

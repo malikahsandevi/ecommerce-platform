@@ -9,6 +9,11 @@ const {
 const { PALETTES, paletteById } = require('../config/palettes');
 const { executeEntryCall, runConfigTest } = require('../utils/integrationRunner');
 const { SECRET_MASK, refreshCredentials } = require('../utils/credentials');
+const {
+    SETTINGS_UNLOCK_TTL_SECONDS,
+    issueSettingsUnlock,
+    passwordMatchesCaller,
+} = require('../utils/settingsLock');
 const mongoose = require('mongoose');
 
 // NOTE: the old bespoke 'paymentMethods' and 'shipping' sections are
@@ -134,6 +139,57 @@ const getSettings = async (req, res) => {
         res.json(settings ? maskSettingsDocument(settings) : {});
     } catch (error) {
         res.status(500).json({ message: error.message });
+    }
+};
+
+// ── Settings Lock: password re-verification ─────────────────────────
+// POST /api/settings/verify-password — the caller re-enters their OWN
+// account password; on a match the API mints the short-lived unlock
+// proof the full Settings reads require (middleware/settingsLock).
+// A wrong password is a 403, never a 401: the panel's HTTP layer
+// treats a 401 as a dead session and would sign the admin out. The
+// failure changes nothing — no lockout, no login side effects.
+const verifySettingsPassword = async (req, res) => {
+    try {
+        const matches = await passwordMatchesCaller(req, req.body?.password);
+        if (!matches) {
+            return res.status(403).json({
+                message: 'Incorrect password. Settings stays locked.',
+            });
+        }
+        const unlockToken = await issueSettingsUnlock(req.user._id);
+        res.json({ unlockToken, expiresIn: SETTINGS_UNLOCK_TTL_SECONDS });
+    } catch (error) {
+        if (error.code === 'JWT_SIGNING_DISABLED') {
+            return res.status(403).json({ message: error.message });
+        }
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// ── Universal appearance write ──────────────────────────────────────
+// PUT /api/settings/appearance — the ONE settings write that is NOT a
+// Settings-panel save: the TopBar theme toggle and the palette Keep
+// path write the appearance section from anywhere in the admin, and
+// they must keep working with no password prompt (a theme choice is
+// the panel's universal rendering state, applied for every staff
+// session). Only the appearance section may ride this route — every
+// other section stays on the password-gated document save. The
+// Settings → Appearance panel's own Save does NOT use this route: it
+// goes through the gated document save like every other panel save.
+const updateSettingsAppearance = async (req, res) => {
+    try {
+        const appearance = req.body?.appearance;
+        if (!appearance || typeof appearance !== 'object' || Array.isArray(appearance)) {
+            return res.status(400).json({ message: 'Provide the appearance section to update' });
+        }
+        let settings = await Setting.findOne().sort({ createdAt: 1 });
+        if (!settings) settings = new Setting();
+        settings.set('appearance', normalizeSection('appearance', appearance, settings.get('appearance')));
+        const savedSettings = await settings.save();
+        res.json(maskSettingsDocument(savedSettings));
+    } catch (error) {
+        res.status(400).json({ message: error.message });
     }
 };
 
@@ -621,4 +677,4 @@ const deleteIntegrationEntry = async (req, res) => {
     }
 };
 
-module.exports = { getSettings, getShellBootstrap, updateSettings, executeIntegration, getServicesCatalogue, maskSettingsDocument, maskValue, isMaskOf, getSettingById, updateSettingById, saveIntegrationEntry, deleteIntegrationEntry };
+module.exports = { getSettings, getShellBootstrap, updateSettings, verifySettingsPassword, updateSettingsAppearance, executeIntegration, getServicesCatalogue, maskSettingsDocument, maskValue, isMaskOf, getSettingById, updateSettingById, saveIntegrationEntry, deleteIntegrationEntry };

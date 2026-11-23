@@ -11,6 +11,11 @@ const {
 const { protect } = require('../middleware/auth');
 const { requireStaff } = require('../middleware/admin');
 const { requirePermission, requireAnyPermission } = require('../middleware/permissions');
+const {
+    requireSavePasswordForUserCreate,
+    requireSavePasswordForUserUpdate,
+    requireSavePasswordForUserDelete,
+} = require('../middleware/settingsLock');
 
 
 // User management is staff-only: signed in AND holding a staff role.
@@ -60,14 +65,20 @@ const guardDelete = async (req, res, next) => {
     }
 };
 
+// Settings Lock (Ahsan's order): writes that administer a STAFF
+// account are Settings → Users & Roles saves, so each one also
+// verifies the caller's own password for that save (the gates in
+// middleware/settingsLock draw the same staff/customer split as the
+// guards above). Ordinary customer-record writes through these same
+// endpoints are NOT gated and keep working as before.
 router.route('/')
     .get(requireAnyPermission([['Users', 'view'], ['Customers', 'view']]), getUsers)
-    .post(guardCreate, createUser);
+    .post(guardCreate, requireSavePasswordForUserCreate, createUser);
 
 router.route('/:id')
     .get(requireAnyPermission([['Users', 'view'], ['Customers', 'view']]), getUserById)
-    .put(guardUpdate, updateUser)
-    .delete(guardDelete, deleteUser);
+    .put(guardUpdate, requireSavePasswordForUserUpdate, updateUser)
+    .delete(guardDelete, requireSavePasswordForUserDelete, deleteUser);
 
 // The customer's shopping profile: stored lists + order-derived stats.
 router.get(

@@ -43,12 +43,15 @@ export default function ThemeToggle() {
     // merges, so only these fields change): the doc is the single
     // source of truth for the theme, so this choice becomes
     // universal — every browser/device applies it on load, over
-    // any stale local cache. Fire-and-forget — the local change
+    // any stale local cache. This goes through the UNIVERSAL
+    // appearance write, not the Settings panels' gated document
+    // save: the toggle lives outside Settings and must never ask
+    // for a password. Fire-and-forget — the local change
     // already applied; if the write is refused (a session without
     // settings permission), the catch keeps this device's toggle
     // local, silently.
     void settingsService
-      .updateSection("appearance", {
+      .updateAppearance({
         theme: nextTheme === "dark" ? "Dark" : "Light",
         mode: nextTheme,
       })

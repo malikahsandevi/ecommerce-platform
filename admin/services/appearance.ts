@@ -298,10 +298,16 @@ export async function keepPreviewedPalette(): Promise<string> {
   const preview = palettePreview;
   if (!preview) throw new Error('No palette preview is running.');
   const id = preview.previewId;
-  const { data } = await apiClient.get('/settings');
+  // The Keep path is part of the UNIVERSAL appearance flow (the
+  // decision popup can fire on any page), so it must not depend on
+  // the Settings Lock: the last-used list comes from the shell
+  // bootstrap (which serves the appearance section to any staff
+  // session) and the write goes through the appearance-only route,
+  // never the locked full-document read / gated document save.
+  const { data } = await apiClient.get('/settings/bootstrap');
   const currentLastUsed = sanitizeLastUsed(data?.appearance?.paletteLastUsed);
   const nextLastUsed = [id, ...currentLastUsed.filter((entry) => entry !== id)].slice(0, 4);
-  await apiClient.put('/settings', {
+  await apiClient.put('/settings/appearance', {
     appearance: { palette: id, paletteLastUsed: nextLastUsed },
   });
   persistPalette(id);

@@ -73,8 +73,37 @@ export const settingsService = {
     return data;
   },
 
-  async updateSection(section: SettingsSection, values: unknown): Promise<SettingsDocument> {
-    const { data } = await apiClient.put<SettingsDocument>("/settings", { [section]: values });
+  /** Settings Lock (Ahsan's order): EVERY save inside Settings
+   *  verifies the admin's own password for that save. The panels
+   *  collect it through the SecurityCheck modal and pass it here; it
+   *  rides in the request body as `securityPassword` (or the
+   *  X-Settings-Password header on DELETEs), the API verifies it
+   *  against the caller's hash and strips it before anything is
+   *  written — a missing/wrong password earns a 403 and nothing is
+   *  saved. The value is never stored by this layer. */
+  async updateSection(
+    section: SettingsSection,
+    values: unknown,
+    securityPassword?: string,
+  ): Promise<SettingsDocument> {
+    const { data } = await apiClient.put<SettingsDocument>("/settings", {
+      [section]: values,
+      ...(securityPassword ? { securityPassword } : {}),
+    });
+    return data;
+  },
+
+  /** The universal appearance write (PUT /settings/appearance): the
+   *  TopBar theme toggle and the palette Keep path write the
+   *  appearance section from anywhere in the admin — deliberately NOT
+   *  password-gated, because a theme choice is the panel's universal
+   *  rendering state. The Settings → Appearance panel's own Save does
+   *  NOT come through here: it uses the gated updateSection above,
+   *  like every other panel save. */
+  async updateAppearance(values: Record<string, unknown>): Promise<SettingsDocument> {
+    const { data } = await apiClient.put<SettingsDocument>("/settings/appearance", {
+      appearance: values,
+    });
     return data;
   },
 
@@ -87,20 +116,32 @@ export const settingsService = {
   async saveIntegration(
     entry: Record<string, unknown>,
     slugOverride?: string,
+    securityPassword?: string,
   ): Promise<{ integration: Record<string, unknown> | null; integrations: Array<Record<string, unknown>> }> {
     // The URL slug is the entry's STORED identity (a persisted entry
     // keeps its slug even if its title was renamed).
     const slug = encodeURIComponent(String(slugOverride ?? entry.serviceSlug ?? ""));
-    const { data } = await apiClient.put(`/settings/integrations/${slug}`, entry);
+    const { data } = await apiClient.put(`/settings/integrations/${slug}`, {
+      ...entry,
+      ...(securityPassword ? { securityPassword } : {}),
+    });
     return data;
   },
 
-  /** Per-entry remove (DELETE /settings/integrations/:slug). */
+  /** Per-entry remove (DELETE /settings/integrations/:slug). A
+   *  Settings save, so the per-save security password rides along —
+   *  in the header, since a DELETE carries no reliable body. */
   async deleteIntegration(
     serviceSlug: string,
+    securityPassword?: string,
   ): Promise<{ integrations: Array<Record<string, unknown>> }> {
     const { data } = await apiClient.delete(
       `/settings/integrations/${encodeURIComponent(serviceSlug)}`,
+      {
+        headers: securityPassword
+          ? { "X-Settings-Password": securityPassword }
+          : undefined,
+      },
     );
     return data;
   },
@@ -110,8 +151,12 @@ export const settingsService = {
     return data;
   },
 
-  async deleteUser(id: string): Promise<void> {
-    await apiClient.delete(`/users/${id}`);
+  async deleteUser(id: string, securityPassword?: string): Promise<void> {
+    await apiClient.delete(`/users/${id}`, {
+      headers: securityPassword
+        ? { "X-Settings-Password": securityPassword }
+        : undefined,
+    });
   },
 
   /** Creates an account from Settings → Users & Roles ("Add User").
@@ -127,8 +172,11 @@ export const settingsService = {
     confirmPassword?: string;
     role: string;
     isActive: boolean;
-  }): Promise<SettingsUser> {
-    const { data } = await apiClient.post<SettingsUser>("/users", values);
+  }, securityPassword?: string): Promise<SettingsUser> {
+    const { data } = await apiClient.post<SettingsUser>("/users", {
+      ...values,
+      ...(securityPassword ? { securityPassword } : {}),
+    });
     return data;
   },
 
@@ -142,17 +190,21 @@ export const settingsService = {
   async updateUser(
     id: string,
     values: UpdateUserValues,
+    securityPassword?: string,
   ): Promise<SettingsUser> {
-    const { data } = await apiClient.put<SettingsUser>(`/users/${id}`, values);
+    const { data } = await apiClient.put<SettingsUser>(`/users/${id}`, {
+      ...values,
+      ...(securityPassword ? { securityPassword } : {}),
+    });
     return data;
   },
 
   /** Creates a custom role (Super Admin only — the API answers 403 for
    *  anyone else). The new role starts with no permissions at all. */
-  async createRole(name: string): Promise<{ role: string; roles: string[]; customRoles: string[] }> {
+  async createRole(name: string, securityPassword?: string): Promise<{ role: string; roles: string[]; customRoles: string[] }> {
     const { data } = await apiClient.post<{ role: string; roles: string[]; customRoles: string[] }>(
       "/permissions/roles",
-      { name },
+      { name, ...(securityPassword ? { securityPassword } : {}) },
     );
     return data;
   },
@@ -160,9 +212,14 @@ export const settingsService = {
   /** Deletes a custom role (Super Admin only — the API answers 403 for
    *  anyone else, 400 for a built-in role, and 400 with the assignment
    *  count while any user still holds the role). */
-  async deleteRole(name: string): Promise<{ role: string; roles: string[]; customRoles: string[] }> {
+  async deleteRole(name: string, securityPassword?: string): Promise<{ role: string; roles: string[]; customRoles: string[] }> {
     const { data } = await apiClient.delete<{ role: string; roles: string[]; customRoles: string[] }>(
       `/permissions/roles/${encodeURIComponent(name)}`,
+      {
+        headers: securityPassword
+          ? { "X-Settings-Password": securityPassword }
+          : undefined,
+      },
     );
     return data;
   },
@@ -195,10 +252,10 @@ export const settingsService = {
 
   /** Replaces the matrix (Super Admin only — the API answers 403 for
    *  anyone else). Returns the stored matrix as merged with defaults. */
-  async updatePermissions(matrix: PermissionMatrixData): Promise<PermissionMatrixData> {
+  async updatePermissions(matrix: PermissionMatrixData, securityPassword?: string): Promise<PermissionMatrixData> {
     const { data } = await apiClient.put<{ matrix: PermissionMatrixData }>(
       "/permissions",
-      { matrix },
+      { matrix, ...(securityPassword ? { securityPassword } : {}) },
     );
     return data.matrix;
   },

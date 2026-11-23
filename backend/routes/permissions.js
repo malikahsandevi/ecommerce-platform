@@ -1,6 +1,7 @@
 const express = require('express');
 const { protect } = require('../middleware/auth');
 const { requireStaff } = require('../middleware/admin');
+const { requireSettingsSavePassword } = require('../middleware/settingsLock');
 const RolePermission = require('../models/RolePermission');
 const User = require('../models/User');
 const {
@@ -18,6 +19,12 @@ const {
 const router = express.Router();
 
 router.use(protect, requireStaff);
+
+// Settings Lock (Ahsan's order): the writes below are Settings →
+// Users & Roles saves (matrix replace, role create/delete), so each
+// one also verifies the caller's own password for that save
+// (requireSettingsSavePassword) on top of the Super-Admin checks the
+// handlers themselves enforce. Reads stay ungated.
 
 // GET /api/permissions/me — the signed-in user's own effective
 // permissions; the admin shell gates its UI on this. It also carries
@@ -66,7 +73,7 @@ router.get('/', async (req, res) => {
 // everyone else). The name is trimmed, length-bounded and must not
 // duplicate an existing role name, case-insensitively. A new role
 // starts with NO permissions; the matrix editor grants them afterwards.
-router.post('/roles', async (req, res) => {
+router.post('/roles', requireSettingsSavePassword, async (req, res) => {
     try {
         if (req.user.role !== 'Super Admin') {
             return res.status(403).json({
@@ -119,7 +126,7 @@ router.post('/roles', async (req, res) => {
 // assignment count — nobody is silently reassigned; the panel must
 // move those users first. On success the role leaves customRoles[]
 // and its matrix row is dropped in the same write.
-router.delete('/roles/:name', async (req, res) => {
+router.delete('/roles/:name', requireSettingsSavePassword, async (req, res) => {
     try {
         if (req.user.role !== 'Super Admin') {
             return res.status(403).json({
@@ -167,7 +174,7 @@ router.delete('/roles/:name', async (req, res) => {
 
 // PUT /api/permissions — replace the matrix. Super Admin only: letting a
 // lesser role edit the matrix would make every other rule pointless.
-router.put('/', async (req, res) => {
+router.put('/', requireSettingsSavePassword, async (req, res) => {
     try {
         if (req.user.role !== 'Super Admin') {
             return res.status(403).json({

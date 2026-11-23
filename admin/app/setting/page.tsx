@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   Bell,
@@ -18,7 +18,18 @@ import Button from "@/components/ui/Button";
 import PermissionNotice from "@/components/ui/PermissionNotice";
 import TopBar from "@/components/ui/TopBar";
 import { confirmDialog } from "@/components/ui/ConfirmDialog";
+import {
+  securityCheckDialog,
+  SecurityCheckCancelledError,
+} from "@/components/ui/SecurityCheckDialog";
+import SettingsLockScreen from "@/components/layout/SettingsLockScreen";
+import {
+  clearSettingsUnlock,
+  hasSettingsUnlock,
+  isSettingsLockedError,
+} from "@/services/settingsLock";
 import { settingsService } from "@/services/settingsService";
+import { extractApiError } from "@/services/api";
 import type { SettingsDocument, SettingsSection, SettingsUser, UpdateUserValues } from "@/services/settingsService";
 import { useAdminAuth } from "@/services/authContext";
 import { applyAppearance, type AppearanceSettings } from "@/services/appearance";
@@ -82,6 +93,33 @@ export default function SettingsPage() {
   const [users, setUsers] = useState<SettingsUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  // Settings Lock: until the admin re-verifies their own password,
+  // this page shows the lock screen and no settings data is loaded
+  // (the API refuses the full read with 403 SETTINGS_LOCKED anyway).
+  const [locked, setLocked] = useState(false);
+
+  const loadSettings = useCallback(() => {
+    setLoading(true);
+    return settingsService
+      .getSettings()
+      .then((data) => {
+        setSettings(data);
+        setLocked(false);
+      })
+      .catch((loadError: unknown) => {
+        if (isSettingsLockedError(loadError)) {
+          // The stored unlock proof is gone/expired — back to the
+          // lock screen, never an error toast.
+          clearSettingsUnlock();
+          setLocked(true);
+        } else {
+          toast.error(loadError instanceof Error ? loadError.message : t("Unable to load settings."));
+        }
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, [t]);
 
   // The settings API requires the admin token — wait for the session
   // before loading, and reload once it appears (the shell renders this
@@ -90,28 +128,20 @@ export default function SettingsPage() {
   // Settings view never fires the fetch at all: the page renders the
   // permission notice below and no settings data is even requested
   // (the API would answer 403 anyway — this keeps the state clean).
+  // With Settings view but NO unlock proof, the read would only earn
+  // the locked refusal — go straight to the lock screen instead.
   useEffect(() => {
     if (!isAuthenticated || !canViewSettings) return;
-    let cancelled = false;
-    setLoading(true);
-    settingsService.getSettings()
-      .then((data) => {
-        if (!cancelled) setSettings(data);
-      })
-      .catch((loadError: unknown) => {
-        if (!cancelled) toast.error(loadError instanceof Error ? loadError.message : t("Unable to load settings."));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isAuthenticated, canViewSettings]);
+    if (!hasSettingsUnlock()) {
+      setLocked(true);
+      setLoading(false);
+      return;
+    }
+    void loadSettings();
+  }, [isAuthenticated, canViewSettings, loadSettings]);
 
   useEffect(() => {
-    if (activeMenu !== "Users & Roles" || !isAuthenticated || !canViewSettings || !canViewUsers) return;
+    if (activeMenu !== "Users & Roles" || !isAuthenticated || !canViewSettings || !canViewUsers || locked) return;
     let cancelled = false;
 
     settingsService.getUsers()
@@ -125,12 +155,20 @@ export default function SettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeMenu, isAuthenticated, canViewSettings, canViewUsers]);
+  }, [activeMenu, isAuthenticated, canViewSettings, canViewUsers, locked]);
 
   const saveSection = async (section: SettingsSection, value: unknown) => {
+    // Settings Lock: every Settings save first verifies the admin's
+    // own password (the modal); a cancel saves nothing. The password
+    // rides with this one request only — the API re-verifies it
+    // server-side before writing.
+    const securityPassword = await securityCheckDialog({
+      message: t("Enter your own account password to save these settings."),
+    });
+    if (!securityPassword) return;
     setSaving(true);
     try {
-      const updated = await settingsService.updateSection(section, value);
+      const updated = await settingsService.updateSection(section, value, securityPassword);
       setSettings(updated);
       // Appearance takes effect immediately, not just in the database.
       if (section === "appearance") {
@@ -144,7 +182,10 @@ export default function SettingsPage() {
       }
       toast.success(t("Settings saved."));
     } catch (saveError) {
-      toast.error(saveError instanceof Error ? saveError.message : t("Unable to save settings."));
+      // Surface the API's own message (extractApiError) — a refused
+      // security check, like any other save refusal, must tell the
+      // admin WHY nothing was saved, not a generic failure line.
+      toast.error(extractApiError(saveError));
     } finally {
       setSaving(false);
     }
@@ -158,8 +199,15 @@ export default function SettingsPage() {
       variant: "danger",
     });
     if (!confirmed) return;
+    // Settings Lock: the deletion is a Settings save — it verifies
+    // the admin's own password after the danger confirmation.
+    const securityPassword = await securityCheckDialog({
+      message: t("Enter your own account password to delete this user."),
+      confirmLabel: t("Verify & Delete"),
+    });
+    if (!securityPassword) return;
     try {
-      await settingsService.deleteUser(id);
+      await settingsService.deleteUser(id, securityPassword);
       setUsers((currentUsers) => currentUsers.filter((user) => user._id !== id));
     } catch (deleteError) {
       toast.error(deleteError instanceof Error ? deleteError.message : t("Unable to delete user."));
@@ -175,8 +223,15 @@ export default function SettingsPage() {
     role: string;
     isActive: boolean;
   }) => {
+    // Settings Lock: creating an account from Users & Roles is a
+    // Settings save — verify first; a cancel aborts silently (the
+    // panel treats SecurityCheckCancelledError as "stay quiet").
+    const securityPassword = await securityCheckDialog({
+      message: t("Enter your own account password to create this user."),
+    });
+    if (!securityPassword) throw new SecurityCheckCancelledError();
     try {
-      const created = await settingsService.createUser(values);
+      const created = await settingsService.createUser(values, securityPassword);
       setUsers((currentUsers) => [...currentUsers, created]);
       toast.success(t("User created."));
     } catch (createError) {
@@ -191,8 +246,15 @@ export default function SettingsPage() {
   };
 
   const updateUser = async (id: string, values: UpdateUserValues) => {
+    // Settings Lock: same per-save verification as createUser. (A
+    // password change inside the edit form keeps its own trio check
+    // on top — that flow is unchanged.)
+    const securityPassword = await securityCheckDialog({
+      message: t("Enter your own account password to save this user."),
+    });
+    if (!securityPassword) throw new SecurityCheckCancelledError();
     try {
-      const updated = await settingsService.updateUser(id, values);
+      const updated = await settingsService.updateUser(id, values, securityPassword);
       setUsers((currentUsers) =>
         currentUsers.map((user) => (user._id === id ? { ...user, ...updated } : user)),
       );
@@ -227,6 +289,33 @@ export default function SettingsPage() {
         <PermissionNotice
           section="Settings"
           heading={t("You don't have permission to view Settings")}
+        />
+      </main>
+    );
+  }
+
+  // Settings Lock: a role WITH Settings view gets the lock screen
+  // until they re-verify their own password — no panel, no settings
+  // data (the API refuses the reads too). Precedence is deliberate:
+  // no-view → the permission notice above; view + locked → here;
+  // view + unlocked → the panels below.
+  if (isAuthenticated && locked) {
+    return (
+      <main className="min-h-full bg-[var(--background)] p-3">
+        <header className="mb-3 flex w-full items-center justify-between">
+          <TopBar
+            title={t("Settings")}
+            subtitle={t("Manage your store settings and preferences")}
+            user={topBarUser}
+            messages={[]}
+            notifications={[]}
+          />
+        </header>
+        <SettingsLockScreen
+          onUnlocked={() => {
+            setLocked(false);
+            void loadSettings();
+          }}
         />
       </main>
     );

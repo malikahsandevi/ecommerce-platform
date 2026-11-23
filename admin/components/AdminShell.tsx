@@ -7,6 +7,7 @@ import MobileNav from "@/components/layout/MobileNav";
 import AdminLoginPopup from "@/components/Login";
 import PaletteDecisionPopup from "@/components/layout/PaletteDecisionPopup";
 import { ConfirmDialogHost } from "@/components/ui/ConfirmDialog";
+import { SecurityCheckDialogHost } from "@/components/ui/SecurityCheckDialog";
 import { ToastHost } from "@/components/ui/Toast";
 import { AuthProvider, useAdminAuth } from "@/services/authContext";
 import { fetchAndApplyAppearance, PaletteSeedContext, reassertDeviceTheme } from "@/services/appearance";
@@ -97,6 +98,11 @@ function AdminShellInner({ children }: { children: React.ReactNode }) {
       {/* The panel's single confirmation-dialog host (replaces every
           native confirm()/alert()). */}
       <ConfirmDialogHost />
+
+      {/* The Settings Lock's per-save security-check host — every
+          save inside Settings prompts for the admin's own password
+          through this one modal. */}
+      <SecurityCheckDialogHost />
 
       {/* The palette Keep/Revert decision popup lives HERE, not in the
           Appearance picker: the 30s preview can expire while the admin
