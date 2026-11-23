@@ -12,6 +12,11 @@ const rolePermissionSchema = new mongoose.Schema(
     {
         key: { type: String, required: true, unique: true, default: 'matrix' },
         matrix: { type: mongoose.Schema.Types.Mixed, default: {} },
+        // Roles created from Settings → Users & Roles on top of the
+        // built-in vocabulary in utils/permissions.js. Built-in role
+        // names are never stored here; this list only grows through the
+        // Super-Admin-only POST /api/permissions/roles endpoint.
+        customRoles: { type: [String], default: [] },
         updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     },
     { timestamps: true },

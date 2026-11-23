@@ -33,8 +33,13 @@ const guardCreate = (req, res, next) => {
 };
 
 const guardUpdate = (req, res, next) => {
+    // Setting a new password is account-level work too — but only a
+    // NON-EMPTY one: the Customers form always submits its password
+    // field, blank when the password should stay as it is.
+    const setsPassword =
+        typeof req.body?.password === 'string' && req.body.password.trim().length > 0;
     const touchesAccount =
-        req.body && ('role' in req.body || 'isActive' in req.body);
+        req.body && ('role' in req.body || 'isActive' in req.body || setsPassword);
     const guard = touchesAccount
         ? requirePermission('Users', 'edit')
         : requireAnyPermission([['Users', 'edit'], ['Customers', 'edit']]);

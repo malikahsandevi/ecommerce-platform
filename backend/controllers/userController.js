@@ -2,6 +2,7 @@ const User = require('../models/User');
 const Order = require('../models/Order');
 // Registered so Order's coupon populate can resolve its code.
 require('../models/Coupon');
+const { getAllRoleNames } = require('../utils/permissions');
 
 const FAVORITE_CATEGORY_LIMIT = 3;
 const favoriteCategoryError = (res) =>
@@ -38,6 +39,8 @@ const getUserById = async (req, res) => {
     }
 };
 
+// Built-in vocabulary, used as the fast path — the authoritative check
+// is getAllRoleNames(), which also knows roles created from the panel.
 const USER_ROLES = ['Super Admin', 'Admin', 'Manager', 'Editor', 'Support', 'Customer'];
 
 // @desc    Create a new user (Settings → Users & Roles "Add User")
@@ -61,8 +64,11 @@ const createUser = async (req, res) => {
         if (String(password).length < 6) {
             return res.status(400).json({ message: 'Password must be at least 6 characters.' });
         }
-        if (role !== undefined && !USER_ROLES.includes(role)) {
-            return res.status(400).json({ message: `Invalid role. Use one of: ${USER_ROLES.join(', ')}.` });
+        if (role !== undefined) {
+            const knownRoles = await getAllRoleNames();
+            if (!knownRoles.includes(role)) {
+                return res.status(400).json({ message: `Invalid role. Use one of: ${knownRoles.join(', ')}.` });
+            }
         }
 
         const normalizedEmail = String(email).trim().toLowerCase();
@@ -124,13 +130,26 @@ const otherActiveSuperAdmins = async (excludeId) => {
     });
 };
 
-// @desc    Update a user (profile, role, active status)
+// @desc    Update a user (profile, role, active status, password)
 // @route   PUT /api/users/:id
 // @access  Admin
 const updateUser = async (req, res) => {
     try {
-        // Exclude password from updates in this route for safety
-        const { password, ...updateData } = req.body;
+        const { password, ...updateData } = req.body || {};
+
+        // Password change: the edit forms promise "leave blank to keep
+        // the current password" — an absent or blank password therefore
+        // changes NOTHING (the stored hash stays byte-identical). A
+        // provided password must meet the same minimum as account
+        // creation (6 characters) and is applied by setting it on the
+        // document and saving, so the model's pre-save hook hashes it
+        // exactly like a freshly created account. It is never echoed
+        // back: the response is re-read without the password field.
+        const wantsPasswordChange =
+            typeof password === 'string' && password.trim().length > 0;
+        if (wantsPasswordChange && password.length < 6) {
+            return res.status(400).json({ message: 'Password must be at least 6 characters.' });
+        }
 
         if (Array.isArray(updateData.favoriteCategories)
             && updateData.favoriteCategories.length > FAVORITE_CATEGORY_LIMIT) {
@@ -140,6 +159,13 @@ const updateUser = async (req, res) => {
         const target = await User.findById(req.params.id);
         if (!target) {
             return res.status(404).json({ message: 'User not found' });
+        }
+
+        if (updateData.role !== undefined) {
+            const knownRoles = await getAllRoleNames();
+            if (!knownRoles.includes(updateData.role)) {
+                return res.status(400).json({ message: `Invalid role. Use one of: ${knownRoles.join(', ')}.` });
+            }
         }
 
         const roleChanges = updateData.role !== undefined && updateData.role !== target.role;
@@ -165,12 +191,17 @@ const updateUser = async (req, res) => {
             }
         }
 
-        const user = await User.findByIdAndUpdate(
-            req.params.id,
-            updateData,
-            { new: true, runValidators: true }
-        ).select('-password');
+        // Document save (not findByIdAndUpdate) so schema validators run
+        // and the password pre-save hook fires when a new password was
+        // set. When no password was provided the field is never touched,
+        // so the stored hash is preserved exactly.
+        target.set(updateData);
+        if (wantsPasswordChange) {
+            target.password = password;
+        }
+        await target.save();
 
+        const user = await User.findById(target._id).select('-password');
         res.json(user);
     } catch (error) {
         res.status(400).json({ message: error.message });

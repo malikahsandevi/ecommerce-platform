@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import Image from "next/image";
-import { Check, ChevronDown, ChevronUp, Copy, Eye, EyeOff, KeyRound, LoaderCircle, Play, Plus, Save, ShieldCheck, Trash2, Code2 } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Copy, Eye, EyeOff, KeyRound, LoaderCircle, Pencil, Play, Plus, RotateCcw, Save, ShieldCheck, Trash2, Code2 } from "lucide-react";
 import ServiceIcon from "@/components/ui/ServiceIcon";
 import {
   SERVICE_CATALOGUE,
@@ -25,6 +25,7 @@ import { useAdminAuth } from "@/services/authContext";
 import type {
   PermissionMatrixData,
   RolePermissionsData,
+  UpdateUserValues,
 } from "@/services/settingsService";
 import {
   SettingsCard,
@@ -107,7 +108,7 @@ export function SettingsPanel({
   onSave: (section: SettingsSection, value: unknown) => void;
   onIntegrationsSync: (integrations: Array<Record<string, unknown>>) => void;
   onDeleteUser: (id: string) => void;
-  onUpdateUser: (id: string, values: { role?: string; isActive?: boolean }) => void;
+  onUpdateUser: (id: string, values: UpdateUserValues) => Promise<void>;
   onCreateUser: (values: NewUserValues) => Promise<void>;
 }) {
   switch (activeMenu) {
@@ -543,7 +544,7 @@ function UsersPanel({
 }: {
   users: SettingsUser[];
   onDeleteUser: (id: string) => void;
-  onUpdateUser: (id: string, values: { role?: string; isActive?: boolean }) => void;
+  onUpdateUser: (id: string, values: UpdateUserValues) => Promise<void>;
   onCreateUser: (values: NewUserValues) => Promise<void>;
 }) {
   const { t } = useLanguage();
@@ -616,6 +617,110 @@ function UsersPanel({
   const selectClassName =
     "h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-sm text-[var(--text)] outline-none transition focus:border-[var(--primary)]";
 
+  // Role choices for every select in this panel: the built-in list,
+  // widened with any custom roles the permissions API knows about (a
+  // user already holding a custom role must keep it selectable too).
+  const [knownRoles, setKnownRoles] = useState<string[]>(USER_ROLE_OPTIONS);
+  useEffect(() => {
+    let cancelled = false;
+    settingsService
+      .getPermissions()
+      .then((perms) => {
+        if (!cancelled && Array.isArray(perms.roles) && perms.roles.length > 0) {
+          setKnownRoles(perms.roles);
+        }
+      })
+      .catch(() => {
+        /* the built-in list stays as the fallback */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const selectRoleOptions = Array.from(
+    new Set([...knownRoles, ...users.map((user) => user.role || "Customer")]),
+  );
+
+  // Inline row changes (role select, status toggle) report failures as
+  // a toast — the page rethrows them with the API's message, exactly
+  // like the create flow surfaces errors to the Add User form.
+  const inlineUpdate = (id: string, values: UpdateUserValues) => {
+    void onUpdateUser(id, values).catch((updateError: unknown) => {
+      toast.error(
+        updateError instanceof Error ? updateError.message : t("Unable to update user."),
+      );
+    });
+  };
+
+  // ── Edit User ──────────────────────────────────────────────────────
+  // Same modal shape as Add User, plus the password rule the form
+  // states in its placeholder: blank keeps the current password (the
+  // field is then omitted from the request entirely).
+  const [editingUser, setEditingUser] = useState<SettingsUser | null>(null);
+  const [editForm, setEditForm] = useState<NewUserValues>({
+    firstName: "",
+    lastName: "",
+    email: "",
+    password: "",
+    role: "Manager",
+    isActive: true,
+  });
+  const [editError, setEditError] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  const editUserBackdrop = useBackdropClose(
+    () => setEditingUser(null),
+    Boolean(editingUser) && !savingEdit,
+  );
+
+  const openEditForm = (user: SettingsUser) => {
+    setEditForm({
+      firstName: user.firstName || "",
+      lastName: user.lastName || "",
+      email: user.email || "",
+      password: "",
+      role: user.role || "Customer",
+      isActive: user.isActive !== false,
+    });
+    setEditError("");
+    setEditingUser(user);
+  };
+
+  const submitEditForm = async () => {
+    if (!editingUser) return;
+    if (!editForm.firstName.trim()) {
+      setEditError(t("A first name is required."));
+      return;
+    }
+    if (!/^\S+@\S+\.\S+$/.test(editForm.email.trim())) {
+      setEditError(t("Enter a valid email address."));
+      return;
+    }
+    if (editForm.password && editForm.password.length < 6) {
+      setEditError(t("Password must be at least 6 characters."));
+      return;
+    }
+    setSavingEdit(true);
+    setEditError("");
+    try {
+      await onUpdateUser(editingUser._id, {
+        firstName: editForm.firstName.trim(),
+        lastName: editForm.lastName.trim(),
+        email: editForm.email.trim(),
+        role: editForm.role,
+        isActive: editForm.isActive,
+        ...(editForm.password ? { password: editForm.password } : {}),
+      });
+      setEditingUser(null);
+    } catch (updateError) {
+      setEditError(
+        updateError instanceof Error ? updateError.message : t("Unable to update user."),
+      );
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
   return (
     <>
     <SettingsCard
@@ -677,7 +782,7 @@ function UsersPanel({
                   onChange={(event) => setForm({ ...form, role: event.target.value })}
                   className={selectClassName}
                 >
-                  {USER_ROLE_OPTIONS.map((role) => (
+                  {selectRoleOptions.map((role) => (
                     <option key={role} value={role}>
                       {t(role)}
                     </option>
@@ -716,6 +821,93 @@ function UsersPanel({
         </div>
       )}
 
+      {editingUser && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3"
+          {...editUserBackdrop}
+        >
+          <div className="w-full max-w-md rounded-xl border border-[var(--border)] bg-[var(--background)] p-5 shadow-2xl">
+            <h3 className="text-base font-semibold text-[var(--text)]">{t("Edit User")}</h3>
+            <p className="mt-1 text-xs text-[var(--text-muted)]">
+              {t("Update the account's details — set a new password only when it should change.")}
+            </p>
+
+            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <SettingsInput
+                label="First Name"
+                value={editForm.firstName}
+                onChange={(event) => setEditForm({ ...editForm, firstName: event.target.value })}
+              />
+              <SettingsInput
+                label="Last Name"
+                value={editForm.lastName}
+                onChange={(event) => setEditForm({ ...editForm, lastName: event.target.value })}
+              />
+              <div className="sm:col-span-2">
+                <SettingsInput
+                  label="Email Address"
+                  type="email"
+                  value={editForm.email}
+                  onChange={(event) => setEditForm({ ...editForm, email: event.target.value })}
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <SettingsInput
+                  label="New Password"
+                  type="password"
+                  autoComplete="new-password"
+                  placeholder="Leave blank to keep the current password"
+                  value={editForm.password}
+                  onChange={(event) => setEditForm({ ...editForm, password: event.target.value })}
+                />
+              </div>
+              <div>
+                <span className="mb-2 block text-xs font-medium text-[var(--text-soft)]">{t("Role")}</span>
+                <select
+                  aria-label={t("Role for the user being edited")}
+                  value={editForm.role}
+                  onChange={(event) => setEditForm({ ...editForm, role: event.target.value })}
+                  className={selectClassName}
+                >
+                  {selectRoleOptions.map((role) => (
+                    <option key={role} value={role}>
+                      {t(role)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <span className="mb-2 block text-xs font-medium text-[var(--text-soft)]">{t("Status")}</span>
+                <select
+                  aria-label={t("Status for the user being edited")}
+                  value={editForm.isActive ? "active" : "inactive"}
+                  onChange={(event) => setEditForm({ ...editForm, isActive: event.target.value === "active" })}
+                  className={selectClassName}
+                >
+                  <option value="active">{t("Active")}</option>
+                  <option value="inactive">{t("Inactive")}</option>
+                </select>
+              </div>
+            </div>
+
+            {editError && (
+              <p className="mt-4 rounded-lg border border-red-300 bg-red-500/10 p-3 text-xs text-red-600" role="alert">
+                {editError}
+              </p>
+            )}
+
+            <div className="mt-5 flex justify-end gap-3">
+              <Button variant="ghost" onClick={() => setEditingUser(null)} disabled={savingEdit}>
+                {t("Cancel")}
+              </Button>
+              <Button variant="primary" onClick={() => void submitEditForm()} disabled={savingEdit}>
+                {savingEdit ? t("Saving...") : t("Save Changes")}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
         <table className="w-full min-w-[600px] text-left text-sm">
           <thead className="bg-[var(--surface)] text-xs text-[var(--text-muted)]">
@@ -742,10 +934,10 @@ function UsersPanel({
                     aria-label={t("Role for {email}").replace("{email}", user.email)}
                     value={user.role || "Customer"}
                     disabled={!canEditUsers}
-                    onChange={(event) => onUpdateUser(user._id, { role: event.target.value })}
+                    onChange={(event) => inlineUpdate(user._id, { role: event.target.value })}
                     className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-[13px] text-[var(--text)] outline-none focus:border-[var(--primary)] disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {USER_ROLE_OPTIONS.map((role) => (
+                    {selectRoleOptions.map((role) => (
                       <option key={role} value={role}>
                         {t(role)}
                       </option>
@@ -756,7 +948,7 @@ function UsersPanel({
                   <button
                     type="button"
                     disabled={!canEditUsers}
-                    onClick={() => onUpdateUser(user._id, { isActive: user.isActive === false })}
+                    onClick={() => inlineUpdate(user._id, { isActive: user.isActive === false })}
                     className={`rounded-full px-2.5 py-1 text-[11px] font-semibold disabled:cursor-not-allowed disabled:opacity-60 ${
                       user.isActive === false
                         ? "bg-red-500/10 text-red-500"
@@ -770,8 +962,20 @@ function UsersPanel({
                 <td className="px-4 py-3 text-center">
                   {/* Same row-action rule as the shared resource
                       tables: always visible, muted at rest, full
-                      colour on the hovered row. (This table's row
-                      action is delete; role/status edit inline.) */}
+                      colour on the hovered row. Edit opens the user
+                      form (profile + optional password change); the
+                      role/status quick edits stay inline. */}
+                  {canEditUsers && (
+                    <button
+                      type="button"
+                      aria-label={t("Edit User")}
+                      title={t("Edit")}
+                      onClick={() => openEditForm(user)}
+                      className="rounded-md p-1.5 text-[var(--text-muted)] transition-colors duration-200 hover:bg-[var(--primary-soft)] hover:text-[var(--primary)] group-hover:text-[var(--primary)]"
+                    >
+                      <Pencil size={16} />
+                    </button>
+                  )}
                   {canDeleteUsers && (
                     <button
                       type="button"
@@ -855,17 +1059,19 @@ function RolePermissionsPanel() {
   const [selectedRole, setSelectedRole] = useState("Admin");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [restoring, setRestoring] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
+
+  const loadPermissions = async () => {
+    const loaded = await settingsService.getPermissions();
+    setData(loaded);
+    setMatrix(loaded.matrix);
+    return loaded;
+  };
 
   useEffect(() => {
     let cancelled = false;
-    settingsService
-      .getPermissions()
-      .then((loaded) => {
-        if (cancelled) return;
-        setData(loaded);
-        setMatrix(loaded.matrix);
-      })
+    loadPermissions()
       .catch((loadError: unknown) => {
         if (!cancelled) {
           setLoadFailed(true);
@@ -878,6 +1084,7 @@ function RolePermissionsPanel() {
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const canEdit = Boolean(data?.canEdit);
@@ -908,6 +1115,87 @@ function RolePermissionsPanel() {
       toast.error(extractApiError(saveError));
     } finally {
       setSaving(false);
+    }
+  };
+
+  // ── Restore Defaults ───────────────────────────────────────────────
+  // Writes the factory matrix back for the BUILT-IN roles through the
+  // ordinary permissions save (one write path, same Super-Admin guard
+  // on the API). Custom roles ride along untouched: the payload starts
+  // from the current matrix and only the default (built-in) rows are
+  // laid over it. Confirm first — the house dialog's backdrop/Escape
+  // is a cancel and changes nothing.
+  const restoreDefaults = async () => {
+    if (!data?.defaults) return;
+    const confirmed = await confirmDialog({
+      title: t("Restore default permissions?"),
+      message: t("Every built-in role's permissions will be reset to the factory defaults. Custom roles are not changed."),
+      confirmLabel: t("Restore Defaults"),
+    });
+    if (!confirmed) return;
+    setRestoring(true);
+    try {
+      const payload: PermissionMatrixData = {
+        ...matrix,
+        ...JSON.parse(JSON.stringify(data.defaults)) as PermissionMatrixData,
+      };
+      const saved = await settingsService.updatePermissions(payload);
+      setMatrix(saved);
+      toast.success(t("Role permissions restored to defaults."));
+    } catch (restoreError) {
+      toast.error(extractApiError(restoreError));
+    } finally {
+      setRestoring(false);
+    }
+  };
+
+  // ── Add Role ───────────────────────────────────────────────────────
+  // Super Admin only: the API enforces it (403) and this panel only
+  // renders the affordance when `canEdit` says the session is a Super
+  // Admin. The same validation runs here first so mistakes are caught
+  // in place, mirroring the Add User form's pattern.
+  const [showAddRole, setShowAddRole] = useState(false);
+  const [roleName, setRoleName] = useState("");
+  const [roleError, setRoleError] = useState("");
+  const [creatingRole, setCreatingRole] = useState(false);
+
+  const addRoleBackdrop = useBackdropClose(
+    () => setShowAddRole(false),
+    showAddRole && !creatingRole,
+  );
+
+  const openAddRole = () => {
+    setRoleName("");
+    setRoleError("");
+    setShowAddRole(true);
+  };
+
+  const submitAddRole = async () => {
+    const name = roleName.trim();
+    if (!name) {
+      setRoleError(t("A role name is required."));
+      return;
+    }
+    if (name.length < 2 || name.length > 30) {
+      setRoleError(t("Role name must be between 2 and 30 characters."));
+      return;
+    }
+    if ((data?.roles || []).some((role) => role.toLowerCase() === name.toLowerCase())) {
+      setRoleError(t("A role with this name already exists."));
+      return;
+    }
+    setCreatingRole(true);
+    setRoleError("");
+    try {
+      const created = await settingsService.createRole(name);
+      await loadPermissions();
+      setSelectedRole(created.role);
+      setShowAddRole(false);
+      toast.success(t("Role created."));
+    } catch (createError) {
+      setRoleError(extractApiError(createError));
+    } finally {
+      setCreatingRole(false);
     }
   };
 
@@ -944,6 +1232,16 @@ function RolePermissionsPanel() {
                   {selectedRole === role && <Check size={11} strokeWidth={3.5} />}
                 </button>
               ))}
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={openAddRole}
+                  className="flex items-center gap-1 rounded-full border border-dashed border-[var(--border)] bg-transparent px-3 py-1.5 text-xs text-[var(--text-soft)] transition-all hover:border-[var(--primary)] hover:text-[var(--primary)]"
+                >
+                  <Plus size={11} strokeWidth={3} />
+                  {t("Add Role")}
+                </button>
+              )}
             </div>
 
             {roleLocked ? (
@@ -1001,14 +1299,59 @@ function RolePermissionsPanel() {
             </div>
 
             {canEdit && (
-              <div className="mt-4 flex justify-end">
+              <div className="mt-4 flex justify-end gap-3">
+                <Button
+                  variant="ghost"
+                  icon={RotateCcw}
+                  onClick={() => void restoreDefaults()}
+                  disabled={saving || restoring}
+                >
+                  {restoring ? t("Saving...") : t("Restore Defaults")}
+                </Button>
                 <Button
                   variant="primary"
                   onClick={() => void saveMatrix()}
-                  disabled={saving}
+                  disabled={saving || restoring}
                 >
                   {saving ? t("Saving...") : t("Save Permissions")}
                 </Button>
+              </div>
+            )}
+
+            {showAddRole && (
+              <div
+                className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3"
+                {...addRoleBackdrop}
+              >
+                <div className="w-full max-w-sm rounded-xl border border-[var(--border)] bg-[var(--background)] p-5 shadow-2xl">
+                  <h3 className="text-base font-semibold text-[var(--text)]">{t("Add Role")}</h3>
+                  <p className="mt-1 text-xs text-[var(--text-muted)]">
+                    {t("A new role starts with no permissions — tick what it may do in the matrix, then save.")}
+                  </p>
+
+                  <div className="mt-4">
+                    <SettingsInput
+                      label="Role Name"
+                      value={roleName}
+                      onChange={(event) => setRoleName(event.target.value)}
+                    />
+                  </div>
+
+                  {roleError && (
+                    <p className="mt-4 rounded-lg border border-red-300 bg-red-500/10 p-3 text-xs text-red-600" role="alert">
+                      {roleError}
+                    </p>
+                  )}
+
+                  <div className="mt-5 flex justify-end gap-3">
+                    <Button variant="ghost" onClick={() => setShowAddRole(false)} disabled={creatingRole}>
+                      {t("Cancel")}
+                    </Button>
+                    <Button variant="primary" onClick={() => void submitAddRole()} disabled={creatingRole}>
+                      {creatingRole ? t("Creating...") : t("Create Role")}
+                    </Button>
+                  </div>
+                </div>
               </div>
             )}
           </>

@@ -34,16 +34,11 @@ const userSchema = new mongoose.Schema(
     avatar: { type: String, default: "default-avatar.png" },
 
     // Role & Permissions (Updated as per Chat Context)
+    // No schema enum: roles created from Settings → Users & Roles are
+    // valid too. The user create/update controllers validate the value
+    // against the known role names (built-ins + custom roles).
     role: {
       type: String,
-      enum: [
-        "Super Admin",
-        "Admin",
-        "Manager",
-        "Editor",
-        "Support",
-        "Customer",
-      ],
       default: "Customer",
     },
     permissions: {

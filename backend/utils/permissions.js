@@ -102,11 +102,13 @@ const buildDefaults = () => {
 
 const DEFAULT_MATRIX = buildDefaults();
 
-/** Keeps only known roles/modules/actions, coercing values to booleans. */
-const sanitizeMatrix = (input) => {
+/** Keeps only known roles/modules/actions, coercing values to booleans.
+ *  `extraRoles` are the stored custom roles — they are honoured exactly
+ *  like the built-in vocabulary; anything else is dropped. */
+const sanitizeMatrix = (input, extraRoles = []) => {
     const clean = {};
     if (!input || typeof input !== 'object') return clean;
-    for (const role of ROLES) {
+    for (const role of [...ROLES, ...extraRoles]) {
         const roleInput = input[role];
         if (!roleInput || typeof roleInput !== 'object') continue;
         clean[role] = {};
@@ -124,11 +126,16 @@ const sanitizeMatrix = (input) => {
     return clean;
 };
 
-/** Defaults with the stored matrix laid over them (stored wins per cell). */
-const mergeMatrix = (stored) => {
+/** Defaults with the stored matrix laid over them (stored wins per cell).
+ *  Custom roles start from no access at all — a brand-new role can do
+ *  nothing until a Super Admin ticks cells for it and saves. */
+const mergeMatrix = (stored, customRoles = []) => {
     const merged = buildDefaults();
-    const clean = sanitizeMatrix(stored);
-    for (const role of ROLES) {
+    for (const role of customRoles) {
+        if (!merged[role]) merged[role] = noAccess();
+    }
+    const clean = sanitizeMatrix(stored, customRoles);
+    for (const role of [...ROLES, ...customRoles]) {
         if (!clean[role]) continue;
         for (const module of MODULES) {
             if (!clean[role][module]) continue;
@@ -141,29 +148,45 @@ const mergeMatrix = (stored) => {
 // The matrix is read on every permission check, so cache it briefly.
 // Saving through PUT /api/permissions invalidates immediately on the
 // instance that served the save; other serverless instances converge
-// within the TTL.
-let cache = { matrix: null, loadedAt: 0 };
+// within the TTL. The custom-role list rides the same cache — it lives
+// in the same document and changes just as rarely.
+let cache = { matrix: null, customRoles: null, loadedAt: 0 };
 const CACHE_TTL_MS = 30_000;
 
 const invalidatePermissionCache = () => {
-    cache = { matrix: null, loadedAt: 0 };
+    cache = { matrix: null, customRoles: null, loadedAt: 0 };
 };
 
-const getMatrix = async () => {
+const loadPermissionState = async () => {
     if (cache.matrix && Date.now() - cache.loadedAt < CACHE_TTL_MS) {
-        return cache.matrix;
+        return cache;
     }
     let stored = {};
+    let customRoles = [];
     try {
         const doc = await RolePermission.findOne({ key: 'matrix' }).lean();
         stored = doc?.matrix || {};
+        customRoles = Array.isArray(doc?.customRoles)
+            ? doc.customRoles.filter(
+                  (name) => typeof name === 'string' && name && !ROLES.includes(name),
+              )
+            : [];
     } catch {
         stored = {}; // a read failure must never lock staff out of defaults
+        customRoles = [];
     }
-    const matrix = mergeMatrix(stored);
-    cache = { matrix, loadedAt: Date.now() };
-    return matrix;
+    const matrix = mergeMatrix(stored, customRoles);
+    cache = { matrix, customRoles, loadedAt: Date.now() };
+    return cache;
 };
+
+const getMatrix = async () => (await loadPermissionState()).matrix;
+
+/** Role names created from the panel, on top of the built-in ROLES. */
+const getCustomRoles = async () => (await loadPermissionState()).customRoles;
+
+/** Every role name the system will accept: built-ins + custom roles. */
+const getAllRoleNames = async () => [...ROLES, ...(await getCustomRoles())];
 
 /**
  * The permissions a role effectively holds. Super Admin is a hard rule:
@@ -191,6 +214,8 @@ module.exports = {
     sanitizeMatrix,
     mergeMatrix,
     getMatrix,
+    getCustomRoles,
+    getAllRoleNames,
     getEffectivePermissions,
     roleHasPermission,
     invalidatePermissionCache,

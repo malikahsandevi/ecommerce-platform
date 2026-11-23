@@ -40,9 +40,26 @@ export type PermissionMatrixData = Record<
 export interface RolePermissionsData {
   modules: string[];
   moduleActions: Record<string, string[]>;
+  /** Built-in roles plus every custom role created from the panel. */
   roles: string[];
+  customRoles: string[];
+  /** The factory permission matrix — Restore Defaults writes these
+   *  values back for the built-in roles through updatePermissions. */
+  defaults: PermissionMatrixData;
   matrix: PermissionMatrixData;
   canEdit: boolean;
+}
+
+/** Fields the Users & Roles edit form may send. `password` is only
+ *  included when the admin typed a new one — blank means "keep the
+ *  current password" and the field is omitted entirely. */
+export interface UpdateUserValues {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  password?: string;
+  role?: string;
+  isActive?: boolean;
 }
 
 export const settingsService = {
@@ -107,14 +124,26 @@ export const settingsService = {
     return data;
   },
 
-  /** Role / active-status changes for the Users & Roles panel. The
-   *  backend refuses self-demotion, self-deactivation and removing the
-   *  last active Super Admin — those errors surface to the page. */
+  /** Profile / role / active-status / password changes for the Users
+   *  & Roles panel. The backend refuses self-demotion, self-deactivation
+   *  and removing the last active Super Admin — those errors surface to
+   *  the page. A non-empty `password` replaces the account's password
+   *  (hashed server-side); omitting it leaves the password untouched. */
   async updateUser(
     id: string,
-    values: { role?: string; isActive?: boolean },
+    values: UpdateUserValues,
   ): Promise<SettingsUser> {
     const { data } = await apiClient.put<SettingsUser>(`/users/${id}`, values);
+    return data;
+  },
+
+  /** Creates a custom role (Super Admin only — the API answers 403 for
+   *  anyone else). The new role starts with no permissions at all. */
+  async createRole(name: string): Promise<{ role: string; roles: string[]; customRoles: string[] }> {
+    const { data } = await apiClient.post<{ role: string; roles: string[]; customRoles: string[] }>(
+      "/permissions/roles",
+      { name },
+    );
     return data;
   },
 

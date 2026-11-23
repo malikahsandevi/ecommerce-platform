@@ -19,7 +19,7 @@ import Button from "@/components/ui/Button";
 import TopBar from "@/components/ui/TopBar";
 import { confirmDialog } from "@/components/ui/ConfirmDialog";
 import { settingsService } from "@/services/settingsService";
-import type { SettingsDocument, SettingsSection, SettingsUser } from "@/services/settingsService";
+import type { SettingsDocument, SettingsSection, SettingsUser, UpdateUserValues } from "@/services/settingsService";
 import { useAdminAuth } from "@/services/authContext";
 import { applyAppearance, type AppearanceSettings } from "@/services/appearance";
 import { applyLanguage, useLanguage } from "@/services/i18n";
@@ -186,7 +186,7 @@ export default function SettingsPage() {
     }
   };
 
-  const updateUser = async (id: string, values: { role?: string; isActive?: boolean }) => {
+  const updateUser = async (id: string, values: UpdateUserValues) => {
     try {
       const updated = await settingsService.updateUser(id, values);
       setUsers((currentUsers) =>
@@ -194,11 +194,15 @@ export default function SettingsPage() {
       );
       toast.success(t("User updated."));
     } catch (updateError) {
-      // The API's own message explains guard refusals (own role, last
-      // Super Admin) better than a generic fallback — prefer it.
+      // Rethrow with the API's message — the panel shows it in place
+      // (the Edit User form) or as a toast (inline row changes). The
+      // API's own wording explains guard refusals (own role, last
+      // Super Admin) better than a generic fallback.
       const apiMessage = (updateError as { response?: { data?: { message?: string } } })?.response
         ?.data?.message;
-      toast.error(apiMessage || (updateError instanceof Error ? updateError.message : t("Unable to update user.")));
+      throw new Error(
+        apiMessage || (updateError instanceof Error ? updateError.message : t("Unable to update user.")),
+      );
     }
   };
 
@@ -338,7 +342,7 @@ export default function SettingsPage() {
             saving={saving}
             onSave={saveSection}
             onDeleteUser={(id) => void deleteUser(id)}
-            onUpdateUser={(id, values) => void updateUser(id, values)}
+            onUpdateUser={updateUser}
             onCreateUser={createUser}
             onIntegrationsSync={(integrations) =>
               setSettings((current) => ({ ...current, integrations }))
