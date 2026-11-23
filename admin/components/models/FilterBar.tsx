@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import SearchBar, { SearchableEntityRecord } from "@/components/ui/SearchBar";
 import Select, {
   SelectOption,
@@ -8,6 +9,11 @@ import Select, {
   SelectSize,
   DropdownDirection,
 } from "@/components/ui/Select";
+import DateRangePicker, {
+  DateRange,
+  formatRangeDayShort,
+  toIsoDay,
+} from "@/components/ui/DateRangePicker";
 import { useLanguage } from "@/services/i18n";
 
 export interface FilterConfigItem {
@@ -42,6 +48,14 @@ export interface FilterBarProps<TSearchData extends SearchableEntityRecord> {
   // Filter Props
   filtersData: FilterConfigItem[];
 
+  /**
+   * By-Date filter (Ahsan's order): the record field the date range
+   * tests. Every list record carries `createdAt` — on Orders that IS
+   * the order/placed date (its detail panel labels it "Order Date"),
+   * on Media the upload date — so the default fits every page.
+   */
+  dateField?: string;
+
   // Consolidated Emission Callback
   onDataChange: (filteredData: TSearchData[]) => void;
 
@@ -72,6 +86,7 @@ export const FilterBar = <TSearchData extends SearchableEntityRecord>({
   searchSize = "md",
   showShortcut = true,
   filtersData,
+  dateField = "createdAt",
   onDataChange,
   clearSignal = 0,
   onClearActiveChange,
@@ -88,6 +103,10 @@ export const FilterBar = <TSearchData extends SearchableEntityRecord>({
       return initial;
     },
   );
+  // By-Date filter state: the applied range (null = all dates) and
+  // whether the shared DateRangePicker popup is open.
+  const [dateRange, setDateRange] = useState<DateRange | null>(null);
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
 
   // Source data change sync
   useEffect(() => {
@@ -109,6 +128,9 @@ export const FilterBar = <TSearchData extends SearchableEntityRecord>({
     filtersData.forEach((f) => (resetValues[f.id] = "all"));
     setFilterValues(resetValues);
     setSearchedData(sourceData);
+    // The date range is part of the same reset: the control returns
+    // to its empty "All Dates" state with everything else.
+    setDateRange(null);
   }, [filtersData, sourceData]);
 
   // Main Combined Filter Logic
@@ -129,9 +151,26 @@ export const FilterBar = <TSearchData extends SearchableEntityRecord>({
       }
     });
 
+    // Apply the By-Date range: the record's own date must fall
+    // inside [from, to] inclusive. Days compare as local ISO day
+    // strings — the same days the picker selects and the same days
+    // the tables display (toLocaleDateString is local too). A record
+    // with no readable date cannot be inside a range, so it drops
+    // out while a range is applied.
+    if (dateRange) {
+      result = result.filter((item) => {
+        const raw = (item as Record<string, unknown>)[dateField];
+        if (raw == null) return false;
+        const d = raw instanceof Date ? raw : new Date(String(raw));
+        if (Number.isNaN(d.getTime())) return false;
+        const day = toIsoDay(d);
+        return day >= dateRange.from && day <= dateRange.to;
+      });
+    }
+
     // Emit Final Filtered Result to Parent
     onDataChange(result);
-  }, [searchedData, filterValues, filtersData, onDataChange]);
+  }, [searchedData, filterValues, filtersData, dateRange, dateField, onDataChange]);
 
   // Active Checks
   const isDropdownFilterActive = Object.values(filterValues).some(
@@ -139,8 +178,11 @@ export const FilterBar = <TSearchData extends SearchableEntityRecord>({
   );
   const isSearchActive = searchedData.length !== sourceData.length;
 
-  // Clear button is active only when search or filter is applied
-  const isClearActive = isDropdownFilterActive || isSearchActive;
+  // Clear button is active only when search or filter is applied —
+  // an applied date range counts, so the header Clear lights up for
+  // it and resets it like everything else.
+  const isClearActive =
+    isDropdownFilterActive || isSearchActive || dateRange !== null;
 
   // Report clear availability to the page header (on mount and on every
   // change) so its Clear button enables/disables in step with this bar.
@@ -196,9 +238,44 @@ export const FilterBar = <TSearchData extends SearchableEntityRecord>({
             direction={item.direction || "bottom"}
           />
         ))}
+        {/* By-Date filter (Ahsan's order): a trigger in the same
+            group and the same dress as the dropdowns — primary,
+            size md, label + chevron — opening the SHARED
+            DateRangePicker popup, the very component the Dashboard's
+            Revenue Analytics Custom period uses (not a fork). Empty
+            it reads "All Dates"; applied it shows the range in the
+            component's short format, like the dashboard trigger. */}
+        <div className="relative flex-1 text-left">
+          <button
+            type="button"
+            data-testid="date-filter-trigger"
+            onClick={() => setDatePickerOpen(true)}
+            className="inline-flex w-full cursor-pointer items-center justify-between gap-1 rounded-lg bg-[var(--primary)] px-2 py-1.5 text-sm font-semibold text-[var(--primary-text,#ffffff)] shadow-2xs transition-colors hover:opacity-90 focus:shadow-2xl"
+          >
+            <span className="inline-flex items-center gap-1.5 truncate">
+              <span className="truncate font-medium">
+                {dateRange
+                  ? `${formatRangeDayShort(dateRange.from)} – ${formatRangeDayShort(dateRange.to)}`
+                  : t("All Dates")}
+              </span>
+            </span>
+            <ChevronDown className="ml-0.5 h-3 w-3 shrink-0 opacity-70" />
+          </button>
+        </div>
+
         {/* The Clear button moved up into the page header row — this
             row now ends with the last dropdown, nothing in its place. */}
       </div>
+
+      <DateRangePicker
+        open={datePickerOpen}
+        value={dateRange}
+        onApply={(range) => {
+          setDateRange(range);
+          setDatePickerOpen(false);
+        }}
+        onClose={() => setDatePickerOpen(false)}
+      />
     </div>
   );
 };
