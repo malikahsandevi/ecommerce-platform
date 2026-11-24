@@ -337,7 +337,7 @@ export default function SettingsPage() {
   // (the settings API answers 403 for them anyway).
   if (isAuthenticated && !canViewSettings) {
     return (
-      <main className="min-h-full bg-[var(--background)] p-3">
+      <main className="bg-[var(--background)] p-3">
         <header className="mb-3 flex w-full items-center justify-between">
           <TopBar
             title={t("Settings")}
@@ -362,7 +362,7 @@ export default function SettingsPage() {
   // view + unlocked → the panels below.
   if (isAuthenticated && locked) {
     return (
-      <main className="min-h-full bg-[var(--background)] p-3">
+      <main className="bg-[var(--background)] p-3">
         <header className="mb-3 flex w-full items-center justify-between">
           <TopBar
             title={t("Settings")}
@@ -385,7 +385,7 @@ export default function SettingsPage() {
   /* Full Page Theme-Matched Skeleton Component */
   if (loading) {
     return (
-      <main className="min-h-full bg-[var(--background)] p-3 flex flex-col gap-3">
+      <main className="bg-[var(--background)] p-3 flex flex-col gap-3">
         {/* The same TopBar the loaded page shows — it used to be missing
             here entirely, which is why Settings looked different. */}
         <header className="flex w-full items-center justify-between">
@@ -449,7 +449,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <main className="min-h-full bg-[var(--background)] p-3">
+    <main className="bg-[var(--background)] p-3">
       <header className="mb-3 flex w-full items-center justify-between">
         <TopBar
           title={t("Settings")}
