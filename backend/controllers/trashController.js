@@ -24,6 +24,7 @@ const {
     Setting,
 } = require('../models');
 const { planRestore, applyRestore, NOT_DELETED } = require('../utils/softDelete');
+const { relinkFromSnapshot } = require('../utils/deleteImpact');
 const { withTransaction } = require('../utils/transactions');
 const { adjustStock, statusReturnsStock, syncCouponUse } = require('./orderController');
 const { syncProductRating } = require('./reviewController');
@@ -310,7 +311,28 @@ const restoreItem = async (req, res) => {
             return res.json({ message: 'Item restored.' });
         }
 
+        // Delete-impact re-link: when the delete detached this
+        // record from other records (media out of galleries, a
+        // category's products, a product out of carts/favorites),
+        // the snapshot it stored as `deletedLinks` goes back —
+        // conservatively, never overwriting a newer assignment
+        // (utils/deleteImpact). Records trashed before snapshots
+        // existed carry none and restore exactly as before. The
+        // snapshot is consumed either way: it describes THIS trash
+        // episode only.
+        const linkModule = {
+            media: 'media',
+            categories: 'categories',
+            brands: 'brands',
+            products: 'products',
+        }[segment];
+        const linkSnapshot = linkModule ? doc.get('deletedLinks') : undefined;
+
         applyRestore(doc, restoreValues);
+        if (linkSnapshot) {
+            await relinkFromSnapshot(linkModule, doc, linkSnapshot);
+            doc.set('deletedLinks', undefined);
+        }
         try {
             await doc.save();
         } catch (error) {

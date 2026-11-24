@@ -176,6 +176,7 @@ const createOrder = async (req, res) => {
         delete data.deletedAt;
         delete data.deletedBy;
         delete data.deletedUniques;
+        delete data.deletedLinks;
 
         if (!Array.isArray(data.items) || data.items.length === 0) {
             return res.status(400).json({ message: 'An order needs at least one item.' });

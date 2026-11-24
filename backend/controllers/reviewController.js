@@ -30,6 +30,7 @@ const stripServerOwnedFields = (body) => {
     delete clean.deletedAt;
     delete clean.deletedBy;
     delete clean.deletedUniques;
+    delete clean.deletedLinks;
     return clean;
 };
 

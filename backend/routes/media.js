@@ -19,6 +19,8 @@ const {
 } = require('../utils/credentials');
 const cloudinaryClient = require('../utils/cloudinaryClient');
 const { requirePermission } = require('../middleware/permissions');
+const { makeDeleteImpactHandler } = require('../controllers/deleteImpactController');
+const { detachForDelete } = require('../utils/deleteImpact');
 const {
     parseCloudinaryUrl,
     canonicalUrl,
@@ -615,6 +617,10 @@ const listMedia = async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 };
+
+// GET /api/media/:id/delete-impact — the links the delete
+// confirmation warns about (products/categories/brands using it).
+router.get('/:id/delete-impact', protect, requirePermission('Media', 'delete'), makeDeleteImpactHandler(Media, 'media'));
 
 // GET /api/media/:id/usage — everything using this media item, for the
 // Edit Media panel's "Used In" list. A product uses the media when a
@@ -1257,6 +1263,11 @@ router.route('/:id')
             const media = await Media.findOne({ _id: req.params.id, ...NOT_DELETED });
             if (!media) return res.status(404).json({ message: 'Not found' });
 
+            // Delete-impact: the media leaves every place it was
+            // used (product galleries, category/brand images) and
+            // the removals are snapshotted for an exact restore.
+            const snapshot = await detachForDelete('media', media);
+            if (snapshot) media.set('deletedLinks', snapshot);
             applySoftDelete(Media, media, req.user?._id);
             await media.save();
             res.json({ message: 'Deleted successfully' });

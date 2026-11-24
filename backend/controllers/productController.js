@@ -5,6 +5,7 @@ const mongoose = require('mongoose');
 const { logActivity } = require('../utils/activity');
 const { NOT_DELETED, applySoftDelete } = require('../utils/softDelete');
 const { duplicateKeyMessage } = require('../utils/duplicateKey');
+const { detachForDelete } = require('../utils/deleteImpact');
 
 // A duplicate slug/SKU answers with a clean sentence, never the raw
 // MongoDB E11000 driver text.
@@ -127,6 +128,7 @@ const normalizeProductInput = async (data) => {
     delete normalized.deletedAt;
     delete normalized.deletedBy;
     delete normalized.deletedUniques;
+    delete normalized.deletedLinks;
 
     if (data.category !== undefined) {
         normalized.category = await resolveReference(Category, data.category, 'Category', true);
@@ -228,6 +230,12 @@ const deleteProduct = async (req, res) => {
         if (!product) {
             return res.status(404).json({ message: 'Product not found' });
         }
+        // Delete-impact: the product leaves every customer's cart
+        // and favorites/liked/wishlist lists; the removals are
+        // snapshotted onto the record so a restore re-links exactly.
+        // Orders and reviews are history — never touched.
+        const snapshot = await detachForDelete('products', product);
+        if (snapshot) product.set('deletedLinks', snapshot);
         applySoftDelete(Product, product, req.user?._id);
         await product.save();
         res.json({ message: 'Product removed successfully' });

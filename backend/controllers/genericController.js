@@ -4,39 +4,16 @@ const {
     applySoftDelete,
 } = require('../utils/softDelete');
 const { duplicateKeyMessage } = require('../utils/duplicateKey');
-const Product = require('../models/Product');
-const Category = require('../models/Category');
+const { detachForDelete } = require('../utils/deleteImpact');
 
-// Delete guards: a record that LIVE records still point at cannot be
-// trashed — the references would dangle (products would keep naming a
-// trashed category/brand on their rows, a subcategory a trashed
-// parent, and the category's sales would silently drop out of the
-// dashboard's Top Categories while its revenue still counted). Each
-// guard returns a refusal message, or null when the delete may
-// proceed. Trashed referrers never block: they are already in
-// Deleted Items themselves.
-const deleteRefusal = async (Model, doc) => {
-    if (Model.modelName === 'Category') {
-        const [products, subcategories] = await Promise.all([
-            Product.countDocuments({ category: doc._id, ...NOT_DELETED }),
-            Category.countDocuments({ parent: doc._id, ...NOT_DELETED }),
-        ]);
-        const parts = [];
-        if (products) parts.push(`${products} product${products === 1 ? '' : 's'}`);
-        if (subcategories) parts.push(`${subcategories} subcategor${subcategories === 1 ? 'y' : 'ies'}`);
-        if (!parts.length) return null;
-        const tail = parts.length === 2
-            ? 'Move or delete those first, then delete the category.'
-            : `Move or delete those ${products ? 'products' : 'subcategories'} first, then delete the category.`;
-        return `This category still has ${parts.join(' and ')}. ${tail}`;
-    }
-    if (Model.modelName === 'Brand') {
-        const products = await Product.countDocuments({ brand: doc._id, ...NOT_DELETED });
-        if (!products) return null;
-        return `This brand still has ${products} product${products === 1 ? '' : 's'}. Move or delete those products first, then delete the brand.`;
-    }
-    return null;
-};
+// Delete-impact modules served by this shared controller: deleting a
+// category or brand no longer REFUSES while live records point at it
+// (the e006341 block) — Ahsan's newer rule supersedes it: the delete
+// confirmation WARNS about the links, and the delete DETACHES them
+// (products become uncategorized / brandless, subcategories become
+// top-level), snapshotting what was removed onto the trashed record
+// so a restore re-links exactly (utils/deleteImpact).
+const DELETE_IMPACT_MODULES = { Category: 'categories', Brand: 'brands' };
 
 // A duplicate unique field (slug / code / …) answers with a clean
 // sentence, never the raw MongoDB E11000 driver text.
@@ -53,6 +30,7 @@ const stripServerOwnedFields = (body) => {
     delete clean.deletedAt;
     delete clean.deletedBy;
     delete clean.deletedUniques;
+    delete clean.deletedLinks;
     return clean;
 };
 
@@ -116,8 +94,11 @@ const genericController = (Model) => {
                 }
                 const doc = await findLiveById(req.params.id);
                 if (!doc) return res.status(404).json({ message: 'Not found' });
-                const refusal = await deleteRefusal(Model, doc);
-                if (refusal) return res.status(400).json({ message: refusal });
+                const impactModule = DELETE_IMPACT_MODULES[Model.modelName];
+                if (impactModule) {
+                    const snapshot = await detachForDelete(impactModule, doc);
+                    if (snapshot) doc.set('deletedLinks', snapshot);
+                }
                 applySoftDelete(Model, doc, req.user?._id);
                 await doc.save();
                 res.json({ message: 'Deleted successfully' });

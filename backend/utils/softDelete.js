@@ -61,6 +61,14 @@ const addSoftDeleteSupport = (schema) => {
         // Original business-unique values, keyed by field name, kept
         // only while the record is trashed (see the header note).
         deletedUniques: { type: Map, of: String },
+        // Delete-impact snapshot (utils/deleteImpact): what the
+        // delete detached from other records — gallery entries,
+        // category/brand assignments, cart/favorites memberships —
+        // kept only while the record is trashed, so a restore can
+        // re-link exactly those places. A plain object whose shape
+        // depends on the module; absent on records trashed before
+        // the snapshot existed (their restore behaves as before).
+        deletedLinks: { type: mongoose.Schema.Types.Mixed, default: undefined },
     });
     schema.index({ deletedAt: 1 });
 };

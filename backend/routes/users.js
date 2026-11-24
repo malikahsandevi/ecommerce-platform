@@ -9,6 +9,7 @@ const {
     resetUserTwoFactor,
     getUserProfile
 } = require('../controllers/userController');
+const { makeDeleteImpactHandler } = require('../controllers/deleteImpactController');
 const { protect } = require('../middleware/auth');
 const { requireStaff } = require('../middleware/admin');
 const { requirePermission, requireAnyPermission } = require('../middleware/permissions');
@@ -73,6 +74,11 @@ const guardDelete = async (req, res, next) => {
 // middleware/settingsLock draw the same staff/customer split as the
 // guards above). Ordinary customer-record writes through these same
 // endpoints are NOT gated and keep working as before.
+// Delete-impact for CUSTOMER records (their orders/reviews, all
+// 'keep' history) — behind the same role-aware guard as the delete
+// itself; staff accounts answer an empty impact (no block).
+router.get('/:id/delete-impact', guardDelete, makeDeleteImpactHandler(User, 'customers'));
+
 router.route('/')
     .get(requireAnyPermission([['Users', 'view'], ['Customers', 'view']]), getUsers)
     .post(guardCreate, requireSavePasswordForUserCreate, createUser);

@@ -1,0 +1,444 @@
+// ── Delete impact: link warnings + detach / re-link ───────────────
+// Ahsan's order (2026-11-24): deleting a record must WARN how many
+// things it is linked to, and on delete it is REMOVED from wherever
+// it was used — his example: media must say how many products use
+// it, and deleting it takes it out of those places.
+//
+// Three pieces share one reference model:
+//   • computeDeleteImpact — the live links of a record, as labelled
+//     counts for GET /api/:module/:id/delete-impact. Links are
+//     either 'remove' (the delete detaches them) or 'keep'
+//     (historical records — orders, reviews — which are NEVER
+//     rewritten; the warning says their history stays).
+//   • detachForDelete — runs at the moment of the soft delete:
+//     performs every 'remove' detachment on LIVE records and
+//     returns a snapshot of exactly what was taken from where.
+//     The caller stores it on the trashed record as `deletedLinks`.
+//   • relinkFromSnapshot — runs on restore from Deleted Items:
+//     puts the snapshot's links back, conservatively — a gallery
+//     entry returns at its original position unless the product
+//     already references the media again; a product regains its
+//     category/brand ONLY while it is still unassigned, so a newer
+//     assignment made while the record was trashed always wins.
+//     Permanent delete discards the snapshot with the record, and
+//     records trashed before snapshots existed restore as before.
+//
+// Reference model (audited against the schemas and the media usage
+// endpoint, which resolves the same links for its "Used In" list):
+//   • A product uses a media item when a gallery entry points at it
+//     by `images.mediaId`, or by URL — the legacy top-level `image`
+//     mirror and gallery entries saved before mediaId existed only
+//     carry the URL. Categories (`image`) and brands (`logo`) hold
+//     a single image URL and no mediaId, so URL is their only link.
+//   • Product.brand is OPTIONAL in the schema, so brands detach
+//     exactly like categories (this supersedes the e006341 delete
+//     block for both: warn + detach replaces refuse).
+//   • A customer's product links live on the User record: cart
+//     entries (`cart.product`), `favorites`, `liked`, `wishlist`.
+const { NOT_DELETED } = require('./softDelete');
+const Product = require('../models/Product');
+const Category = require('../models/Category');
+const Brand = require('../models/Brand');
+const User = require('../models/User');
+const Order = require('../models/Order');
+const Review = require('../models/Review');
+
+const link = (key, label, singular, count, action) => ({ key, label, singular, count, action });
+const onlyCounted = (links) => links.filter((entry) => entry.count > 0);
+
+// ── Media ↔ products ────────────────────────────────────────────────
+const mediaProductFilter = (media) => {
+    const or = [{ 'images.mediaId': media._id }];
+    if (media.url) or.push({ image: media.url }, { 'images.url': media.url });
+    return { $and: [{ $or: or }, NOT_DELETED] };
+};
+
+const entryReferencesMedia = (entry, media) => {
+    if (!entry) return false;
+    if (entry.mediaId && media._id && String(entry.mediaId) === String(media._id)) return true;
+    return Boolean(media.url) && entry.url === media.url;
+};
+
+/** Restores the stored gallery contract after entries were removed
+ *  or re-inserted: exactly one main (the first flagged entry, else
+ *  the first entry), the main entry first, and the top-level `image`
+ *  mirror pointing at the main entry's URL ('' when none remain) —
+ *  the same shape productController.normalizeGallery writes. */
+const normalizeStoredGallery = (product) => {
+    const entries = (product.images || []).map((entry) =>
+        entry && typeof entry.toObject === 'function' ? entry.toObject() : entry,
+    );
+    if (!entries.length) {
+        product.images = [];
+        product.image = '';
+        return;
+    }
+    let mainIndex = entries.findIndex((entry) => entry.isMain || entry.isPrimary);
+    if (mainIndex < 0) mainIndex = 0;
+    const ordered = [entries[mainIndex], ...entries.filter((_, i) => i !== mainIndex)];
+    ordered.forEach((entry, i) => {
+        entry.isMain = i === 0;
+        entry.isPrimary = i === 0;
+    });
+    product.images = ordered;
+    product.image = ordered[0]?.url || '';
+};
+
+// ── Impact (the warning's numbers) ──────────────────────────────────
+const computeDeleteImpact = async (moduleKey, doc) => {
+    switch (moduleKey) {
+        case 'media': {
+            const [products, categories, brands] = await Promise.all([
+                Product.countDocuments(mediaProductFilter(doc)),
+                doc.url ? Category.countDocuments({ image: doc.url, ...NOT_DELETED }) : 0,
+                doc.url ? Brand.countDocuments({ logo: doc.url, ...NOT_DELETED }) : 0,
+            ]);
+            return onlyCounted([
+                link('products', 'products', 'product', products, 'remove'),
+                link('categories', 'categories', 'category', categories, 'remove'),
+                link('brands', 'brands', 'brand', brands, 'remove'),
+            ]);
+        }
+        case 'categories': {
+            const [products, subcategories] = await Promise.all([
+                Product.countDocuments({ category: doc._id, ...NOT_DELETED }),
+                Category.countDocuments({ parent: doc._id, ...NOT_DELETED }),
+            ]);
+            return onlyCounted([
+                link('products', 'products', 'product', products, 'remove'),
+                link('subcategories', 'subcategories', 'subcategory', subcategories, 'remove'),
+            ]);
+        }
+        case 'brands': {
+            const products = await Product.countDocuments({ brand: doc._id, ...NOT_DELETED });
+            return onlyCounted([link('products', 'products', 'product', products, 'remove')]);
+        }
+        case 'products': {
+            const [carts, favoriteUsers, likedUsers, wishlists, orders, reviews] =
+                await Promise.all([
+                    User.countDocuments({ 'cart.product': doc._id, ...NOT_DELETED }),
+                    User.find({ favorites: doc._id, ...NOT_DELETED }).distinct('_id'),
+                    User.find({ liked: doc._id, ...NOT_DELETED }).distinct('_id'),
+                    User.countDocuments({ wishlist: doc._id, ...NOT_DELETED }),
+                    Order.countDocuments({ 'items.product': doc._id, ...NOT_DELETED }),
+                    Review.countDocuments({ product: doc._id, ...NOT_DELETED }),
+                ]);
+            // favorites + liked are one warning line ("favorites
+            // lists") — a customer holding it in both counts once.
+            const favorites = new Set([
+                ...favoriteUsers.map(String),
+                ...likedUsers.map(String),
+            ]).size;
+            return onlyCounted([
+                link('carts', 'customer carts', 'customer cart', carts, 'remove'),
+                link('favorites', 'favorites lists', 'favorites list', favorites, 'remove'),
+                link('wishlists', 'wishlists', 'wishlist', wishlists, 'remove'),
+                link('orders', 'orders', 'order', orders, 'keep'),
+                link('reviews', 'reviews', 'review', reviews, 'keep'),
+            ]);
+        }
+        case 'coupons': {
+            const orders = await Order.countDocuments({ coupon: doc._id, ...NOT_DELETED });
+            return onlyCounted([link('orders', 'orders', 'order', orders, 'keep')]);
+        }
+        case 'customers': {
+            const [orders, reviews] = await Promise.all([
+                Order.countDocuments({ user: doc._id, ...NOT_DELETED }),
+                Review.countDocuments({ user: doc._id, ...NOT_DELETED }),
+            ]);
+            return onlyCounted([
+                link('orders', 'orders', 'order', orders, 'keep'),
+                link('reviews', 'reviews', 'review', reviews, 'keep'),
+            ]);
+        }
+        default:
+            return [];
+    }
+};
+
+// ── Detach (at soft-delete time) ────────────────────────────────────
+const detachMedia = async (media) => {
+    const snapshot = { products: [], categories: [], brands: [] };
+
+    const products = await Product.find(mediaProductFilter(media));
+    for (const product of products) {
+        const removed = [];
+        const kept = [];
+        (product.images || []).forEach((entry, index) => {
+            if (entryReferencesMedia(entry, media)) {
+                removed.push({ index, entry: entry.toObject() });
+            } else {
+                kept.push(entry);
+            }
+        });
+        // The legacy single-image mirror can point at the media with
+        // no gallery entry carrying it — that link must go too.
+        const mirror = Boolean(media.url) && product.image === media.url;
+        if (!removed.length && !mirror) continue;
+        snapshot.products.push({
+            product: String(product._id),
+            entries: removed,
+            mirror,
+        });
+        product.images = kept;
+        normalizeStoredGallery(product);
+        // eslint-disable-next-line no-await-in-loop
+        await product.save();
+    }
+
+    if (media.url) {
+        const categories = await Category.find({ image: media.url, ...NOT_DELETED }).select('_id');
+        if (categories.length) {
+            snapshot.categories = categories.map((category) => String(category._id));
+            await Category.updateMany(
+                { _id: { $in: snapshot.categories } },
+                { $set: { image: '' } },
+            );
+        }
+        const brands = await Brand.find({ logo: media.url, ...NOT_DELETED }).select('_id');
+        if (brands.length) {
+            snapshot.brands = brands.map((brand) => String(brand._id));
+            await Brand.updateMany(
+                { _id: { $in: snapshot.brands } },
+                { $set: { logo: '' } },
+            );
+        }
+    }
+
+    return snapshot.products.length || snapshot.categories.length || snapshot.brands.length
+        ? snapshot
+        : null;
+};
+
+const detachCategory = async (category) => {
+    const [productIds, subcategoryIds] = await Promise.all([
+        Product.find({ category: category._id, ...NOT_DELETED }).distinct('_id'),
+        Category.find({ parent: category._id, ...NOT_DELETED }).distinct('_id'),
+    ]);
+    if (!productIds.length && !subcategoryIds.length) return null;
+    if (productIds.length) {
+        await Product.updateMany(
+            { _id: { $in: productIds } },
+            { $set: { category: null } },
+        );
+    }
+    if (subcategoryIds.length) {
+        await Category.updateMany(
+            { _id: { $in: subcategoryIds } },
+            { $set: { parent: null } },
+        );
+    }
+    return {
+        products: productIds.map(String),
+        subcategories: subcategoryIds.map(String),
+    };
+};
+
+const detachBrand = async (brand) => {
+    const productIds = await Product.find({ brand: brand._id, ...NOT_DELETED }).distinct('_id');
+    if (!productIds.length) return null;
+    await Product.updateMany(
+        { _id: { $in: productIds } },
+        { $set: { brand: null } },
+    );
+    return { products: productIds.map(String) };
+};
+
+const detachProduct = async (product) => {
+    const users = await User.find({
+        $and: [
+            {
+                $or: [
+                    { 'cart.product': product._id },
+                    { favorites: product._id },
+                    { liked: product._id },
+                    { wishlist: product._id },
+                ],
+            },
+            NOT_DELETED,
+        ],
+    });
+    const snapshot = { cart: [], favorites: [], liked: [], wishlist: [] };
+    const isProduct = (id) => String(id) === String(product._id);
+
+    for (const user of users) {
+        let changed = false;
+        const cartEntry = (user.cart || []).find(
+            (entry) => entry.product && isProduct(entry.product),
+        );
+        if (cartEntry) {
+            snapshot.cart.push({
+                user: String(user._id),
+                quantity: cartEntry.quantity || 1,
+            });
+            user.cart = user.cart.filter(
+                (entry) => !(entry.product && isProduct(entry.product)),
+            );
+            changed = true;
+        }
+        for (const field of ['favorites', 'liked', 'wishlist']) {
+            if ((user[field] || []).some(isProduct)) {
+                snapshot[field].push(String(user._id));
+                user[field] = user[field].filter((id) => !isProduct(id));
+                changed = true;
+            }
+        }
+        // eslint-disable-next-line no-await-in-loop
+        if (changed) await user.save();
+    }
+
+    return snapshot.cart.length ||
+        snapshot.favorites.length ||
+        snapshot.liked.length ||
+        snapshot.wishlist.length
+        ? snapshot
+        : null;
+};
+
+/** Performs the module's detachments and returns the snapshot to
+ *  store on the trashed record (null when nothing was linked). */
+const detachForDelete = async (moduleKey, doc) => {
+    switch (moduleKey) {
+        case 'media':
+            return detachMedia(doc);
+        case 'categories':
+            return detachCategory(doc);
+        case 'brands':
+            return detachBrand(doc);
+        case 'products':
+            return detachProduct(doc);
+        default:
+            return null;
+    }
+};
+
+// ── Re-link (at restore time) ───────────────────────────────────────
+const relinkMedia = async (media, snapshot) => {
+    for (const item of snapshot.products || []) {
+        // eslint-disable-next-line no-await-in-loop
+        const product = await Product.findById(item.product);
+        if (!product) continue;
+        let changed = false;
+        const alreadyLinked = (product.images || []).some((entry) =>
+            entryReferencesMedia(entry, media),
+        );
+        if (!alreadyLinked && item.entries?.length) {
+            const entries = (product.images || []).map((entry) =>
+                entry && typeof entry.toObject === 'function' ? entry.toObject() : entry,
+            );
+            const sorted = [...item.entries].sort((a, b) => a.index - b.index);
+            for (const { index, entry } of sorted) {
+                const at = Math.max(0, Math.min(index, entries.length));
+                entries.splice(at, 0, entry);
+            }
+            product.images = entries;
+            normalizeStoredGallery(product);
+            changed = true;
+        }
+        // Legacy mirror link: only when the gallery carries nothing
+        // and no newer main image was chosen meanwhile.
+        if (item.mirror && !(product.images || []).length && !product.image && media.url) {
+            product.image = media.url;
+            changed = true;
+        }
+        // eslint-disable-next-line no-await-in-loop
+        if (changed) await product.save();
+    }
+
+    // Category/brand images come back only into a still-empty slot —
+    // an image picked while the media was trashed is never replaced.
+    // ($in with '' and null matches empty, null and missing alike.)
+    const emptyImage = { $in: ['', null] };
+    for (const id of snapshot.categories || []) {
+        // eslint-disable-next-line no-await-in-loop
+        await Category.updateOne(
+            { _id: id, image: emptyImage },
+            { $set: { image: media.url } },
+        );
+    }
+    for (const id of snapshot.brands || []) {
+        // eslint-disable-next-line no-await-in-loop
+        await Brand.updateOne(
+            { _id: id, logo: emptyImage },
+            { $set: { logo: media.url } },
+        );
+    }
+};
+
+const relinkCategory = async (category, snapshot) => {
+    // Only records that are STILL unassigned get the link back — a
+    // product recategorized (or a subcategory re-parented) while this
+    // category sat in Deleted Items keeps its newer assignment.
+    if (snapshot.products?.length) {
+        await Product.updateMany(
+            { _id: { $in: snapshot.products }, category: null },
+            { $set: { category: category._id } },
+        );
+    }
+    if (snapshot.subcategories?.length) {
+        await Category.updateMany(
+            { _id: { $in: snapshot.subcategories }, parent: null },
+            { $set: { parent: category._id } },
+        );
+    }
+};
+
+const relinkBrand = async (brand, snapshot) => {
+    if (snapshot.products?.length) {
+        await Product.updateMany(
+            { _id: { $in: snapshot.products }, brand: null },
+            { $set: { brand: brand._id } },
+        );
+    }
+};
+
+const relinkProduct = async (product, snapshot) => {
+    const isProduct = (id) => String(id) === String(product._id);
+    for (const entry of snapshot.cart || []) {
+        // eslint-disable-next-line no-await-in-loop
+        const user = await User.findById(entry.user);
+        if (!user) continue;
+        if (!(user.cart || []).some((item) => item.product && isProduct(item.product))) {
+            user.cart.push({ product: product._id, quantity: entry.quantity || 1 });
+            // eslint-disable-next-line no-await-in-loop
+            await user.save();
+        }
+    }
+    for (const field of ['favorites', 'liked', 'wishlist']) {
+        for (const userId of snapshot[field] || []) {
+            // eslint-disable-next-line no-await-in-loop
+            const user = await User.findById(userId);
+            if (!user) continue;
+            if (!(user[field] || []).some(isProduct)) {
+                user[field].push(product._id);
+                // eslint-disable-next-line no-await-in-loop
+                await user.save();
+            }
+        }
+    }
+};
+
+/** Re-applies a snapshot taken by detachForDelete. Modules without
+ *  detachments (coupons, customers, reviews, orders) never reach
+ *  here — their links are history and were never removed. */
+const relinkFromSnapshot = async (moduleKey, doc, snapshot) => {
+    if (!snapshot || typeof snapshot !== 'object') return;
+    switch (moduleKey) {
+        case 'media':
+            return relinkMedia(doc, snapshot);
+        case 'categories':
+            return relinkCategory(doc, snapshot);
+        case 'brands':
+            return relinkBrand(doc, snapshot);
+        case 'products':
+            return relinkProduct(doc, snapshot);
+        default:
+            return undefined;
+    }
+};
+
+module.exports = {
+    computeDeleteImpact,
+    detachForDelete,
+    relinkFromSnapshot,
+};

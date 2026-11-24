@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { Category, Product } = require('../models');
 const genericController = require('../controllers/genericController')(Category);
+const { makeDeleteImpactHandler } = require('../controllers/deleteImpactController');
 const { protect } = require('../middleware/auth');
 const { requirePermission } = require('../middleware/permissions');
 const { NOT_DELETED } = require('../utils/softDelete');
@@ -28,6 +29,9 @@ router.get('/', async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 });
+
+// Delete-impact: the links the delete confirmation warns about.
+router.get('/:id/delete-impact', protect, requirePermission('Categories', 'delete'), makeDeleteImpactHandler(Category, 'categories'));
 
 router.route('/').post(protect, requirePermission('Categories', 'create'), genericController.create);
 router.route('/:id')

@@ -172,6 +172,7 @@ const updateUser = async (req, res) => {
         delete updateData.deletedAt;
         delete updateData.deletedBy;
         delete updateData.deletedUniques;
+        delete updateData.deletedLinks;
         delete updateData.twoFactorSecret;
         delete updateData.twoFactorEnabled;
         delete updateData.passwordResetTokenHash;

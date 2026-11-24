@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { Coupon, Product } = require('../models');
 const genericController = require('../controllers/genericController')(Coupon);
+const { makeDeleteImpactHandler } = require('../controllers/deleteImpactController');
 const { protect } = require('../middleware/auth');
 const { requirePermission } = require('../middleware/permissions');
 const { resolveCoupon } = require('../utils/coupon');
@@ -99,6 +100,9 @@ const getCouponById = async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 };
+
+// Delete-impact: the links the delete confirmation warns about.
+router.get('/:id/delete-impact', protect, requirePermission('Coupons', 'delete'), makeDeleteImpactHandler(Coupon, 'coupons'));
 
 router.route('/')
     .get(protect, requirePermission('Coupons', 'view'), getAllCoupons)
