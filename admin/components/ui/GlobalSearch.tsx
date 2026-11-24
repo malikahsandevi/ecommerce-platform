@@ -15,6 +15,7 @@ import {
   CircleAlert,
 } from "lucide-react";
 import { apiClient } from "@/services/api";
+import { PersonAvatar } from "@/components/ui/PersonAvatar";
 import { useLanguage } from "@/services/i18n";
 import { formatMoney } from "@/services/currency";
 
@@ -428,17 +429,28 @@ export const GlobalSearch: React.FC = () => {
                       : "hover:bg-[var(--surface-muted)]"
                   }`}
                 >
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface-muted)]">
-                    {result.image ? (
-                      <img
-                        src={result.image}
-                        alt=""
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <TypeIcon className="h-4 w-4 text-[var(--text-muted)]" />
-                    )}
-                  </span>
+                  {result.type === "customer" ? (
+                    // A person result carries the person's own disc
+                    // (round): their photo when they have one, their
+                    // initials otherwise — never the generic type icon.
+                    <PersonAvatar
+                      src={result.image}
+                      name={result.name}
+                      sizeClass="h-8 w-8"
+                    />
+                  ) : (
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface-muted)]">
+                      {result.image ? (
+                        <img
+                          src={result.image}
+                          alt=""
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <TypeIcon className="h-4 w-4 text-[var(--text-muted)]" />
+                      )}
+                    </span>
+                  )}
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-xs font-medium text-[var(--text)]">
                       {result.name}

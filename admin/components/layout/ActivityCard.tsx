@@ -10,6 +10,7 @@ import {
   TriangleAlert,
   type LucideIcon,
 } from "lucide-react";
+import { PersonAvatar } from "@/components/ui/PersonAvatar";
 import { useLanguage } from "@/services/i18n";
 
 export interface ActivityLogItem {
@@ -17,6 +18,11 @@ export interface ActivityLogItem {
   type: string;
   description: string;
   createdAt?: string;
+  /** The customer the entry is about (orders, status changes and
+   *  reviews carry one in their log metadata; the dashboard resolves
+   *  it). When present, the entry's leading circle is that person's
+   *  disc instead of the event-type icon. */
+  person?: { name: string; avatar?: string | null } | null;
 }
 
 const TYPE_ICONS: Record<string, LucideIcon> = {
@@ -150,9 +156,17 @@ export const ActivityCard: React.FC<{ logs?: ActivityLogItem[] }> = ({ logs }) =
             const Icon = TYPE_ICONS[log.type] || Activity;
             return (
               <li key={log.id} className="flex shrink-0 items-center gap-3 py-3 first:pt-0 last:pb-0">
-                <span className="w-8 h-8 shrink-0 rounded-full bg-(--primary-soft) text-(--primary) flex items-center justify-center">
-                  <Icon className="w-4 h-4" />
-                </span>
+                {log.person ? (
+                  <PersonAvatar
+                    src={log.person.avatar}
+                    name={log.person.name}
+                    sizeClass="w-8 h-8"
+                  />
+                ) : (
+                  <span className="w-8 h-8 shrink-0 rounded-full bg-(--primary-soft) text-(--primary) flex items-center justify-center">
+                    <Icon className="w-4 h-4" />
+                  </span>
+                )}
                 <div className="min-w-0 flex-1">
                   <p className="text-xs text-(--text) leading-snug">{localizedDescription(log.description, t)}</p>
                   <p className="text-[11px] text-(--text-muted) mt-0.5">

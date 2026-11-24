@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import SearchBar, { SearchableEntityRecord } from "@/components/ui/SearchBar";
 import GlobalSearch from "@/components/ui/GlobalSearch";
+import { PersonAvatar } from "@/components/ui/PersonAvatar";
 import ThemeToggle from "@/components/models/ThemeToggle";
 import { useAdminAuth } from "@/services/authContext";
 import { useLanguage } from "@/services/i18n";
@@ -301,13 +302,26 @@ export const TopBar = <T extends SearchableEntityRecord>({
                         onClick={() => openFeedItem(item)}
                         className="w-full text-left py-3 px-1 flex items-start gap-2 hover:bg-(--primary-soft) rounded-lg transition-colors cursor-pointer"
                       >
-                        <span className="mt-0.5 shrink-0">
-                          {item.type === "review_pending" ? (
-                            <Star className="w-4 h-4 text-(--primary)" />
-                          ) : (
-                            <UserPlus className="w-4 h-4 text-(--primary)" />
-                          )}
-                        </span>
+                        {item.personName ? (
+                          // A person-led item (a review's author, a new
+                          // customer) carries that person's own disc.
+                          <span className="shrink-0">
+                            <PersonAvatar
+                              src={item.avatar}
+                              name={item.personName}
+                              sizeClass="w-7 h-7"
+                              textClass="text-[9px]"
+                            />
+                          </span>
+                        ) : (
+                          <span className="mt-0.5 shrink-0">
+                            {item.type === "review_pending" ? (
+                              <Star className="w-4 h-4 text-(--primary)" />
+                            ) : (
+                              <UserPlus className="w-4 h-4 text-(--primary)" />
+                            )}
+                          </span>
+                        )}
                         <span className="flex flex-col gap-0.5 flex-1 min-w-0">
                           <span className="text-xs font-semibold text-(--text) leading-snug">
                             {item.title}

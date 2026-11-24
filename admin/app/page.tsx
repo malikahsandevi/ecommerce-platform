@@ -278,6 +278,9 @@ export default function Page() {
         type: log.type || "",
         description: log.description || "",
         createdAt: log.createdAt,
+        person: log.person
+          ? { name: log.person.name || "", avatar: log.person.avatar || null }
+          : null,
       }))
     );
 

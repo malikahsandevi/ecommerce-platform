@@ -2,6 +2,7 @@
 import React, { useLayoutEffect, useRef, useState } from "react";
 import { Inbox, Pencil, Trash2 } from "lucide-react";
 import { AvatarViewerTrigger } from "@/components/ui/AvatarViewer";
+import { PersonAvatar } from "@/components/ui/PersonAvatar";
 import { useLanguage } from "@/services/i18n";
 
 export interface CreateTableProps<T extends Record<string, any>> {
@@ -130,41 +131,14 @@ function CellThumb({ src, alt }: { src: string; alt: string }) {
   );
 }
 
-/** A person's initials — the same rule the TopBar avatar uses (first
- *  word + last word; a single word gives its first two letters). */
-function personInitials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "N";
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-}
-
 /**
  * Round person disc for the name-bearing text columns (Orders'
- * Customer, Reviews' Customer): the row's uploaded photo (`userImage`)
- * when the person has one that loads; otherwise — no photo, or a photo
- * that fails to load — an initials disc of the EXACT same size in the
- * house placeholder style (the TopBar / New Customers pattern). Every
- * row therefore carries exactly one disc and the name never shifts.
+ * Customer, Reviews' Customer): the shared PersonAvatar at this
+ * table's 32px size — the row's uploaded photo (`userImage`) when the
+ * person has one that loads, an initials disc of the EXACT same size
+ * otherwise. Every row therefore carries exactly one disc and the
+ * name never shifts.
  */
-function UserCellAvatar({ src, name }: { src: string | null; name: string }) {
-  const [failedSrc, setFailedSrc] = useState<string | null>(null);
-  if (src && failedSrc !== src) {
-    return (
-      <img
-        src={src}
-        alt={name}
-        className="w-8 h-8 rounded-full object-cover shrink-0 border border-[var(--border)]"
-        onError={() => setFailedSrc(src)}
-      />
-    );
-  }
-  return (
-    <span className="w-8 h-8 rounded-full bg-[var(--primary-soft)] text-[var(--primary-dark)] flex items-center justify-center text-[10px] font-bold shrink-0">
-      {personInitials(name)}
-    </span>
-  );
-}
 
 export function StatusPill({ status }: { status: unknown }) {
   const { t } = useLanguage();
@@ -620,7 +594,7 @@ export function CreateTable<T extends Record<string, any>>({
                       >
                         {isUserNameColumn ? (
                           <span className="flex items-center gap-2 min-w-0">
-                            <UserCellAvatar src={userPhotoSrc} name={displayText} />
+                            <PersonAvatar src={userPhotoSrc} name={displayText} />
                             <span className="truncate">{previewText}</span>
                           </span>
                         ) : (

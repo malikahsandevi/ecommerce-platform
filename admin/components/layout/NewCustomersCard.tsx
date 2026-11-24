@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React from "react";
 import Link from "next/link";
 import { UserRound } from "lucide-react";
+import { PersonAvatar } from "@/components/ui/PersonAvatar";
 import { useLanguage } from "@/services/i18n";
 
 export interface NewCustomer {
@@ -12,33 +13,20 @@ export interface NewCustomer {
 }
 
 /**
- * The customer's profile photo in the exact box the initials circle
- * occupies (w-9 h-9, round). The stored placeholder value is not a
- * photo, and a photo that fails to load falls back to the initials —
- * the same pattern the TopBar avatar uses.
+ * The customer's disc in the exact box the row has always used
+ * (w-9 h-9, round) — the shared PersonAvatar: the uploaded photo when
+ * one exists and loads, otherwise the initials disc (the stored
+ * placeholder value is not a photo). A nameless row initials from the
+ * email instead.
  */
-const CustomerAvatar: React.FC<{ customer: NewCustomer }> = ({ customer }) => {
-  const [failedSrc, setFailedSrc] = useState<string | null>(null);
-  const src = customer.avatar?.trim();
-  const showImage = Boolean(
-    src && src !== "default-avatar.png" && failedSrc !== src,
-  );
-  if (showImage) {
-    return (
-      <img
-        src={src}
-        alt={customer.name}
-        className="w-9 h-9 rounded-full object-cover shrink-0"
-        onError={() => setFailedSrc(src ?? null)}
-      />
-    );
-  }
-  return (
-    <span className="w-9 h-9 rounded-full bg-(--primary-soft) text-(--primary-dark) flex items-center justify-center text-[11px] font-bold shrink-0">
-      {initialsOf(customer.name, customer.email)}
-    </span>
-  );
-};
+const CustomerAvatar: React.FC<{ customer: NewCustomer }> = ({ customer }) => (
+  <PersonAvatar
+    src={customer.avatar}
+    name={customer.name && customer.name !== "—" ? customer.name : customer.email}
+    sizeClass="w-9 h-9"
+    textClass="text-[11px]"
+  />
+);
 
 interface NewCustomersCardProps {
   /** Undefined while the dashboard request is still in flight. */
@@ -52,12 +40,6 @@ const SCROLLBAR_CLASSES =
 /** One customer row is exactly 56px tall (h-14, border included), so
  *  the list shows exactly 3 rows: 3 × 56 = 168px. */
 const ROW_H = 56;
-
-const initialsOf = (name: string, email: string) => {
-  const source = name && name !== "—" ? name : email;
-  const parts = source.split(/[\s@.]+/).filter(Boolean);
-  return ((parts[0]?.[0] || "C") + (parts[1]?.[0] || "")).toUpperCase();
-};
 
 /**
  * Occupies the reference design's "Active User" slot — but filled with

@@ -11,6 +11,7 @@ import {
 } from "@/services/serviceCatalogue";
 import Button from "@/components/ui/Button";
 import PermissionNotice from "@/components/ui/PermissionNotice";
+import { PersonAvatar } from "@/components/ui/PersonAvatar";
 import Select from "@/components/ui/Select";
 import { useBackdropClose } from "@/hooks/useBackdropClose";
 import MediaPickerModal from "@/components/models/MediaPickerModal";
@@ -587,29 +588,19 @@ function NotificationsPanel({ data, saving, onSave }: SectionPanelProps<ObjectDa
 
 const USER_ROLE_OPTIONS = ["Super Admin", "Admin", "Manager", "Editor", "Support", "Customer"];
 
-/** Round avatar for the Users & Roles list: the saved image when the
- *  user has one, otherwise an initial-letter tile (same fallback the
- *  Customers table and details panel use). */
+/** Round avatar for the Users & Roles list: the shared PersonAvatar
+ *  at this list's 32px size — the saved photo when the user has one,
+ *  the initials disc otherwise. */
 function UserAvatarTile({ user }: { user: SettingsUser }) {
-  const [failedUrl, setFailedUrl] = useState<string | null>(null);
   const displayName =
     [user.firstName, user.lastName].filter(Boolean).join(" ") || user.name || "Unnamed user";
-  const src =
-    user.avatar && user.avatar !== "default-avatar.png" ? user.avatar : undefined;
-  if (src && failedUrl !== src) {
-    return (
-      <img
-        src={src}
-        alt={displayName}
-        onError={() => setFailedUrl(src)}
-        className="h-8 w-8 shrink-0 rounded-full border border-[var(--border)] object-cover"
-      />
-    );
-  }
   return (
-    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--primary-soft)] text-[11px] font-bold text-[var(--primary)]">
-      {(displayName.trim().charAt(0) || "N").toUpperCase()}
-    </span>
+    <PersonAvatar
+      src={user.avatar}
+      name={displayName}
+      sizeClass="h-8 w-8"
+      textClass="text-[11px]"
+    />
   );
 }
 
@@ -3368,15 +3359,36 @@ function DeletedItemsPanel({ timeZone }: { timeZone?: string }) {
               className="flex flex-wrap items-center gap-x-4 gap-y-2 py-3"
             >
               <div className="min-w-0 flex-1 basis-56">
-                <p className="truncate font-medium text-[var(--text)]">{item.name}</p>
-                <p className="text-xs text-[var(--text-muted)]">
-                  {t(item.moduleLabel)}
-                  {item.code ? ` · #${item.code}` : ""}
-                </p>
+                <div className="flex items-center gap-2.5 min-w-0">
+                  {item.avatar !== undefined && (
+                    // A deleted person record (customer / staff)
+                    // carries its own disc beside its name.
+                    <PersonAvatar
+                      src={item.avatar}
+                      name={item.name}
+                      sizeClass="h-8 w-8"
+                    />
+                  )}
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-[var(--text)]">{item.name}</p>
+                    <p className="text-xs text-[var(--text-muted)]">
+                      {t(item.moduleLabel)}
+                      {item.code ? ` · #${item.code}` : ""}
+                    </p>
+                  </div>
+                </div>
               </div>
               <div className="text-xs leading-5 text-[var(--text-muted)]">
-                <p>
-                  {t("Deleted by")}{" "}
+                <p className="flex items-center gap-1.5">
+                  <span>{t("Deleted by")}</span>
+                  {item.deletedBy && (item.deletedBy.name || item.deletedBy.email) ? (
+                    <PersonAvatar
+                      src={item.deletedBy.avatar}
+                      name={item.deletedBy.name || item.deletedBy.email || ""}
+                      sizeClass="h-5 w-5"
+                      textClass="text-[8px]"
+                    />
+                  ) : null}
                   <span className="text-[var(--text)]">
                     {item.deletedBy?.name || item.deletedBy?.email || "—"}
                   </span>

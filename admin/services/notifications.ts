@@ -34,6 +34,11 @@ export interface FeedItem {
    *  (the record's public code / order number / customer email), so the
    *  clicked record is in the visible results. */
   search: string | null;
+  /** Person-led items only (a pending review's author, a new
+   *  customer): who the item is about, so its row renders that
+   *  person's disc instead of the event-type icon. */
+  personName?: string | null;
+  avatar?: string | null;
 }
 
 interface Feeds {

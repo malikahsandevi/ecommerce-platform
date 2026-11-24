@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import Link from "next/link";
 import { ArrowRight, ShoppingBag } from "lucide-react";
 import { StatusPill } from "@/components/models/CreateTable";
+import { PersonAvatar } from "@/components/ui/PersonAvatar";
 import { formatMoney, useStoreCurrency } from "@/services/currency";
 import { useLanguage } from "@/services/i18n";
 
@@ -19,23 +20,11 @@ export interface DashboardOrder {
 }
 
 /**
- * The buyer's profile photo (round, beside the name) when the account
- * has one uploaded. No photo — or one that fails to load — renders
- * nothing, leaving the name exactly as it was.
+ * The buyer's disc beside the name (the shared PersonAvatar at this
+ * card's 28px size): the uploaded photo when the account has one that
+ * loads, otherwise an initials disc of the exact same size — a row
+ * never shows empty space beside the customer name.
  */
-const BuyerAvatar: React.FC<{ order: DashboardOrder }> = ({ order }) => {
-  const [failed, setFailed] = useState(false);
-  const src = order.avatar?.trim();
-  if (!src || failed) return null;
-  return (
-    <img
-      src={src}
-      alt={order.customer}
-      className="w-7 h-7 rounded-full object-cover shrink-0"
-      onError={() => setFailed(true)}
-    />
-  );
-};
 
 /** Same thin styled scrollbar as the media panel's scroll areas. */
 const SCROLLBAR_CLASSES =
@@ -120,7 +109,12 @@ export const RecentOrdersCard: React.FC<RecentOrdersProps> = ({ orders }) => {
                   </td>
                   <td className="py-2.5 pr-3 font-medium text-(--text) whitespace-nowrap">
                     <span className="flex items-center gap-2">
-                      <BuyerAvatar order={order} />
+                      <PersonAvatar
+                        src={order.avatar}
+                        name={order.customer}
+                        sizeClass="w-7 h-7"
+                        textClass="text-[9px]"
+                      />
                       {order.customer}
                     </span>
                   </td>

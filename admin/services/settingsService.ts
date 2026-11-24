@@ -43,8 +43,16 @@ export interface DeletedItem {
   id: string;
   name: string;
   code?: string | null;
+  /** Person records only (customers / staff): the record's own
+   *  avatar, so the row shows their disc beside their name. Absent
+   *  for every other module. */
+  avatar?: string | null;
   deletedAt: string;
-  deletedBy?: { name?: string | null; email?: string | null } | null;
+  deletedBy?: {
+    name?: string | null;
+    email?: string | null;
+    avatar?: string | null;
+  } | null;
 }
 
 /** The role → module → action permission matrix (GET /permissions). */
