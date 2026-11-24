@@ -47,6 +47,14 @@ module.exports = {
                 "Live"
             ],
             "default": "Sandbox"
+        },
+        {
+            "key": "planName",
+            "label": "Plan Name",
+            "secret": false,
+            "required": false,
+            "plan": true,
+            "placeholder": "e.g. Free"
         }
     ],
     "endpoints": [

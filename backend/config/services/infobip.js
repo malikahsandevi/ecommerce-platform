@@ -34,6 +34,23 @@ module.exports = {
             "secret": false,
             "required": true,
             "placeholder": "e.g. MyStore"
+        },
+        {
+            "key": "planName",
+            "label": "Plan Name",
+            "secret": false,
+            "required": false,
+            "plan": true,
+            "placeholder": "e.g. Free"
+        },
+        {
+            "key": "smsLimit",
+            "label": "SMS Credit / Limit",
+            "secret": false,
+            "required": false,
+            "plan": true,
+            "autoFill": true,
+            "placeholder": "e.g. 10.00 USD"
         }
     ],
     "endpoints": []

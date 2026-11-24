@@ -18,7 +18,7 @@ module.exports = {
             "label": "Publishable Key",
             "secret": false,
             "required": true,
-            "placeholder": "e.g. pk_live_…"
+            "placeholder": "e.g. pk_live_\u2026"
         },
         {
             "key": "secretKey",
@@ -32,7 +32,15 @@ module.exports = {
             "label": "Webhook Secret",
             "secret": true,
             "required": true,
-            "placeholder": "e.g. whsec_… — hidden after saving"
+            "placeholder": "e.g. whsec_\u2026 — hidden after saving"
+        },
+        {
+            "key": "planName",
+            "label": "Plan Name",
+            "secret": false,
+            "required": false,
+            "plan": true,
+            "placeholder": "e.g. Free"
         }
     ],
     "endpoints": [

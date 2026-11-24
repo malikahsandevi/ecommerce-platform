@@ -26,6 +26,24 @@ module.exports = {
             "secret": false,
             "required": true,
             "placeholder": "name@example.com"
+        },
+        {
+            "key": "planName",
+            "label": "Plan Name",
+            "secret": false,
+            "required": false,
+            "plan": true,
+            "autoFill": true,
+            "placeholder": "Filled in by Test when the provider reports it — or type it"
+        },
+        {
+            "key": "sendLimit",
+            "label": "Monthly Send Limit",
+            "secret": false,
+            "required": false,
+            "plan": true,
+            "autoFill": true,
+            "placeholder": "e.g. 40,000 emails"
         }
     ],
     "endpoints": [

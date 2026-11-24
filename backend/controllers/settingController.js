@@ -4,10 +4,12 @@ const {
     getDefinition,
     catalogueView,
     isConfigured,
+    entryValues,
     findEntry,
 } = require('../config/services');
 const { PALETTES, paletteById } = require('../config/palettes');
 const { executeEntryCall, runConfigTest } = require('../utils/integrationRunner');
+const { fetchPlanDetails } = require('../utils/planDetails');
 const { SECRET_MASK, refreshCredentials } = require('../utils/credentials');
 const {
     SETTINGS_UNLOCK_TTL_SECONDS,
@@ -90,6 +92,18 @@ const isMaskOf = (incoming, stored) => {
     return text === SECRET_MASK || text === maskValue(stored);
 };
 
+/** The plan-field keys of a sub-service definition (plan name + plan
+ *  limits). Plan fields are ordinary non-secret fields — the admin
+ *  types them (or Test fills them from the provider), so they are
+ *  exempt from credential masking everywhere: reads return them in
+ *  full and saves take them verbatim. */
+const planFieldKeysOf = (subService) => {
+    const definition = subService ? getDefinition(subService) : null;
+    return new Set(
+        (definition?.fields || []).filter((field) => field.plan).map((field) => field.key),
+    );
+};
+
 const maskIntegrationEntry = (entry) => {
     const obj = entry?.toObject ? entry.toObject() : { ...entry };
     if (obj.authCredentials) {
@@ -102,7 +116,9 @@ const maskIntegrationEntry = (entry) => {
     }
     if (obj.fields) {
         const fields = obj.fields instanceof Map ? Object.fromEntries(obj.fields) : { ...obj.fields };
+        const planKeys = planFieldKeysOf(obj.subService);
         for (const key of Object.keys(fields)) {
+            if (planKeys.has(key)) continue; // plan fields are never masked
             if (fields[key]) fields[key] = maskValue(fields[key]);
         }
         obj.fields = fields;
@@ -333,7 +349,33 @@ const normalizeIntegration = (item, existingBySlug) => {
         const fields = {};
         for (const field of definition.fields) {
             const incoming = item.fields?.[field.key];
+            if (field.plan) {
+                // Plan fields are plain text, never masked: an omitted
+                // value keeps the stored one, a sent value is taken
+                // verbatim — a blank stays blank so the check below can
+                // ask for it instead of silently keeping the old value.
+                // (The mask guard only covers a stale client still
+                // holding a pre-exemption masked copy.)
+                fields[field.key] = incoming === undefined || incoming === null
+                    ? (existingFields[field.key] ?? '')
+                    : (isMaskOf(incoming, existingFields[field.key])
+                        ? (existingFields[field.key] ?? '')
+                        : String(incoming));
+                continue;
+            }
             fields[field.key] = keepMaskedValue(incoming, existingFields[field.key], field.default ?? '');
+        }
+        // Plan fields must be filled before an entry saves (Ahsan's
+        // order): Test fills them from the provider where the provider
+        // reports its plan, otherwise the admin types them. Refuse
+        // with the exact list of what is missing.
+        const missingPlan = definition.fields.filter(
+            (field) => field.plan && String(fields[field.key] ?? '').trim() === '',
+        );
+        if (missingPlan.length > 0) {
+            throw new Error(
+                `Fill these fields: ${missingPlan.map((field) => field.label).join(', ')}`,
+            );
         }
         return {
             usageType: definition.service,
@@ -575,15 +617,116 @@ const updateSettings = async (req, res) => {
     }
 };
 
+// ── Transient test entries ───────────────────────────────────────────
+// TEST RUNS THE FORM'S UNSAVED VALUES (Ahsan's order: "test ky time
+// test, naky saving process"). The panel sends the form's current
+// values (preset entries) or the whole form entry (custom entries);
+// the test runs against those, merged over the stored entry so a
+// masked/blank credential slot resolves to the stored value — exactly
+// the merge a save would do — while plan fields are taken verbatim.
+// NOTHING here persists anything; the endpoint never wrote and still
+// never writes.
+
+/** Preset form values over the stored entry of the same sub-service. */
+const buildTransientPresetEntry = ({ storedEntry, serviceSlug, subService, formValues }) => {
+    const definition = getDefinition(subService || storedEntry?.subService || '');
+    if (!definition || definition.id === 'custom') return null;
+    const sameProvider = storedEntry && storedEntry.subService === definition.id;
+    const storedValues = sameProvider ? (storedEntry.values || {}) : {};
+    const planKeys = planFieldKeysOf(definition.id);
+    const values = {};
+    for (const field of definition.fields) {
+        const incoming = formValues[field.key];
+        values[field.key] = planKeys.has(field.key)
+            ? (incoming === undefined || incoming === null
+                ? (storedValues[field.key] ?? '')
+                : (isMaskOf(incoming, storedValues[field.key])
+                    ? (storedValues[field.key] ?? '')
+                    : String(incoming)))
+            : keepMaskedValue(incoming, storedValues[field.key], field.default ?? '');
+    }
+    return {
+        serviceSlug,
+        subService: definition.id,
+        usageType: definition.service,
+        title: sameProvider ? storedEntry.title : definition.name,
+        isConnected: sameProvider ? storedEntry.isConnected : true,
+        baseUrl: typeof definition.baseUrl === 'string' ? definition.baseUrl : '',
+        authType: 'NONE',
+        authCredentials: { apiKey: '', headerKey: 'Authorization', username: '', password: '' },
+        globalHeaders: {},
+        endpoints: definition.endpoints || [],
+        values,
+        raw: sameProvider ? storedEntry.raw : null,
+    };
+};
+
+/** A custom (admin-defined) form entry over its stored counterpart. */
+const buildTransientCustomEntry = ({ storedEntry, formEntry }) => {
+    const raw = formEntry || {};
+    const storedRaw = storedEntry?.raw || {};
+    const storedAuth = storedRaw.authCredentials || {};
+    const storedPairs = new Map(
+        (storedRaw.customFields || []).map((pair) => [pair.key, pair]),
+    );
+    const storedHeaders = storedRaw.globalHeaders instanceof Map
+        ? Object.fromEntries(storedRaw.globalHeaders)
+        : (storedRaw.globalHeaders || {});
+    const globalHeaders = {};
+    for (const [key, value] of Object.entries(raw.globalHeaders || {})) {
+        globalHeaders[key] = keepMaskedValue(value, storedHeaders[key]);
+    }
+    const entry = {
+        serviceSlug: raw.serviceSlug,
+        subService: 'custom',
+        usageType: raw.usageType || storedEntry?.usageType || 'CUSTOM',
+        title: raw.title || storedEntry?.title || '',
+        isConnected: raw.isConnected !== undefined ? Boolean(raw.isConnected) : true,
+        baseUrl: raw.baseUrl || '',
+        authType: raw.authType || 'NONE',
+        authCredentials: {
+            apiKey: keepMaskedValue(raw.authCredentials?.apiKey, storedAuth.apiKey),
+            headerKey: raw.authCredentials?.headerKey || 'Authorization',
+            username: keepMaskedValue(raw.authCredentials?.username, storedAuth.username),
+            password: keepMaskedValue(raw.authCredentials?.password, storedAuth.password),
+        },
+        globalHeaders,
+        endpoints: Array.isArray(raw.endpoints) ? raw.endpoints : [],
+        customFields: (Array.isArray(raw.customFields) ? raw.customFields : []).map((pair) => ({
+            ...pair,
+            value: keepMaskedValue(pair?.value, storedPairs.get(pair?.key)?.value),
+        })),
+        values: {},
+    };
+    entry.values = entryValues(entry);
+    return entry;
+};
+
 // Universal Dynamic Driver Engine (Runtime Integration Call) —
-// resolves the saved entry through the services gate
+// resolves the entry through the services gate
 // (config/services/index.js) and executes through the shared runner
 // (utils/integrationRunner.js). Toggle OFF or unconfigured → refused.
+// With transient form input (see above) the test runs the unsaved
+// values; without it, the saved entry exactly as before. After a
+// successful test, providers whose API reports plan details return
+// them as `planDetails` — the panel fills the entry's EMPTY plan
+// fields from them (form state only; Test never saves).
 const executeIntegration = async (req, res) => {
     const { serviceSlug, endpointName, payload = {}, queryParams = {} } = req.body || {};
 
     try {
-        const { entry } = await findEntry(serviceSlug);
+        const { entry: storedEntry } = await findEntry(serviceSlug);
+        let entry = storedEntry;
+        if (req.body?.values && typeof req.body.values === 'object') {
+            entry = buildTransientPresetEntry({
+                storedEntry,
+                serviceSlug,
+                subService: req.body.subService,
+                formValues: req.body.values,
+            });
+        } else if (req.body?.entry && typeof req.body.entry === 'object') {
+            entry = buildTransientCustomEntry({ storedEntry, formEntry: req.body.entry });
+        }
         if (!entry) {
             return res.status(404).json({ message: `Integration '${serviceSlug}' not found or disabled.` });
         }
@@ -604,12 +747,18 @@ const executeIntegration = async (req, res) => {
         }
         // A preset with no callable endpoint gets a configuration
         // test instead of an HTTP call (see runConfigTest).
+        let data;
         if (entry.subService && entry.subService !== 'custom' && !(definition.endpoints || []).length) {
-            const data = await runConfigTest({ entry, definition, values: entry.values });
-            return res.json({ success: true, data });
+            data = await runConfigTest({ entry, definition, values: entry.values });
+        } else {
+            data = await executeEntryCall({ entry, definition, endpointName, payload, queryParams });
         }
-        const data = await executeEntryCall({ entry, definition, endpointName, payload, queryParams });
-        res.json({ success: true, data });
+        const planDetails = await fetchPlanDetails(definition, entry.values);
+        res.json({
+            success: true,
+            data,
+            ...(Object.keys(planDetails).length > 0 ? { planDetails } : {}),
+        });
     } catch (error) {
         res.status(error.status || 400).json({
             success: false,

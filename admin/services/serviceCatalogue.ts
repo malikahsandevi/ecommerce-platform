@@ -18,6 +18,12 @@ export interface ServiceFieldDef {
   default?: string;
   /** Input placeholder — a format hint/example, never a fake secret. */
   placeholder?: string;
+  /** Plan field (plan name / a plan limit): an ordinary non-secret field,
+   * never masked. Saving an entry refuses while any plan field is empty. */
+  plan?: boolean;
+  /** Test can fill this plan field from the provider's own account API
+   * (empty form fields only; nothing is saved by Test). */
+  autoFill?: boolean;
 }
 
 export interface SubServiceDef {
@@ -52,52 +58,52 @@ export const SERVICE_CATALOGUE: ServiceCategoryDef[] = [
     subServices: [
       {
         id: "cloudinary", name: "Cloudinary", hasFixedBase: true,
-        fields: [F("cloudName", "Cloud Name"), F("apiKey", "API Key"), F("apiSecret", "API Secret", true)],
+        fields: [F("cloudName", "Cloud Name"), F("apiKey", "API Key"), F("apiSecret", "API Secret", true), F("planName", "Plan Name", false, { required: false, plan: true, autoFill: true, placeholder: "Filled in by Test when the provider reports it — or type it" }), F("storageLimit", "Storage Limit", false, { required: false, plan: true, autoFill: true, placeholder: "e.g. 25 GB" })],
         endpoints: [{ name: "ping", path: "/ping", method: "GET" }],
       },
       {
         id: "aws-s3", name: "AWS S3", hasFixedBase: false,
-        fields: [F("accessKey", "Access Key"), F("secretKey", "Secret Key", true), F("bucket", "Bucket"), F("region", "Region")],
+        fields: [F("accessKey", "Access Key"), F("secretKey", "Secret Key", true), F("bucket", "Bucket"), F("region", "Region"), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" }), F("storageLimit", "Storage Limit", false, { required: false, plan: true, placeholder: "e.g. 25 GB" })],
         endpoints: [],
       },
       {
         id: "cloudflare-r2", name: "Cloudflare R2", hasFixedBase: false,
-        fields: [F("accountId", "Account ID"), F("accessKey", "Access Key"), F("secretKey", "Secret Key", true), F("bucket", "Bucket")],
+        fields: [F("accountId", "Account ID"), F("accessKey", "Access Key"), F("secretKey", "Secret Key", true), F("bucket", "Bucket"), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" }), F("storageLimit", "Storage Limit", false, { required: false, plan: true, placeholder: "e.g. 25 GB" })],
         endpoints: [],
       },
       {
         id: "google-cloud-storage", name: "Google Cloud Storage", hasFixedBase: false,
-        fields: [F("projectId", "Project ID"), F("bucket", "Bucket"), F("clientEmail", "Client Email"), F("privateKey", "Private Key", true)],
+        fields: [F("projectId", "Project ID"), F("bucket", "Bucket"), F("clientEmail", "Client Email"), F("privateKey", "Private Key", true), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" }), F("storageLimit", "Storage Limit", false, { required: false, plan: true, placeholder: "e.g. 25 GB" })],
         endpoints: [],
       },
       {
         id: "azure-blob-storage", name: "Azure Blob Storage", hasFixedBase: false,
-        fields: [F("accountName", "Storage Account"), F("accountKey", "Account Key", true), F("container", "Container")],
+        fields: [F("accountName", "Storage Account"), F("accountKey", "Account Key", true), F("container", "Container"), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" }), F("storageLimit", "Storage Limit", false, { required: false, plan: true, placeholder: "e.g. 25 GB" })],
         endpoints: [],
       },
       {
         id: "digitalocean-spaces", name: "DigitalOcean Spaces", hasFixedBase: false,
-        fields: [F("accessKey", "Access Key", false, { placeholder: "Spaces access key from the API page" }), F("secretKey", "Secret Key", true), F("bucket", "Bucket"), F("region", "Region", false, { placeholder: "e.g. nyc3" })],
+        fields: [F("accessKey", "Access Key", false, { placeholder: "Spaces access key from the API page" }), F("secretKey", "Secret Key", true), F("bucket", "Bucket"), F("region", "Region", false, { placeholder: "e.g. nyc3" }), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" }), F("storageLimit", "Storage Limit", false, { required: false, plan: true, placeholder: "e.g. 25 GB" })],
         endpoints: [],
       },
       {
         id: "backblaze-b2", name: "Backblaze B2", hasFixedBase: false,
-        fields: [F("keyId", "Key ID", false, { placeholder: "Application key ID from B2" }), F("applicationKey", "Application Key", true), F("bucket", "Bucket")],
+        fields: [F("keyId", "Key ID", false, { placeholder: "Application key ID from B2" }), F("applicationKey", "Application Key", true), F("bucket", "Bucket"), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" }), F("storageLimit", "Storage Limit", false, { required: false, plan: true, placeholder: "e.g. 25 GB" })],
         endpoints: [],
       },
       {
         id: "wasabi", name: "Wasabi", hasFixedBase: false,
-        fields: [F("accessKey", "Access Key", false, { placeholder: "Access key from the Wasabi console" }), F("secretKey", "Secret Key", true), F("bucket", "Bucket"), F("region", "Region", false, { placeholder: "e.g. us-east-1" })],
+        fields: [F("accessKey", "Access Key", false, { placeholder: "Access key from the Wasabi console" }), F("secretKey", "Secret Key", true), F("bucket", "Bucket"), F("region", "Region", false, { placeholder: "e.g. us-east-1" }), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" }), F("storageLimit", "Storage Limit", false, { required: false, plan: true, placeholder: "e.g. 25 GB" })],
         endpoints: [],
       },
       {
         id: "bunny-storage", name: "Bunny Storage", hasFixedBase: false,
-        fields: [F("storageZone", "Storage Zone"), F("accessKey", "Access Key", true), F("region", "Storage Hostname", false, { placeholder: "e.g. storage.bunnycdn.com" })],
+        fields: [F("storageZone", "Storage Zone"), F("accessKey", "Access Key", true), F("region", "Storage Hostname", false, { placeholder: "e.g. storage.bunnycdn.com" }), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" }), F("storageLimit", "Storage Limit", false, { required: false, plan: true, placeholder: "e.g. 25 GB" })],
         endpoints: [],
       },
       {
         id: "supabase-storage", name: "Supabase Storage", hasFixedBase: false,
-        fields: [F("projectUrl", "Project URL"), F("serviceRoleKey", "Service Role Key", true), F("bucket", "Bucket")],
+        fields: [F("projectUrl", "Project URL"), F("serviceRoleKey", "Service Role Key", true), F("bucket", "Bucket"), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" }), F("storageLimit", "Storage Limit", false, { required: false, plan: true, placeholder: "e.g. 25 GB" })],
         endpoints: [],
       },
       {
@@ -109,13 +115,13 @@ export const SERVICE_CATALOGUE: ServiceCategoryDef[] = [
           F("storageBucket", "Storage Bucket", false, { placeholder: "e.g. my-project.appspot.com" }),
           F("messagingSenderId", "Messaging Sender ID", false, { placeholder: "e.g. 123456789012" }),
           F("appId", "App ID", false, { placeholder: "e.g. 1:123456789012:web:abcdef123456" }),
-          F("measurementId", "Measurement ID", false, { required: false }),
+          F("measurementId", "Measurement ID", false, { required: false }), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" }), F("storageLimit", "Storage Limit", false, { required: false, plan: true, placeholder: "e.g. 25 GB" })
         ],
         endpoints: [],
       },
       {
         id: "minio", name: "MinIO", hasFixedBase: false,
-        fields: [F("endpoint", "Endpoint URL"), F("accessKey", "Access Key", false, { placeholder: "Access key for your MinIO server" }), F("secretKey", "Secret Key", true), F("bucket", "Bucket"), F("region", "Region", false, { placeholder: "e.g. us-east-1" })],
+        fields: [F("endpoint", "Endpoint URL"), F("accessKey", "Access Key", false, { placeholder: "Access key for your MinIO server" }), F("secretKey", "Secret Key", true), F("bucket", "Bucket"), F("region", "Region", false, { placeholder: "e.g. us-east-1" }), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" }), F("storageLimit", "Storage Limit", false, { required: false, plan: true, placeholder: "e.g. 25 GB" })],
         endpoints: [],
       },
     ],
@@ -126,25 +132,25 @@ export const SERVICE_CATALOGUE: ServiceCategoryDef[] = [
     subServices: [
       {
         id: "stripe", name: "Stripe", hasFixedBase: true,
-        fields: [F("publishableKey", "Publishable Key"), F("secretKey", "Secret Key", true), F("webhookSecret", "Webhook Secret", true)],
+        fields: [F("publishableKey", "Publishable Key"), F("secretKey", "Secret Key", true), F("webhookSecret", "Webhook Secret", true), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" })],
         endpoints: [{ name: "balance", path: "/balance", method: "GET" }],
       },
       {
         id: "paypal", name: "PayPal", hasFixedBase: true,
         fields: [
           F("clientId", "Client ID"), F("clientSecret", "Client Secret", true),
-          F("mode", "Mode", false, { type: "select", options: ["Sandbox", "Live"], default: "Sandbox" }),
+          F("mode", "Mode", false, { type: "select", options: ["Sandbox", "Live"], default: "Sandbox" }), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" })
         ],
         endpoints: [{ name: "userinfo", path: "/v1/identity/oauth2/userinfo", method: "GET" }],
       },
       {
         id: "razorpay", name: "Razorpay", hasFixedBase: true,
-        fields: [F("keyId", "Key ID"), F("keySecret", "Key Secret", true), F("webhookSecret", "Webhook Secret", true, { required: false })],
+        fields: [F("keyId", "Key ID"), F("keySecret", "Key Secret", true), F("webhookSecret", "Webhook Secret", true, { required: false }), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" })],
         endpoints: [{ name: "payments", path: "/payments", method: "GET" }],
       },
       {
         id: "square", name: "Square", hasFixedBase: true,
-        fields: [F("accessToken", "Access Token", true), F("locationId", "Location ID"), F("applicationId", "Application ID", false, { required: false, placeholder: "e.g. sq0idp-…" })],
+        fields: [F("accessToken", "Access Token", true), F("locationId", "Location ID"), F("applicationId", "Application ID", false, { required: false, placeholder: "e.g. sq0idp-…" }), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" })],
         endpoints: [{ name: "locations", path: "/locations", method: "GET" }],
       },
       {
@@ -152,46 +158,46 @@ export const SERVICE_CATALOGUE: ServiceCategoryDef[] = [
         fields: [
           F("apiKey", "API Key", true), F("merchantAccount", "Merchant Account"),
           F("clientKey", "Client Key", false, { required: false, placeholder: "Client key for web components" }),
-          F("environment", "Environment", false, { type: "select", options: ["Test", "Live"], default: "Test" }),
+          F("environment", "Environment", false, { type: "select", options: ["Test", "Live"], default: "Test" }), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" })
         ],
         endpoints: [{ name: "paymentMethods", path: "/paymentMethods", method: "POST" }],
       },
       {
         id: "checkout-com", name: "Checkout.com", hasFixedBase: true,
-        fields: [F("secretKey", "Secret Key", true), F("publishableKey", "Publishable Key")],
+        fields: [F("secretKey", "Secret Key", true), F("publishableKey", "Publishable Key"), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" })],
         endpoints: [],
       },
       {
         id: "braintree", name: "Braintree", hasFixedBase: true,
         fields: [
           F("merchantId", "Merchant ID"), F("publicKey", "Public Key"), F("privateKey", "Private Key", true),
-          F("environment", "Environment", false, { type: "select", options: ["Sandbox", "Production"], default: "Sandbox" }),
+          F("environment", "Environment", false, { type: "select", options: ["Sandbox", "Production"], default: "Sandbox" }), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" })
         ],
         endpoints: [],
       },
       {
         id: "mollie", name: "Mollie", hasFixedBase: true,
-        fields: [F("apiKey", "API Key", true)],
+        fields: [F("apiKey", "API Key", true), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" })],
         endpoints: [{ name: "methods", path: "/methods", method: "GET" }],
       },
       {
         id: "paddle", name: "Paddle", hasFixedBase: true,
-        fields: [F("apiKey", "API Key", true), F("clientToken", "Client Token")],
+        fields: [F("apiKey", "API Key", true), F("clientToken", "Client Token"), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" })],
         endpoints: [{ name: "products", path: "/products", method: "GET" }],
       },
       {
         id: "jazzcash", name: "JazzCash", hasFixedBase: false,
-        fields: [F("merchantId", "Merchant ID"), F("password", "Password", true), F("integritySalt", "Integrity Salt", true)],
+        fields: [F("merchantId", "Merchant ID"), F("password", "Password", true), F("integritySalt", "Integrity Salt", true), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" })],
         endpoints: [],
       },
       {
         id: "easypaisa", name: "Easypaisa", hasFixedBase: false,
-        fields: [F("storeId", "Store ID"), F("hashKey", "Hash Key", true)],
+        fields: [F("storeId", "Store ID"), F("hashKey", "Hash Key", true), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" })],
         endpoints: [],
       },
       {
         id: "payfast", name: "PayFast", hasFixedBase: false,
-        fields: [F("merchantId", "Merchant ID"), F("securedKey", "Secured Key", true)],
+        fields: [F("merchantId", "Merchant ID"), F("securedKey", "Secured Key", true), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" })],
         endpoints: [],
       },
       // Custom is ALWAYS last (Ahsan's order): any gateway not in the
@@ -211,7 +217,7 @@ export const SERVICE_CATALOGUE: ServiceCategoryDef[] = [
           F("port", "Port", false, { type: "number" }),
           F("username", "Username"), F("password", "Password", true),
           F("encryption", "Encryption", false, { type: "select", options: ["SSL", "TLS", "None"], default: "SSL" }),
-          F("fromEmail", "From Email"), F("fromName", "From Name"),
+          F("fromEmail", "From Email"), F("fromName", "From Name"), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" }), F("sendLimit", "Monthly Send Limit", false, { required: false, plan: true, placeholder: "e.g. 40,000 emails" })
         ],
         endpoints: [],
       },
@@ -220,28 +226,28 @@ export const SERVICE_CATALOGUE: ServiceCategoryDef[] = [
         fields: [
           F("host", "Host"), F("port", "Port", false, { type: "number" }),
           F("username", "Username"), F("password", "Password", true),
-          F("fromEmail", "From Email"), F("fromName", "From Name"),
+          F("fromEmail", "From Email"), F("fromName", "From Name"), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" }), F("sendLimit", "Monthly Send Limit", false, { required: false, plan: true, placeholder: "e.g. 40,000 emails" })
         ],
         endpoints: [],
       },
       {
         id: "sendgrid", name: "SendGrid", hasFixedBase: true,
-        fields: [F("apiKey", "API Key", true), F("fromEmail", "From Email")],
+        fields: [F("apiKey", "API Key", true), F("fromEmail", "From Email"), F("planName", "Plan Name", false, { required: false, plan: true, autoFill: true, placeholder: "Filled in by Test when the provider reports it — or type it" }), F("sendLimit", "Monthly Send Limit", false, { required: false, plan: true, autoFill: true, placeholder: "e.g. 40,000 emails" })],
         endpoints: [{ name: "profile", path: "/user/profile", method: "GET" }],
       },
       {
         id: "resend", name: "Resend", hasFixedBase: true,
-        fields: [F("apiKey", "API Key", true), F("fromEmail", "From Email")],
+        fields: [F("apiKey", "API Key", true), F("fromEmail", "From Email"), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" }), F("sendLimit", "Monthly Send Limit", false, { required: false, plan: true, placeholder: "e.g. 40,000 emails" })],
         endpoints: [{ name: "domains", path: "/domains", method: "GET" }],
       },
       {
         id: "mailgun", name: "Mailgun", hasFixedBase: true,
-        fields: [F("apiKey", "API Key", true), F("domain", "Domain"), F("fromEmail", "From Email")],
+        fields: [F("apiKey", "API Key", true), F("domain", "Domain"), F("fromEmail", "From Email"), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" }), F("sendLimit", "Monthly Send Limit", false, { required: false, plan: true, placeholder: "e.g. 40,000 emails" })],
         endpoints: [{ name: "domain", path: "/domains/{domain}", method: "GET" }],
       },
       {
         id: "postmark", name: "Postmark", hasFixedBase: true,
-        fields: [F("serverToken", "Server Token", true), F("fromEmail", "From Email")],
+        fields: [F("serverToken", "Server Token", true), F("fromEmail", "From Email"), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" }), F("sendLimit", "Monthly Send Limit", false, { required: false, plan: true, placeholder: "e.g. 40,000 emails" })],
         endpoints: [{ name: "server", path: "/server", method: "GET" }],
       },
     ],
@@ -252,52 +258,52 @@ export const SERVICE_CATALOGUE: ServiceCategoryDef[] = [
     subServices: [
       {
         id: "twilio", name: "Twilio", hasFixedBase: true,
-        fields: [F("accountSid", "Account SID"), F("authToken", "Auth Token", true), F("fromNumber", "From Number")],
+        fields: [F("accountSid", "Account SID"), F("authToken", "Auth Token", true), F("fromNumber", "From Number"), F("planName", "Plan Name", false, { required: false, plan: true, autoFill: true, placeholder: "Filled in by Test when the provider reports it — or type it" }), F("smsLimit", "SMS Credit / Limit", false, { required: false, plan: true, autoFill: true, placeholder: "e.g. 10.00 USD" })],
         endpoints: [{ name: "messages", path: "/Messages.json", method: "GET" }],
       },
       {
         id: "vonage", name: "Vonage", hasFixedBase: true,
-        fields: [F("apiKey", "API Key"), F("apiSecret", "API Secret", true), F("from", "From")],
+        fields: [F("apiKey", "API Key"), F("apiSecret", "API Secret", true), F("from", "From"), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" }), F("smsLimit", "SMS Credit / Limit", false, { required: false, plan: true, autoFill: true, placeholder: "e.g. 10.00 USD" })],
         endpoints: [{ name: "balance", path: "/account/get-balance", method: "GET" }],
       },
       {
         id: "messagebird", name: "MessageBird", hasFixedBase: true,
-        fields: [F("accessKey", "Access Key", true), F("from", "From")],
+        fields: [F("accessKey", "Access Key", true), F("from", "From"), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" }), F("smsLimit", "SMS Credit / Limit", false, { required: false, plan: true, autoFill: true, placeholder: "e.g. 10.00 USD" })],
         endpoints: [{ name: "balance", path: "/balance", method: "GET" }],
       },
       {
         id: "plivo", name: "Plivo", hasFixedBase: true,
-        fields: [F("authId", "Auth ID"), F("authToken", "Auth Token", true), F("fromNumber", "From Number")],
+        fields: [F("authId", "Auth ID"), F("authToken", "Auth Token", true), F("fromNumber", "From Number"), F("planName", "Plan Name", false, { required: false, plan: true, autoFill: true, placeholder: "Filled in by Test when the provider reports it — or type it" }), F("smsLimit", "SMS Credit / Limit", false, { required: false, plan: true, autoFill: true, placeholder: "e.g. 10.00 USD" })],
         endpoints: [{ name: "account", path: "/", method: "GET" }],
       },
       {
         id: "sinch", name: "Sinch", hasFixedBase: true,
-        fields: [F("servicePlanId", "Service Plan ID"), F("apiToken", "API Token", true), F("fromNumber", "From Number")],
+        fields: [F("servicePlanId", "Service Plan ID"), F("apiToken", "API Token", true), F("fromNumber", "From Number"), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" }), F("smsLimit", "SMS Credit / Limit", false, { required: false, plan: true, placeholder: "e.g. 10.00 USD" })],
         endpoints: [{ name: "batches", path: "/batches", method: "GET" }],
       },
       {
         id: "infobip", name: "Infobip", hasFixedBase: false,
-        fields: [F("apiKey", "API Key", true), F("baseUrl", "Base URL", false, { placeholder: "e.g. https://xxxxx.api.infobip.com" }), F("from", "From")],
+        fields: [F("apiKey", "API Key", true), F("baseUrl", "Base URL", false, { placeholder: "e.g. https://xxxxx.api.infobip.com" }), F("from", "From"), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" }), F("smsLimit", "SMS Credit / Limit", false, { required: false, plan: true, autoFill: true, placeholder: "e.g. 10.00 USD" })],
         endpoints: [],
       },
       {
         id: "bandwidth", name: "Bandwidth", hasFixedBase: true,
-        fields: [F("accountId", "Account ID"), F("apiToken", "API Token", false, { placeholder: "Your Bandwidth API token" }), F("apiSecret", "API Secret", true), F("applicationId", "Application ID", false, { placeholder: "Messaging application ID from the dashboard" }), F("fromNumber", "From Number")],
+        fields: [F("accountId", "Account ID"), F("apiToken", "API Token", false, { placeholder: "Your Bandwidth API token" }), F("apiSecret", "API Secret", true), F("applicationId", "Application ID", false, { placeholder: "Messaging application ID from the dashboard" }), F("fromNumber", "From Number"), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" }), F("smsLimit", "SMS Credit / Limit", false, { required: false, plan: true, placeholder: "e.g. 10.00 USD" })],
         endpoints: [],
       },
       {
         id: "telnyx", name: "Telnyx", hasFixedBase: true,
-        fields: [F("apiKey", "API Key", true), F("fromNumber", "From Number"), F("messagingProfileId", "Messaging Profile ID")],
+        fields: [F("apiKey", "API Key", true), F("fromNumber", "From Number"), F("messagingProfileId", "Messaging Profile ID"), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" }), F("smsLimit", "SMS Credit / Limit", false, { required: false, plan: true, autoFill: true, placeholder: "e.g. 10.00 USD" })],
         endpoints: [{ name: "balance", path: "/balance", method: "GET" }],
       },
       {
         id: "amazon-sns", name: "Amazon SNS", hasFixedBase: false,
-        fields: [F("accessKey", "Access Key"), F("secretKey", "Secret Key", true), F("region", "Region")],
+        fields: [F("accessKey", "Access Key"), F("secretKey", "Secret Key", true), F("region", "Region"), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" }), F("smsLimit", "SMS Credit / Limit", false, { required: false, plan: true, placeholder: "e.g. 10.00 USD" })],
         endpoints: [],
       },
       {
         id: "clicksend", name: "ClickSend", hasFixedBase: true,
-        fields: [F("username", "Username", false, { placeholder: "Your ClickSend username" }), F("apiKey", "API Key", true), F("from", "From")],
+        fields: [F("username", "Username", false, { placeholder: "Your ClickSend username" }), F("apiKey", "API Key", true), F("from", "From"), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" }), F("smsLimit", "SMS Credit / Limit", false, { required: false, plan: true, autoFill: true, placeholder: "e.g. 10.00 USD" })],
         endpoints: [{ name: "account", path: "/account", method: "GET" }],
       },
     ],
@@ -328,12 +334,12 @@ export const SERVICE_CATALOGUE: ServiceCategoryDef[] = [
       },
       {
         id: "auth0", name: "Auth0", hasFixedBase: false,
-        fields: [F("domain", "Domain", false, { placeholder: "e.g. myapp.us.auth0.com" }), F("clientId", "Client ID"), F("clientSecret", "Client Secret", true)],
+        fields: [F("domain", "Domain", false, { placeholder: "e.g. myapp.us.auth0.com" }), F("clientId", "Client ID"), F("clientSecret", "Client Secret", true), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" }), F("mauLimit", "Monthly Active Users Limit", false, { required: false, plan: true, placeholder: "e.g. 7,500 users" })],
         endpoints: [],
       },
       {
         id: "clerk", name: "Clerk", hasFixedBase: true,
-        fields: [F("publishableKey", "Publishable Key"), F("secretKey", "Secret Key", true)],
+        fields: [F("publishableKey", "Publishable Key"), F("secretKey", "Secret Key", true), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" }), F("mauLimit", "Monthly Active Users Limit", false, { required: false, plan: true, placeholder: "e.g. 7,500 users" })],
         endpoints: [],
       },
       {
@@ -345,7 +351,7 @@ export const SERVICE_CATALOGUE: ServiceCategoryDef[] = [
           F("storageBucket", "Storage Bucket", false, { placeholder: "e.g. my-project.appspot.com" }),
           F("messagingSenderId", "Messaging Sender ID", false, { placeholder: "e.g. 123456789012" }),
           F("appId", "App ID", false, { placeholder: "e.g. 1:123456789012:web:abcdef123456" }),
-          F("measurementId", "Measurement ID", false, { required: false }),
+          F("measurementId", "Measurement ID", false, { required: false }), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" }), F("mauLimit", "Monthly Active Users Limit", false, { required: false, plan: true, placeholder: "e.g. 7,500 users" })
         ],
         endpoints: [],
       },
@@ -355,41 +361,41 @@ export const SERVICE_CATALOGUE: ServiceCategoryDef[] = [
     id: "SHIPPING",
     label: "Shipping",
     subServices: [
-      { id: "easypost", name: "EasyPost", hasFixedBase: true, fields: [F("apiKey", "API Key", true)], endpoints: [{ name: "addresses", path: "/addresses", method: "GET" }] },
-      { id: "shippo", name: "Shippo", hasFixedBase: true, fields: [F("apiKey", "API Key", true)], endpoints: [{ name: "addresses", path: "/addresses/", method: "GET" }] },
+      { id: "easypost", name: "EasyPost", hasFixedBase: true, fields: [F("apiKey", "API Key", true), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" })], endpoints: [{ name: "addresses", path: "/addresses", method: "GET" }] },
+      { id: "shippo", name: "Shippo", hasFixedBase: true, fields: [F("apiKey", "API Key", true), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" })], endpoints: [{ name: "addresses", path: "/addresses/", method: "GET" }] },
       {
         id: "fedex", name: "FedEx", hasFixedBase: true,
-        fields: [F("clientId", "Client ID"), F("clientSecret", "Client Secret", true), F("accountNumber", "Account Number")],
+        fields: [F("clientId", "Client ID"), F("clientSecret", "Client Secret", true), F("accountNumber", "Account Number"), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" })],
         endpoints: [],
       },
       {
         id: "ups", name: "UPS", hasFixedBase: true,
-        fields: [F("clientId", "Client ID"), F("clientSecret", "Client Secret", true), F("accountNumber", "Account Number")],
+        fields: [F("clientId", "Client ID"), F("clientSecret", "Client Secret", true), F("accountNumber", "Account Number"), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" })],
         endpoints: [],
       },
       {
         id: "dhl", name: "DHL", hasFixedBase: true,
-        fields: [F("apiKey", "API Key", true), F("apiSecret", "API Secret", true, { required: false }), F("accountNumber", "Account Number")],
+        fields: [F("apiKey", "API Key", true), F("apiSecret", "API Secret", true, { required: false }), F("accountNumber", "Account Number"), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" })],
         endpoints: [],
       },
       {
         id: "usps", name: "USPS", hasFixedBase: true,
-        fields: [F("clientId", "Client ID"), F("clientSecret", "Client Secret", true)],
+        fields: [F("clientId", "Client ID"), F("clientSecret", "Client Secret", true), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" })],
         endpoints: [],
       },
       {
         id: "aramex", name: "Aramex", hasFixedBase: false,
-        fields: [F("username", "Username"), F("password", "Password", true), F("accountNumber", "Account Number"), F("accountPin", "Account PIN", true), F("accountEntity", "Account Entity", false, { placeholder: "e.g. DXB" }), F("accountCountryCode", "Account Country Code", false, { placeholder: "e.g. AE" })],
+        fields: [F("username", "Username"), F("password", "Password", true), F("accountNumber", "Account Number"), F("accountPin", "Account PIN", true), F("accountEntity", "Account Entity", false, { placeholder: "e.g. DXB" }), F("accountCountryCode", "Account Country Code", false, { placeholder: "e.g. AE" }), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" })],
         endpoints: [],
       },
       {
         id: "sendcloud", name: "SendCloud", hasFixedBase: true,
-        fields: [F("publicKey", "Public Key"), F("secretKey", "Secret Key", true)],
+        fields: [F("publicKey", "Public Key"), F("secretKey", "Secret Key", true), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" })],
         endpoints: [{ name: "user", path: "/user", method: "GET" }],
       },
-      { id: "aftership", name: "AfterShip", hasFixedBase: true, fields: [F("apiKey", "API Key", true)], endpoints: [{ name: "couriers", path: "/couriers", method: "GET" }] },
-      { id: "leopards", name: "Leopards Courier", hasFixedBase: false, fields: [F("apiKey", "API Key", true), F("apiPassword", "API Password", true)], endpoints: [] },
-      { id: "postex", name: "PostEx", hasFixedBase: true, fields: [F("apiToken", "API Token", true)], endpoints: [] },
+      { id: "aftership", name: "AfterShip", hasFixedBase: true, fields: [F("apiKey", "API Key", true), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" })], endpoints: [{ name: "couriers", path: "/couriers", method: "GET" }] },
+      { id: "leopards", name: "Leopards Courier", hasFixedBase: false, fields: [F("apiKey", "API Key", true), F("apiPassword", "API Password", true), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" })], endpoints: [] },
+      { id: "postex", name: "PostEx", hasFixedBase: true, fields: [F("apiToken", "API Token", true), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" })], endpoints: [] },
       // Custom is ALWAYS last (Ahsan's order): any carrier not in the
       // list is added with free key-value pairs; the entry still
       // stores this tab's category (SHIPPING) with sub-service "custom".
@@ -400,18 +406,18 @@ export const SERVICE_CATALOGUE: ServiceCategoryDef[] = [
     id: "ANALYTICS",
     label: "Analytics",
     subServices: [
-      { id: "google-analytics", name: "Google Analytics", hasFixedBase: false, fields: [F("measurementId", "Measurement ID"), F("apiSecret", "API Secret (Measurement Protocol)", true, { required: false, placeholder: "Only for server-side events — hidden after saving" })], endpoints: [] },
-      { id: "google-tag-manager", name: "Google Tag Manager", hasFixedBase: false, fields: [F("containerId", "Container ID", false, { placeholder: "e.g. GTM-XXXXXXX" })], endpoints: [] },
-      { id: "meta-pixel", name: "Meta Pixel", hasFixedBase: false, fields: [F("pixelId", "Pixel ID")], endpoints: [] },
-      { id: "mixpanel", name: "Mixpanel", hasFixedBase: false, fields: [F("projectToken", "Project Token"), F("apiSecret", "API Secret", true, { required: false })], endpoints: [] },
+      { id: "google-analytics", name: "Google Analytics", hasFixedBase: false, fields: [F("measurementId", "Measurement ID"), F("apiSecret", "API Secret (Measurement Protocol)", true, { required: false, placeholder: "Only for server-side events — hidden after saving" }), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" })], endpoints: [] },
+      { id: "google-tag-manager", name: "Google Tag Manager", hasFixedBase: false, fields: [F("containerId", "Container ID", false, { placeholder: "e.g. GTM-XXXXXXX" }), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" })], endpoints: [] },
+      { id: "meta-pixel", name: "Meta Pixel", hasFixedBase: false, fields: [F("pixelId", "Pixel ID"), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" })], endpoints: [] },
+      { id: "mixpanel", name: "Mixpanel", hasFixedBase: false, fields: [F("projectToken", "Project Token"), F("apiSecret", "API Secret", true, { required: false }), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" })], endpoints: [] },
     ],
   },
   {
     id: "MAPS",
     label: "Maps",
     subServices: [
-      { id: "google-maps", name: "Google Maps", hasFixedBase: true, fields: [F("apiKey", "API Key", true)], endpoints: [{ name: "geocode", path: "/geocode/json", method: "GET" }] },
-      { id: "mapbox", name: "Mapbox", hasFixedBase: true, fields: [F("accessToken", "Access Token", true)], endpoints: [] },
+      { id: "google-maps", name: "Google Maps", hasFixedBase: true, fields: [F("apiKey", "API Key", true), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" })], endpoints: [{ name: "geocode", path: "/geocode/json", method: "GET" }] },
+      { id: "mapbox", name: "Mapbox", hasFixedBase: true, fields: [F("accessToken", "Access Token", true), F("planName", "Plan Name", false, { required: false, plan: true, placeholder: "e.g. Free" })], endpoints: [] },
     ],
   },
   {

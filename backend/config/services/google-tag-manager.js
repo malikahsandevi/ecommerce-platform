@@ -22,6 +22,14 @@ module.exports = {
             "secret": false,
             "required": true,
             "placeholder": "e.g. GTM-XXXXXXX"
+        },
+        {
+            "key": "planName",
+            "label": "Plan Name",
+            "secret": false,
+            "required": false,
+            "plan": true,
+            "placeholder": "e.g. Free"
         }
     ],
     "endpoints": []

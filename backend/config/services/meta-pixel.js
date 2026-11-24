@@ -18,6 +18,14 @@ module.exports = {
             "secret": false,
             "required": true,
             "placeholder": "e.g. 123456789012345"
+        },
+        {
+            "key": "planName",
+            "label": "Plan Name",
+            "secret": false,
+            "required": false,
+            "plan": true,
+            "placeholder": "e.g. Free"
         }
     ],
     "endpoints": []

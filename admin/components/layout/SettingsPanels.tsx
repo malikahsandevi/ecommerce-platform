@@ -2247,6 +2247,17 @@ function ServiceBuilderPanel({
       return t("{label}: {name} is a single-configuration service — only one entry can exist.").replace("{label}", label).replace("{name}", def.name);
     }
     const isPreset = Boolean(def && def.id !== "custom");
+    if (isPreset && def) {
+      // Plan fields (plan name + limits) must be filled before the
+      // entry saves — Test fills them from the provider where the
+      // provider reports its plan, otherwise the admin types them.
+      const missingPlan = def.fields.filter(
+        (field) => field.plan && !(item.fields[field.key] ?? "").trim(),
+      );
+      if (missingPlan.length > 0) {
+        return t("Fill these fields: {fields}").replace("{fields}", missingPlan.map((field) => field.label).join(", "));
+      }
+    }
     if (!isPreset) {
       if (!item.baseUrl.trim()) return t("{label}: a base API URL is required for custom services.").replace("{label}", label);
       for (const endpoint of item.endpoints) {
@@ -2268,9 +2279,8 @@ function ServiceBuilderPanel({
       return false;
     }
     // Settings Lock: every entry save verifies the admin's own
-    // password for that save (the Test flow's save-first step passes
-    // through here too — the test execution itself is not a save and
-    // asks for nothing).
+    // password for that save. (Test is not a save — it runs the
+    // form's unsaved values and asks for nothing.)
     const securityPassword = await securityCheckDialog({
       message: t("Enter your own account password to save this service."),
     });
@@ -2425,9 +2435,13 @@ function ServiceBuilderPanel({
     else if (choice === "alt") await makeNewEntry(index);
   };
 
-  // Test runs the SAVED configuration through the backend runner —
-  // the entry is saved first (its own per-entry save), so what is
-  // tested is exactly what is stored. The outcome is a toast.
+  // Test runs the form's CURRENT (unsaved) values through the
+  // backend runner — Test never saves: the form values travel with
+  // the request and the runner merges them over the stored entry.
+  // Where the provider's API reports its plan, the result carries
+  // plan details and the entry's EMPTY plan fields fill from them
+  // (form state only — values the admin already typed are kept).
+  // The outcome is a toast.
   const testEntry = async (index: number) => {
     const item = entries[index];
     const def = subServiceById(item.subService);
@@ -2439,11 +2453,36 @@ function ServiceBuilderPanel({
     }
     setBusy((current) => ({ ...current, [index]: "test" }));
     try {
-      const saved = await saveEntry(index);
-      if (!saved) return;
-      const result = await settingsService.executeIntegration(item.serviceSlug, endpointName);
+      const result = isPreset
+        ? await settingsService.executeIntegration(item.serviceSlug, endpointName, {}, {}, {
+            values: item.fields,
+            subService: item.subService,
+          })
+        : await settingsService.executeIntegration(item.serviceSlug, endpointName, {}, {}, {
+            entry: entryToApi(item) as unknown as Record<string, unknown>,
+          });
       const summary = JSON.stringify(result.data ?? result).slice(0, 220);
       toast.success(t("{title}: connection works — {summary}").replace("{title}", item.title).replace("{summary}", summary));
+      if (result.planDetails && def) {
+        const filledLabels: string[] = [];
+        const nextFields = { ...item.fields };
+        for (const field of def.fields) {
+          if (!field.plan) continue;
+          const value = result.planDetails[field.key];
+          if (value && !(nextFields[field.key] ?? "").trim()) {
+            nextFields[field.key] = value;
+            filledLabels.push(field.label);
+          }
+        }
+        if (filledLabels.length > 0) {
+          updateEntry(index, { fields: nextFields });
+          toast.success(
+            t("{title}: plan details filled in — {fields}")
+              .replace("{title}", item.title)
+              .replace("{fields}", filledLabels.join(", ")),
+          );
+        }
+      }
     } catch (testError) {
       toast.error(extractApiError(testError).slice(0, 300));
     } finally {

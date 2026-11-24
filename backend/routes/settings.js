@@ -49,9 +49,9 @@ router.post('/backup', requirePermission('Settings', 'edit'), requireSuperAdmin,
 router.post('/backup/restore', requirePermission('Settings', 'edit'), requireSuperAdmin, requireSettingsSavePassword, restoreBackup);
 
 // Universal Driver execution route (to trigger dynamic integrations).
-// NOT a save and NOT password-gated: it executes the SAVED entry and
-// persists nothing (the panel's Test flow saves the entry first —
-// that save is gated like every other).
+// NOT a save and NOT password-gated: it executes the saved entry — or
+// the panel's unsaved form values when the Test flow sends them — and
+// persists nothing either way.
 router.post('/execute', requirePermission('Settings', 'edit'), executeIntegration);
 
 // The service catalogue (categories → sub-services → field schemas,

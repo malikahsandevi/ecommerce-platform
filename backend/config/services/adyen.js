@@ -53,6 +53,14 @@ module.exports = {
                 "Live"
             ],
             "default": "Test"
+        },
+        {
+            "key": "planName",
+            "label": "Plan Name",
+            "secret": false,
+            "required": false,
+            "plan": true,
+            "placeholder": "e.g. Free"
         }
     ],
     "endpoints": [

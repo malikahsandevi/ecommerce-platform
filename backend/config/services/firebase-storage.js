@@ -68,6 +68,22 @@ module.exports = {
             "secret": false,
             "required": false,
             "placeholder": "e.g. G-XXXXXXXXXX"
+        },
+        {
+            "key": "planName",
+            "label": "Plan Name",
+            "secret": false,
+            "required": false,
+            "plan": true,
+            "placeholder": "e.g. Free"
+        },
+        {
+            "key": "storageLimit",
+            "label": "Storage Limit",
+            "secret": false,
+            "required": false,
+            "plan": true,
+            "placeholder": "e.g. 25 GB"
         }
     ],
     "endpoints": []

@@ -27,6 +27,14 @@ module.exports = {
             "secret": true,
             "required": true,
             "placeholder": "Paste the secured key — hidden after saving"
+        },
+        {
+            "key": "planName",
+            "label": "Plan Name",
+            "secret": false,
+            "required": false,
+            "plan": true,
+            "placeholder": "e.g. Free"
         }
     ],
     "endpoints": []

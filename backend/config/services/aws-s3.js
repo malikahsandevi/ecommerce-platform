@@ -17,7 +17,7 @@ module.exports = {
             "label": "Access Key",
             "secret": false,
             "required": true,
-            "placeholder": "Access key ID (starts with AKIA…)"
+            "placeholder": "Access key ID (starts with AKIA\u2026)"
         },
         {
             "key": "secretKey",
@@ -39,6 +39,22 @@ module.exports = {
             "secret": false,
             "required": true,
             "placeholder": "e.g. eu-west-1"
+        },
+        {
+            "key": "planName",
+            "label": "Plan Name",
+            "secret": false,
+            "required": false,
+            "plan": true,
+            "placeholder": "e.g. Free"
+        },
+        {
+            "key": "storageLimit",
+            "label": "Storage Limit",
+            "secret": false,
+            "required": false,
+            "plan": true,
+            "placeholder": "e.g. 25 GB"
         }
     ],
     "endpoints": []

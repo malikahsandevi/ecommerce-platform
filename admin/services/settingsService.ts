@@ -300,22 +300,30 @@ export const settingsService = {
     return data;
   },
 
-  /** Runs one saved integration endpoint through the backend runner
-   *  (POST /settings/execute). The runner executes the SAVED
-   *  configuration — the panel saves the entry first, so what is
-   *  tested is exactly what is stored. Resolves with the provider's
-   *  response data; a provider failure rejects with the API's error
-   *  message. */
+  /** Runs one integration endpoint through the backend runner
+   *  (POST /settings/execute). Test runs the form's UNSAVED values:
+   *  pass `extra.values` (preset entries) or `extra.entry` (custom
+   *  entries) and the runner merges them over the stored entry —
+   *  nothing is persisted either way. Resolves with the provider's
+   *  response data plus, where the provider's API reports its plan,
+   *  `planDetails` for the entry's auto-fillable plan fields; a
+   *  provider failure rejects with the API's error message. */
   async executeIntegration(
     serviceSlug: string,
     endpointName: string,
     payload: Record<string, unknown> = {},
     queryParams: Record<string, unknown> = {},
-  ): Promise<{ success: boolean; data: unknown }> {
-    const { data } = await apiClient.post<{ success: boolean; data: unknown }>(
-      "/settings/execute",
-      { serviceSlug, endpointName, payload, queryParams },
-    );
+    extra?: {
+      values?: Record<string, string>;
+      subService?: string;
+      entry?: Record<string, unknown>;
+    },
+  ): Promise<{ success: boolean; data: unknown; planDetails?: Record<string, string> }> {
+    const { data } = await apiClient.post<{
+      success: boolean;
+      data: unknown;
+      planDetails?: Record<string, string>;
+    }>("/settings/execute", { serviceSlug, endpointName, payload, queryParams, ...extra });
     return data;
   },
 

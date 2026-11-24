@@ -26,6 +26,14 @@ module.exports = {
             "secret": false,
             "required": true,
             "placeholder": "Client-side token from the dashboard"
+        },
+        {
+            "key": "planName",
+            "label": "Plan Name",
+            "secret": false,
+            "required": false,
+            "plan": true,
+            "placeholder": "e.g. Free"
         }
     ],
     "endpoints": [

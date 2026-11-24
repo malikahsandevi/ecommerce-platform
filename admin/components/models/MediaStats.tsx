@@ -172,11 +172,25 @@ export default function MediaStats({ items, isLoading = false }: { items: Row[];
     const totalQuota = quotaKnown
       ? groups.reduce((sum, group) => sum + (groupUsage(group)!.creditsLimit as number) * GB, 0)
       : null;
-    const quotaUsed = quotaKnown
-      ? groups.reduce((sum, group) => sum + (groupUsage(group)?.storageUsedBytes ?? 0), 0)
+    // Remaining space is a CREDIT remainder, per Cloudinary's Credit
+    // System: Remaining (GB) = credits.limit − credits.usage (1 credit
+    // = 1 GB). The credit pool is shared with bandwidth and
+    // transformations, so this is deliberately NOT total − storage
+    // bytes: storage bytes alone would overstate what is left. The
+    // figure only appears when every account reported both numbers.
+    const totalAvailable = quotaKnown &&
+      groups.every((group) => groupUsage(group)?.creditsUsed != null)
+      ? groups.reduce(
+          (sum, group) =>
+            sum +
+            Math.max(
+              0,
+              (groupUsage(group)!.creditsLimit as number) -
+                (groupUsage(group)!.creditsUsed as number),
+            ) * GB,
+          0,
+        )
       : null;
-    const totalAvailable =
-      totalQuota != null && quotaUsed != null ? Math.max(0, totalQuota - quotaUsed) : null;
     const singleGroup = groups.length === 1 ? groups[0] : undefined;
     const singlePlan = singleGroup ? groupUsage(singleGroup)?.plan ?? null : null;
 

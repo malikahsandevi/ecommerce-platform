@@ -19,7 +19,7 @@ module.exports = {
             "label": "Account SID",
             "secret": false,
             "required": true,
-            "placeholder": "e.g. AC… (34 characters)"
+            "placeholder": "e.g. AC\u2026 (34 characters)"
         },
         {
             "key": "authToken",
@@ -34,6 +34,24 @@ module.exports = {
             "secret": false,
             "required": true,
             "placeholder": "e.g. +14155552671"
+        },
+        {
+            "key": "planName",
+            "label": "Plan Name",
+            "secret": false,
+            "required": false,
+            "plan": true,
+            "autoFill": true,
+            "placeholder": "Filled in by Test when the provider reports it — or type it"
+        },
+        {
+            "key": "smsLimit",
+            "label": "SMS Credit / Limit",
+            "secret": false,
+            "required": false,
+            "plan": true,
+            "autoFill": true,
+            "placeholder": "e.g. 10.00 USD"
         }
     ],
     "endpoints": [

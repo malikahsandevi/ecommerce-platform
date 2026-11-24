@@ -25,7 +25,15 @@ module.exports = {
             "label": "Publishable Key",
             "secret": false,
             "required": true,
-            "placeholder": "e.g. pk_live_…"
+            "placeholder": "e.g. pk_live_\u2026"
+        },
+        {
+            "key": "planName",
+            "label": "Plan Name",
+            "secret": false,
+            "required": false,
+            "plan": true,
+            "placeholder": "e.g. Free"
         }
     ],
     "endpoints": []

@@ -32,6 +32,22 @@ module.exports = {
             "secret": true,
             "required": true,
             "placeholder": "Paste the client secret — hidden after saving"
+        },
+        {
+            "key": "planName",
+            "label": "Plan Name",
+            "secret": false,
+            "required": false,
+            "plan": true,
+            "placeholder": "e.g. Free"
+        },
+        {
+            "key": "mauLimit",
+            "label": "Monthly Active Users Limit",
+            "secret": false,
+            "required": false,
+            "plan": true,
+            "placeholder": "e.g. 7,500 users"
         }
     ],
     "endpoints": []

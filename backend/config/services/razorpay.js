@@ -19,7 +19,7 @@ module.exports = {
             "label": "Key ID",
             "secret": false,
             "required": true,
-            "placeholder": "e.g. rzp_live_…"
+            "placeholder": "e.g. rzp_live_\u2026"
         },
         {
             "key": "keySecret",
@@ -34,6 +34,14 @@ module.exports = {
             "secret": true,
             "required": false,
             "placeholder": "Paste the webhook secret — hidden after saving"
+        },
+        {
+            "key": "planName",
+            "label": "Plan Name",
+            "secret": false,
+            "required": false,
+            "plan": true,
+            "placeholder": "e.g. Free"
         }
     ],
     "endpoints": [

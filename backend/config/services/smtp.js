@@ -54,6 +54,22 @@ module.exports = {
             "secret": false,
             "required": true,
             "placeholder": "e.g. My Store"
+        },
+        {
+            "key": "planName",
+            "label": "Plan Name",
+            "secret": false,
+            "required": false,
+            "plan": true,
+            "placeholder": "e.g. Free"
+        },
+        {
+            "key": "sendLimit",
+            "label": "Monthly Send Limit",
+            "secret": false,
+            "required": false,
+            "plan": true,
+            "placeholder": "e.g. 40,000 emails"
         }
     ],
     "endpoints": []

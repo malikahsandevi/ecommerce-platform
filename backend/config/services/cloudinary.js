@@ -34,6 +34,24 @@ module.exports = {
             "secret": true,
             "required": true,
             "placeholder": "Paste the API secret — hidden after saving"
+        },
+        {
+            "key": "planName",
+            "label": "Plan Name",
+            "secret": false,
+            "required": false,
+            "plan": true,
+            "autoFill": true,
+            "placeholder": "Filled in by Test when the provider reports it — or type it"
+        },
+        {
+            "key": "storageLimit",
+            "label": "Storage Limit",
+            "secret": false,
+            "required": false,
+            "plan": true,
+            "autoFill": true,
+            "placeholder": "e.g. 25 GB"
         }
     ],
     "endpoints": [

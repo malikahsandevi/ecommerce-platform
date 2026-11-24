@@ -32,7 +32,15 @@ module.exports = {
             "label": "Application ID",
             "secret": false,
             "required": false,
-            "placeholder": "e.g. sq0idp-…"
+            "placeholder": "e.g. sq0idp-\u2026"
+        },
+        {
+            "key": "planName",
+            "label": "Plan Name",
+            "secret": false,
+            "required": false,
+            "plan": true,
+            "placeholder": "e.g. Free"
         }
     ],
     "endpoints": [

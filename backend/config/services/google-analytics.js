@@ -32,6 +32,14 @@ module.exports = {
             "secret": true,
             "required": false,
             "placeholder": "Only for server-side events — hidden after saving"
+        },
+        {
+            "key": "planName",
+            "label": "Plan Name",
+            "secret": false,
+            "required": false,
+            "plan": true,
+            "placeholder": "e.g. Free"
         }
     ],
     "endpoints": []

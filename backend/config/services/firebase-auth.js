@@ -68,6 +68,22 @@ module.exports = {
             "secret": false,
             "required": false,
             "placeholder": "e.g. G-XXXXXXXXXX"
+        },
+        {
+            "key": "planName",
+            "label": "Plan Name",
+            "secret": false,
+            "required": false,
+            "plan": true,
+            "placeholder": "e.g. Free"
+        },
+        {
+            "key": "mauLimit",
+            "label": "Monthly Active Users Limit",
+            "secret": false,
+            "required": false,
+            "plan": true,
+            "placeholder": "e.g. 7,500 users"
         }
     ],
     "endpoints": []
