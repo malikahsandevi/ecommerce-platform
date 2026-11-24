@@ -8,6 +8,7 @@ const {
     findEntry,
 } = require('../config/services');
 const { PALETTES, paletteById } = require('../config/palettes');
+const { effectiveShipping } = require('../utils/shipping');
 const { executeEntryCall, runConfigTest } = require('../utils/integrationRunner');
 const { fetchPlanDetails } = require('../utils/planDetails');
 const { SECRET_MASK, refreshCredentials } = require('../utils/credentials');
@@ -18,19 +19,26 @@ const {
 } = require('../utils/settingsLock');
 const mongoose = require('mongoose');
 
-// NOTE: the old bespoke 'paymentMethods' and 'shipping' sections are
-// deliberately NOT writable here any more — Ahsan replaced those tabs
-// with the services system (Payment / Shipping category entries in
-// `integrations`, managed from the new Payment Methods / Shipping
-// tabs). The fields stay in the Setting schema/document (their stored
-// values are preserved, simply no longer editable or read by any
-// flow — nothing ever consumed them).
+// NOTE: the old bespoke 'paymentMethods' section is deliberately NOT
+// writable here any more — Ahsan replaced that tab with the services
+// system (Payment category entries in `integrations`, managed from
+// the Payment Methods tab). Its schema field stays (stored values
+// preserved, simply no longer editable).
+//
+// 'shipping' IS writable again — as the Shipping CENTRE (methods &
+// rates, delivery options & areas, couriers & automation), which is
+// a different thing from both the legacy shipping fields (zones /
+// freeShippingThreshold / defaultShippingMethod — kept stored,
+// untouched by the centre's normalizer) and the SHIPPING-category
+// credential entries in `integrations` (the providers' API accounts,
+// which stay exactly as they were).
 const settingSections = new Set([
     'general',
     'storeInfo',
     'notifications',
     'integrations',
-    'appearance'
+    'appearance',
+    'shipping'
 ]);
 
 const arraySections = new Set(['integrations']);
@@ -140,6 +148,18 @@ const maskIntegrationEntry = (entry) => {
     return obj;
 };
 
+/** One courier profile as the panel may receive it: the API
+ *  credential fields masked like every other credential in this
+ *  document (stars + last 4); names, templates and toggles are
+ *  metadata and stay readable. */
+const maskCourierProfile = (courier) => {
+    const obj = { ...courier };
+    for (const key of ['apiKey', 'apiUsername', 'apiPassword']) {
+        if (obj[key]) obj[key] = maskValue(obj[key]);
+    }
+    return obj;
+};
+
 const maskSettingsDocument = (doc) => {
     if (!doc) return doc;
     const obj = doc.toObject ? doc.toObject() : doc;
@@ -150,6 +170,27 @@ const maskSettingsDocument = (doc) => {
     delete obj.deletedIntegrations;
     if (Array.isArray(obj.integrations)) {
         obj.integrations = obj.integrations.map(maskIntegrationEntry);
+    }
+    if (obj.shipping) {
+        // The Shipping centre reads serve the EFFECTIVE lists (the
+        // built-in couriers / delivery options of a never-configured
+        // store included — utils/shipping), so the panel always
+        // shows what the order flow would actually use. The stored
+        // *Initialized flags stay in the document untouched; a save
+        // through the normalizer is what flips them.
+        const effective = effectiveShipping(obj);
+        obj.shipping = {
+            ...obj.shipping,
+            methods: effective.methods,
+            defaultMethodId: effective.defaultMethodId,
+            deliveryOptions: effective.deliveryOptions,
+            deliveryZones: effective.deliveryZones,
+            defaultDeliveryOptionId: effective.defaultDeliveryOptionId,
+            couriers: effective.couriers.map(maskCourierProfile),
+            defaultCourierId: effective.defaultCourierId,
+            autoAssignCourier: effective.autoAssignCourier,
+            codPaidOnDelivery: effective.codPaidOnDelivery,
+        };
     }
     return obj;
 };
@@ -464,7 +505,184 @@ const normalizeIntegration = (item, existingBySlug) => {
     return normalizedGeneric;
 };
 
+// ── Shipping centre normalization ──────────────────────────────────
+// One section, three sides (methods & rates / delivery options &
+// areas / couriers & automation). Each list is normalized on its
+// own: ids are stable identities (generated from the name when a
+// new entry arrives without one), duplicates are refused, charges
+// must be real numbers, and courier credential slots follow the
+// same mask-keep rule as every credential in this controller (the
+// panel only ever holds masks — a mask or a blank on save keeps the
+// stored secret, a typed value replaces it). Saving a side's list
+// marks that side initialized: from then on the stored list rules,
+// even emptied on purpose. The legacy shipping fields (zones,
+// freeShippingThreshold, defaultShippingMethod) are never touched.
+const slugId = (name, taken) => {
+    const base =
+        String(name || '')
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '') || 'entry';
+    let id = base;
+    let suffix = 2;
+    while (taken.has(id)) {
+        id = `${base}-${suffix}`;
+        suffix += 1;
+    }
+    return id;
+};
+
+const shippingNumber = (value, fieldLabel, { nullable = false } = {}) => {
+    if (value === undefined || value === null || value === '') {
+        if (nullable) return null;
+        return 0;
+    }
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) {
+        throw new Error(`${fieldLabel} must be a number`);
+    }
+    return numeric;
+};
+
+const normalizeShippingSection = (value, currentValue) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        throw new Error('shipping must be an object');
+    }
+    const current = currentValue?.toObject?.() || currentValue || {};
+    const next = { ...current };
+
+    if (Array.isArray(value.methods)) {
+        const taken = new Set();
+        next.methods = value.methods.map((item) => {
+            const name = String(item?.name || '').trim();
+            if (!name) throw new Error('Every shipping method needs a name.');
+            let id = String(item?.id || '').trim();
+            if (!id || taken.has(id)) id = slugId(name, taken);
+            taken.add(id);
+            return {
+                id,
+                name,
+                charge: Math.max(0, shippingNumber(item?.charge, `The charge of "${name}"`)),
+                freeAbove:
+                    item?.freeAbove === undefined
+                        ? null
+                        : shippingNumber(item.freeAbove, `The free-above amount of "${name}"`, { nullable: true }),
+                estimatedDays: String(item?.estimatedDays || '').trim(),
+                isActive: item?.isActive !== false,
+            };
+        });
+        next.deliveryInitialized = true;
+    }
+    if (value.defaultMethodId !== undefined) {
+        const wanted = String(value.defaultMethodId || '');
+        next.defaultMethodId = (next.methods || []).some((method) => method.id === wanted)
+            ? wanted
+            : '';
+    }
+
+    if (Array.isArray(value.deliveryOptions)) {
+        const taken = new Set();
+        next.deliveryOptions = value.deliveryOptions.map((item) => {
+            const name = String(item?.name || '').trim();
+            if (!name) throw new Error('Every delivery option needs a name.');
+            let id = String(item?.id || '').trim();
+            if (!id || taken.has(id)) id = slugId(name, taken);
+            taken.add(id);
+            return {
+                id,
+                name,
+                chargeAdjustment: shippingNumber(
+                    item?.chargeAdjustment,
+                    `The charge adjustment of "${name}"`,
+                ),
+                isPickup: Boolean(item?.isPickup),
+                isActive: item?.isActive !== false,
+                isBuiltIn: Boolean(item?.isBuiltIn),
+            };
+        });
+        next.deliveryInitialized = true;
+    }
+    if (Array.isArray(value.deliveryZones)) {
+        const taken = new Set();
+        next.deliveryZones = value.deliveryZones.map((item) => {
+            const name = String(item?.name || '').trim();
+            if (!name) throw new Error('Every delivery area needs a name.');
+            let id = String(item?.id || '').trim();
+            if (!id || taken.has(id)) id = slugId(name, taken);
+            taken.add(id);
+            const cities = (Array.isArray(item?.cities) ? item.cities : [])
+                .map((city) => String(city || '').trim())
+                .filter(Boolean);
+            return {
+                id,
+                name,
+                cities: [...new Set(cities)],
+                chargeOverride:
+                    item?.chargeOverride === undefined
+                        ? null
+                        : shippingNumber(item.chargeOverride, `The charge override of "${name}"`, { nullable: true }),
+                isActive: item?.isActive !== false,
+            };
+        });
+        next.deliveryInitialized = true;
+    }
+    if (value.defaultDeliveryOptionId !== undefined) {
+        const wanted = String(value.defaultDeliveryOptionId || '');
+        next.defaultDeliveryOptionId = (next.deliveryOptions || []).some(
+            (option) => option.id === wanted,
+        )
+            ? wanted
+            : '';
+    }
+
+    if (Array.isArray(value.couriers)) {
+        const existingById = new Map(
+            (current.couriers || []).map((courier) => {
+                const obj = courier?.toObject ? courier.toObject() : courier;
+                return [obj.id, obj];
+            }),
+        );
+        const taken = new Set();
+        next.couriers = value.couriers.map((item) => {
+            const name = String(item?.name || '').trim();
+            if (!name) throw new Error('Every courier needs a name.');
+            let id = String(item?.id || '').trim();
+            if (!id || taken.has(id)) id = slugId(name, taken);
+            taken.add(id);
+            const existing = existingById.get(id) || {};
+            return {
+                id,
+                name,
+                trackingUrlTemplate: String(item?.trackingUrlTemplate || '').trim(),
+                apiBaseUrl: String(item?.apiBaseUrl || '').trim(),
+                apiKey: keepMaskedValue(item?.apiKey, existing.apiKey),
+                apiUsername: keepMaskedValue(item?.apiUsername, existing.apiUsername),
+                apiPassword: keepMaskedValue(item?.apiPassword, existing.apiPassword),
+                isActive: item?.isActive !== false,
+                isBuiltIn: Boolean(item?.isBuiltIn ?? existing.isBuiltIn),
+            };
+        });
+        next.couriersInitialized = true;
+    }
+    if (value.defaultCourierId !== undefined) {
+        const wanted = String(value.defaultCourierId || '');
+        next.defaultCourierId = (next.couriers || []).some((courier) => courier.id === wanted)
+            ? wanted
+            : '';
+    }
+    if (value.autoAssignCourier !== undefined) {
+        next.autoAssignCourier = Boolean(value.autoAssignCourier);
+    }
+    if (value.codPaidOnDelivery !== undefined) {
+        next.codPaidOnDelivery = Boolean(value.codPaidOnDelivery);
+    }
+    return next;
+};
+
 const normalizeSection = (section, value, currentValue) => {
+    if (section === 'shipping') {
+        return normalizeShippingSection(value, currentValue);
+    }
     if (arraySections.has(section)) {
         if (!Array.isArray(value)) throw new Error(`${section} must be an array`);
 

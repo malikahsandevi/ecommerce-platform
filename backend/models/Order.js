@@ -121,8 +121,26 @@ const orderSchema = new mongoose.Schema({
   // Tracking
   trackingNumber: { type: String },
   shippingCarrier: { type: String },
+  // The Settings → Shipping courier profile this order rides with
+  // (its `id`); shippingCarrier above stays the name snapshot the
+  // orders list has always shown. The courier profile supplies the
+  // tracking link template and the live-sync API configuration.
+  courierId: { type: String, default: '' },
   shippedAt: { type: Date },
   deliveredAt: { type: Date },
+
+  // Shipping choice snapshots — what the shared calculator priced at
+  // placement (utils/shipping): the method / delivery option the
+  // order was placed with and the delivery zone its city matched.
+  // Names are snapshotted so the order's money breakdown keeps
+  // reading correctly even if the settings entries are later renamed
+  // or removed. Empty on orders placed before the Shipping centre
+  // existed (and on any order placed with no methods configured).
+  shippingMethodId: { type: String, default: '' },
+  shippingMethodName: { type: String, default: '' },
+  deliveryOptionId: { type: String, default: '' },
+  deliveryOptionName: { type: String, default: '' },
+  deliveryZoneName: { type: String, default: '' },
   
   // Notes
   customerNote: { type: String },

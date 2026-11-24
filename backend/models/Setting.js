@@ -87,6 +87,76 @@ const integrationEntrySchema = new mongoose.Schema(
   },
 );
 
+// ── Shipping centre sub-documents (Settings → Shipping) ───────────
+// The Shipping tab is ONE management centre with three sides —
+// methods & rates, delivery options & areas, and couriers &
+// automation — and all of it lives here, in the settings store, so
+// the admin panel, the order flow and the future storefront checkout
+// all read the same configuration. Every entry carries a stable
+// string `id` (its identity across saves); `_id` is off because the
+// string id is the only identity these entries need.
+const courierProfileSchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true, trim: true },
+    name: { type: String, required: true, trim: true },
+    // Public tracking page pattern; "{tracking}" is replaced with
+    // the order's tracking number wherever a tracking link is built.
+    trackingUrlTemplate: { type: String, default: "", trim: true },
+    // Optional live-tracking API (utils/courierSync): the generic
+    // adapter calls GET {apiBaseUrl}/tracking/{trackingNumber} with
+    // the key (or username + password) as the credential. All three
+    // credential fields are masked on every settings read.
+    apiBaseUrl: { type: String, default: "", trim: true },
+    apiKey: { type: String, default: "" },
+    apiUsername: { type: String, default: "" },
+    apiPassword: { type: String, default: "" },
+    isActive: { type: Boolean, default: true },
+    isBuiltIn: { type: Boolean, default: false },
+  },
+  { _id: false },
+);
+
+const shippingMethodSchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true, trim: true },
+    name: { type: String, required: true, trim: true },
+    charge: { type: Number, default: 0 },
+    // Free when the order subtotal reaches this amount; null = this
+    // method is never free.
+    freeAbove: { type: Number, default: null },
+    estimatedDays: { type: String, default: "", trim: true },
+    isActive: { type: Boolean, default: true },
+  },
+  { _id: false },
+);
+
+const deliveryOptionSchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true, trim: true },
+    name: { type: String, required: true, trim: true },
+    // Added to (or taken off) the shipping charge; pickup options
+    // ignore it — a pickup order never pays shipping.
+    chargeAdjustment: { type: Number, default: 0 },
+    isPickup: { type: Boolean, default: false },
+    isActive: { type: Boolean, default: true },
+    isBuiltIn: { type: Boolean, default: false },
+  },
+  { _id: false },
+);
+
+const deliveryZoneSchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true, trim: true },
+    name: { type: String, required: true, trim: true },
+    cities: { type: [String], default: [] },
+    // This zone's own shipping charge for its cities; null = the
+    // chosen method's charge applies.
+    chargeOverride: { type: Number, default: null },
+    isActive: { type: Boolean, default: true },
+  },
+  { _id: false },
+);
+
 const settingSchema = new mongoose.Schema(
   {
     // 1. General Settings
@@ -133,7 +203,13 @@ const settingSchema = new mongoose.Schema(
       },
     ],
 
-    // 4. Shipping Settings
+    // 4. Shipping Settings — the Shipping centre (see the
+    // sub-document schemas above). The first three fields are the
+    // LEGACY shape, kept stored and untouched: nothing reads them
+    // any more, the centre below replaced them. The `*Initialized`
+    // flags distinguish "never configured" (reads serve the
+    // built-in defaults from utils/shipping.js) from "staff saved
+    // this list, possibly empty" (the stored list rules).
     shipping: {
       zones: [
         {
@@ -145,6 +221,20 @@ const settingSchema = new mongoose.Schema(
       ],
       freeShippingThreshold: { type: Number, default: 100 },
       defaultShippingMethod: { type: String, default: "Standard Shipping" },
+      // Side 1 — methods & rates.
+      methods: { type: [shippingMethodSchema], default: [] },
+      defaultMethodId: { type: String, default: "" },
+      // Side 2 — delivery options & areas.
+      deliveryOptions: { type: [deliveryOptionSchema], default: [] },
+      deliveryZones: { type: [deliveryZoneSchema], default: [] },
+      defaultDeliveryOptionId: { type: String, default: "home-delivery" },
+      deliveryInitialized: { type: Boolean, default: false },
+      // Side 3 — couriers & automation.
+      couriers: { type: [courierProfileSchema], default: [] },
+      couriersInitialized: { type: Boolean, default: false },
+      defaultCourierId: { type: String, default: "" },
+      autoAssignCourier: { type: Boolean, default: true },
+      codPaidOnDelivery: { type: Boolean, default: true },
     },
 
     // 5. Notifications

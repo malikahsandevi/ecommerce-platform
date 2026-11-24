@@ -125,8 +125,13 @@ const STATUS_LINES = {
     pending: 'Your order is awaiting processing.',
 };
 
-/** "Order status changed" — sent when an admin updates the status. */
-const sendOrderStatusEmail = async ({ to, customerName, order, previousStatus }) => {
+/** "Order status changed" — sent when an admin updates the status.
+ *  A shipped order with a tracking number also carries the courier's
+ *  tracking link as the message's button — the caller computes it
+ *  from the courier profile's URL template (utils/shipping) and
+ *  passes it as `trackingUrl`; without a number or a template the
+ *  link is omitted entirely, never sent broken. */
+const sendOrderStatusEmail = async ({ to, customerName, order, previousStatus, trackingUrl }) => {
     const { storeName, currency } = await getStoreBranding();
     const status = order.status || 'pending';
     const lines = [
@@ -143,7 +148,10 @@ const sendOrderStatusEmail = async ({ to, customerName, order, previousStatus })
         storeName,
         heading: `Order ${order.orderNumber} — ${status}`,
         lines,
-        cta: null,
+        cta:
+            status === 'shipped' && order.trackingNumber && trackingUrl
+                ? { label: 'Track your order', url: trackingUrl }
+                : null,
     });
     return sendEmailSafe({
         to,

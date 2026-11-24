@@ -6,6 +6,16 @@ const { resolveCoupon, recordCouponUse, releaseCouponUse, claimCouponUse } = req
 const { sendOrderConfirmationEmail, sendOrderStatusEmail } = require('../utils/emailTemplates');
 const { NOT_DELETED } = require('../utils/softDelete');
 const { transactionsSupported, withTransaction } = require('../utils/transactions');
+const {
+    getShippingConfig,
+    defaultCourier,
+    findCourier,
+    trackingUrlFor,
+    shipmentBlock,
+    isCodPayment,
+    computeShippingCharge,
+} = require('../utils/shipping');
+const { getTrackingStatus } = require('../utils/courierSync');
 
 /**
  * Thrown inside a TRANSACTIONAL placement when the order-number
@@ -132,6 +142,21 @@ const logLowStockAlerts = async (items) => {
     }
 };
 
+// Every order payload carries its `shipment` block (courier,
+// tracking number, shipped/delivered stamps and the computed public
+// tracking link) — the admin's order detail renders it straight from
+// the list/detail rows, so both reads attach it the same way.
+const presentOrders = async (orders) => {
+    const config = await getShippingConfig();
+    return orders.map((order) => {
+        const obj = order.toObject ? order.toObject() : { ...order };
+        obj.shipment = shipmentBlock(config, obj);
+        return obj;
+    });
+};
+
+const presentOrder = async (order) => (await presentOrders([order]))[0];
+
 // @desc    Get all orders
 // @route   GET /api/orders
 // @access  Admin
@@ -139,7 +164,7 @@ const getOrders = async (req, res) => {
     try {
         const orders = await Order.find({ ...NOT_DELETED }).populate('user', 'firstName lastName email avatar').populate('coupon', 'code');
         await Order.withCodes(orders);
-        res.json(orders);
+        res.json(await presentOrders(orders));
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
@@ -155,7 +180,7 @@ const getOrderById = async (req, res) => {
             return res.status(404).json({ message: 'Order not found' });
         }
         await Order.withCodes(order);
-        res.json(order);
+        res.json(await presentOrder(order));
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
@@ -177,6 +202,13 @@ const createOrder = async (req, res) => {
         delete data.deletedBy;
         delete data.deletedUniques;
         delete data.deletedLinks;
+        // The shipping snapshots are server-owned too: they record
+        // what the shared calculator priced (utils/shipping), so a
+        // create body may CHOOSE a method / delivery option (the id
+        // fields) but never name them or price them itself.
+        delete data.shippingMethodName;
+        delete data.deliveryOptionName;
+        delete data.deliveryZoneName;
 
         if (!Array.isArray(data.items) || data.items.length === 0) {
             return res.status(400).json({ message: 'An order needs at least one item.' });
@@ -277,10 +309,41 @@ const createOrder = async (req, res) => {
             data.discount = 0;
             data.coupon = undefined;
         }
+        // Shipping: the shared calculator (utils/shipping) prices
+        // the chosen method + delivery option + destination city
+        // against the recomputed subtotal — the same numbers the
+        // admin form previewed through /shipping-quote, recomputed
+        // here so a stale or hostile preview can never set the
+        // charge. With NO shipping methods configured the calculator
+        // reports `configured: false` and the caller's shippingCost
+        // stands exactly as before (a fresh store charges nothing
+        // and requires nothing new).
+        const shippingConfig = await getShippingConfig();
+        const shippingQuote = computeShippingCharge(shippingConfig, {
+            subtotal: data.subtotal,
+            methodId: data.shippingMethodId,
+            deliveryOptionId: data.deliveryOptionId,
+            city: data.shippingAddress?.city,
+        });
+        if (shippingQuote.configured) {
+            data.shippingCost = shippingQuote.charge;
+            data.shippingMethodId = shippingQuote.methodId;
+            data.shippingMethodName = shippingQuote.methodName;
+            data.deliveryOptionId = shippingQuote.deliveryOptionId;
+            data.deliveryOptionName = shippingQuote.deliveryOptionName;
+            data.deliveryZoneName = shippingQuote.zoneName;
+        } else {
+            data.shippingMethodId = '';
+            data.shippingMethodName = '';
+            data.deliveryOptionId = '';
+            data.deliveryOptionName = '';
+            data.deliveryZoneName = '';
+        }
+
         // The total is always derived here from the recomputed subtotal
         // (never taken from the caller): subtotal − discount + tax +
-        // shipping. Tax and shipping stay caller-set — no server-side
-        // rule computes them — but they can no longer smuggle a wrong
+        // shipping. Tax stays caller-set — no server-side rule
+        // computes it — but it can no longer smuggle a wrong
         // subtotal or discount into the recorded total.
         data.total =
             Math.round(
@@ -485,6 +548,29 @@ const createOrder = async (req, res) => {
             order = await placeOrder(null);
         }
 
+        // An order created straight into the confirmed (processing)
+        // state gets the same auto-assignment the confirm transition
+        // runs in updateOrder: the default courier, when the
+        // automation is on and no courier was chosen by hand.
+        if (
+            bornStatus === 'processing' &&
+            !order.shippingCarrier &&
+            !order.courierId &&
+            shippingConfig.autoAssignCourier
+        ) {
+            const courier = defaultCourier(shippingConfig);
+            if (courier) {
+                order.shippingCarrier = courier.name;
+                order.courierId = courier.id;
+                await order.save();
+                await logActivity(
+                    'STATUS_CHANGE',
+                    `Order ${order.orderNumber}: ${courier.name} assigned automatically (default courier)`,
+                    { orderId: order._id, customerId: order.user || undefined }
+                );
+            }
+        }
+
         const userDoc = order.user
             ? await User.findById(order.user).select('firstName lastName email').lean()
             : null;
@@ -541,6 +627,7 @@ const updateOrder = async (req, res) => {
             'paymentId',
             'transactionId',
             'shippingCarrier',
+            'courierId',
             'trackingNumber',
             'notes',
             'shippingAddress',
@@ -555,6 +642,48 @@ const updateOrder = async (req, res) => {
         // when the parcel actually left / arrived.
         if (nextStatus === 'shipped' && !order.shippedAt) updates.shippedAt = new Date();
         if (nextStatus === 'delivered' && !order.deliveredAt) updates.deliveredAt = new Date();
+
+        // ── Shipping automation (Settings → Shipping toggles) ──────
+        // Computed BEFORE the atomic claim so the side effects land
+        // in the same write as the status itself:
+        //  • Confirming an order (pending → processing) with no
+        //    courier yet auto-assigns the default courier.
+        //  • Delivering a cash-on-delivery order marks its payment
+        //    Paid (the courier collected the cash at the door).
+        // Both default ON; a toggle OFF leaves the behaviour exactly
+        // as it was before the automation existed. The flags below
+        // drive the post-save activity entries — the log lines are
+        // written only when the claim actually won.
+        let shippingConfig = null;
+        let autoAssignedCourier = null;
+        let codAutoPaid = false;
+        if (nextStatus !== previousStatus) {
+            shippingConfig = await getShippingConfig();
+            if (
+                previousStatus === 'pending' &&
+                nextStatus === 'processing' &&
+                !order.shippingCarrier &&
+                !order.courierId &&
+                shippingConfig.autoAssignCourier
+            ) {
+                const courier = defaultCourier(shippingConfig);
+                if (courier) {
+                    updates.shippingCarrier = courier.name;
+                    updates.courierId = courier.id;
+                    autoAssignedCourier = courier;
+                }
+            }
+            if (
+                nextStatus === 'delivered' &&
+                shippingConfig.codPaidOnDelivery &&
+                isCodPayment(order.paymentMethod) &&
+                order.paymentStatus !== 'paid'
+            ) {
+                updates.paymentStatus = 'paid';
+                updates.paymentDate = updates.deliveredAt || new Date();
+                codAutoPaid = true;
+            }
+        }
 
         // A status change is claimed ATOMICALLY: the conditional
         // update only lands while the stored status is still the one
@@ -614,7 +743,7 @@ const updateOrder = async (req, res) => {
                 if (!current) {
                     return res.status(404).json({ message: 'Order not found' });
                 }
-                return res.json(current);
+                return res.json(await presentOrder(current));
             }
             order = outcome.order;
             updated = outcome.order;
@@ -637,23 +766,40 @@ const updateOrder = async (req, res) => {
                 `Order ${order.orderNumber} status changed from ${previousStatus} to ${nextStatus}`,
                 { orderId: order._id, customerId: order.user || undefined }
             );
+            if (autoAssignedCourier) {
+                await logActivity(
+                    'STATUS_CHANGE',
+                    `Order ${order.orderNumber}: ${autoAssignedCourier.name} assigned automatically (default courier)`,
+                    { orderId: order._id, customerId: order.user || undefined }
+                );
+            }
+            if (codAutoPaid) {
+                await logActivity(
+                    'STATUS_CHANGE',
+                    `Order ${order.orderNumber}: Payment marked Paid automatically — COD collected on delivery`,
+                    { orderId: order._id, customerId: order.user || undefined }
+                );
+            }
 
             // Status-update email to the customer (fail-soft, like the
-            // confirmation — see createOrder).
+            // confirmation — see createOrder). A shipped order's email
+            // carries the courier tracking link when one can be built.
             const userDoc = order.user
                 ? await User.findById(order.user).select('firstName lastName email').lean()
                 : null;
             if (userDoc?.email) {
+                const config = shippingConfig || (await getShippingConfig());
                 await sendOrderStatusEmail({
                     to: userDoc.email,
                     customerName: customerLabel(userDoc),
                     order: updated,
                     previousStatus,
+                    trackingUrl: trackingUrlFor(findCourier(config, updated), updated.trackingNumber),
                 });
             }
         }
 
-        res.json(updated);
+        res.json(await presentOrder(updated));
     } catch (error) {
         res.status(400).json({ message: error.message });
     }
@@ -712,12 +858,294 @@ const deleteOrder = async (req, res) => {
     }
 };
 
+// @desc    Shipping choices for the order screens (couriers,
+// methods, delivery options — active entries only, no credentials)
+// @route   GET /api/orders/shipping-options
+// @access  Admin (Orders view)
+const getShippingOptions = async (req, res) => {
+    try {
+        const config = await getShippingConfig();
+        res.json({
+            configured: config.methods.some((method) => method.isActive !== false),
+            couriers: config.couriers
+                .filter((courier) => courier.isActive !== false)
+                .map((courier) => ({ id: courier.id, name: courier.name })),
+            methods: config.methods
+                .filter((method) => method.isActive !== false)
+                .map((method) => ({
+                    id: method.id,
+                    name: method.name,
+                    charge: method.charge,
+                    freeAbove: method.freeAbove ?? null,
+                    estimatedDays: method.estimatedDays || '',
+                })),
+            deliveryOptions: config.deliveryOptions
+                .filter((option) => option.isActive !== false)
+                .map((option) => ({
+                    id: option.id,
+                    name: option.name,
+                    chargeAdjustment: option.chargeAdjustment || 0,
+                    isPickup: Boolean(option.isPickup),
+                })),
+            defaults: {
+                courierId: config.defaultCourierId,
+                methodId: config.defaultMethodId,
+                deliveryOptionId: config.defaultDeliveryOptionId,
+            },
+        });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+// @desc    Shipping quote for the Create Order form — the shared
+// calculator over the form's current lines + choices. Advisory
+// only: createOrder recomputes the same numbers at placement.
+// @route   POST /api/orders/shipping-quote
+// @access  Admin (Orders create)
+const shippingQuote = async (req, res) => {
+    try {
+        const { items, shippingMethodId, deliveryOptionId, city } = req.body || {};
+        let subtotal = 0;
+        for (const item of Array.isArray(items) ? items : []) {
+            if (!item?.product || !item?.quantity) continue;
+            // eslint-disable-next-line no-await-in-loop
+            const product = await Product.findOne({ _id: item.product, ...NOT_DELETED })
+                .select('price')
+                .lean();
+            if (product) subtotal += (Number(product.price) || 0) * (Number(item.quantity) || 0);
+        }
+        subtotal = Math.round(subtotal * 100) / 100;
+        const config = await getShippingConfig();
+        const quote = computeShippingCharge(config, {
+            subtotal,
+            methodId: shippingMethodId,
+            deliveryOptionId,
+            city,
+        });
+        res.json({
+            subtotal,
+            configured: quote.configured,
+            shippingCharge: quote.configured ? quote.charge : 0,
+            methodId: quote.methodId || '',
+            methodName: quote.methodName || '',
+            deliveryOptionId: quote.deliveryOptionId || '',
+            deliveryOptionName: quote.deliveryOptionName || '',
+            zoneName: quote.zoneName || '',
+            freeApplied: Boolean(quote.freeApplied),
+            total: Math.round((subtotal + (quote.configured ? quote.charge : 0)) * 100) / 100,
+        });
+    } catch (error) {
+        res.status(400).json({ message: error.message });
+    }
+};
+
+// ── Courier tracking sync ──────────────────────────────────────────
+// The forward-only ladder a courier report may climb: a report can
+// advance an order, never pull it back.
+const SYNC_ORDER_RANK = { pending: 0, processing: 1, shipped: 2, delivered: 3 };
+const SYNC_COURIER_RANK = { shipped: 2, out_for_delivery: 2.5, delivered: 3 };
+
+/**
+ * Runs a status transition ARRIVED FROM courier tracking with the
+ * full delivered/shipped side-effect set — stamps, the COD
+ * auto-paid rule, the activity entries and the customer email —
+ * exactly as a staff-driven change to the same status behaves.
+ */
+const transitionViaSync = async (order, targetStatus, config) => {
+    const previousStatus = order.status;
+    order.status = targetStatus;
+    if (targetStatus === 'shipped' && !order.shippedAt) order.shippedAt = new Date();
+    let codAutoPaid = false;
+    if (targetStatus === 'delivered') {
+        if (!order.deliveredAt) order.deliveredAt = new Date();
+        if (
+            config.codPaidOnDelivery &&
+            isCodPayment(order.paymentMethod) &&
+            order.paymentStatus !== 'paid'
+        ) {
+            order.paymentStatus = 'paid';
+            order.paymentDate = order.deliveredAt;
+            codAutoPaid = true;
+        }
+    }
+    await order.save();
+    await logActivity(
+        'STATUS_CHANGE',
+        `Order ${order.orderNumber} status changed from ${previousStatus} to ${targetStatus} (courier tracking sync)`,
+        { orderId: order._id, customerId: order.user || undefined }
+    );
+    if (codAutoPaid) {
+        await logActivity(
+            'STATUS_CHANGE',
+            `Order ${order.orderNumber}: Payment marked Paid automatically — COD collected on delivery`,
+            { orderId: order._id, customerId: order.user || undefined }
+        );
+    }
+    const userDoc = order.user
+        ? await User.findById(order.user).select('firstName lastName email').lean()
+        : null;
+    if (userDoc?.email) {
+        await sendOrderStatusEmail({
+            to: userDoc.email,
+            customerName: customerLabel(userDoc),
+            order,
+            previousStatus,
+            trackingUrl: trackingUrlFor(findCourier(config, order), order.trackingNumber),
+        });
+    }
+};
+
+/**
+ * Syncs ONE order against its courier and reports the outcome as
+ * { success, changed, message } — shared by the single-order and
+ * sync-all endpoints. Every outcome that touches the record (an
+ * advance, an out-for-delivery or returned report) is written to
+ * the activity log; plain failures answer with the adapter's
+ * human message and change nothing.
+ */
+const syncOneOrder = async (order, config) => {
+    if (['cancelled', 'refunded', 'delivered'].includes(order.status)) {
+        return {
+            success: true,
+            changed: false,
+            message: `Order is already ${order.status} — nothing to sync.`,
+        };
+    }
+    if (!String(order.trackingNumber || '').trim()) {
+        return {
+            success: false,
+            changed: false,
+            message: 'Add a tracking number to this order before syncing.',
+        };
+    }
+    const courier = findCourier(config, order);
+    if (!courier) {
+        return {
+            success: false,
+            changed: false,
+            message: 'Assign a courier to this order before syncing tracking.',
+        };
+    }
+    const result = await getTrackingStatus(courier, order.trackingNumber);
+    if (!result.ok) {
+        return { success: false, changed: false, message: result.message };
+    }
+    if (result.status === 'unknown') {
+        return {
+            success: true,
+            changed: false,
+            message: `${courier.name} has not reported a recognizable status for this shipment yet.`,
+        };
+    }
+    if (result.status === 'returned') {
+        await logActivity(
+            'STATUS_CHANGE',
+            `Order ${order.orderNumber}: ${courier.name} reports the shipment was returned`,
+            { orderId: order._id, customerId: order.user || undefined }
+        );
+        return {
+            success: true,
+            changed: false,
+            message: `${courier.name} reports this shipment was returned. The order status was left unchanged — review it and refund or reship as needed.`,
+        };
+    }
+    if (SYNC_COURIER_RANK[result.status] <= SYNC_ORDER_RANK[order.status]) {
+        return {
+            success: true,
+            changed: false,
+            message: `Tracking has not moved past the order's current status — nothing changed.`,
+        };
+    }
+    if (result.status === 'out_for_delivery') {
+        await logActivity(
+            'STATUS_CHANGE',
+            `Order ${order.orderNumber} is out for delivery (${courier.name})`,
+            { orderId: order._id, customerId: order.user || undefined }
+        );
+        return {
+            success: true,
+            changed: false,
+            message: `${courier.name} reports the parcel is out for delivery.`,
+        };
+    }
+    await transitionViaSync(order, result.status, config);
+    return {
+        success: true,
+        changed: true,
+        message:
+            result.status === 'delivered'
+                ? 'Order marked delivered from courier tracking.'
+                : 'Order marked shipped from courier tracking.',
+    };
+};
+
+// @desc    Sync one order's status from its courier
+// @route   POST /api/orders/:id/sync-tracking
+// @access  Admin (Orders edit)
+const syncOrderTracking = async (req, res) => {
+    try {
+        const order = await Order.findOne({ _id: req.params.id, ...NOT_DELETED });
+        if (!order) {
+            return res.status(404).json({ message: 'Order not found' });
+        }
+        const config = await getShippingConfig();
+        const outcome = await syncOneOrder(order, config);
+        res.json({ ...outcome, order: await presentOrder(order) });
+    } catch (error) {
+        res.status(400).json({ message: error.message });
+    }
+};
+
+// @desc    Sync every open shipped order against its courier
+// @route   POST /api/orders/sync-tracking
+// @access  Admin (Orders edit)
+const syncAllOrderTracking = async (req, res) => {
+    try {
+        const config = await getShippingConfig();
+        const orders = await Order.find({
+            ...NOT_DELETED,
+            status: 'shipped',
+            trackingNumber: { $nin: [null, ''] },
+        });
+        const results = [];
+        let advanced = 0;
+        let delivered = 0;
+        let failed = 0;
+        for (const order of orders) {
+            // eslint-disable-next-line no-await-in-loop
+            const outcome = await syncOneOrder(order, config);
+            if (!outcome.success) failed += 1;
+            if (outcome.changed) {
+                advanced += 1;
+                if (order.status === 'delivered') delivered += 1;
+            }
+            results.push({ orderNumber: order.orderNumber, ...outcome });
+        }
+        res.json({
+            success: true,
+            checked: orders.length,
+            advanced,
+            delivered,
+            unchanged: orders.length - advanced - failed,
+            failed,
+            results,
+        });
+    } catch (error) {
+        res.status(400).json({ message: error.message });
+    }
+};
+
 module.exports = {
     getOrders,
     getOrderById,
     createOrder,
     updateOrder,
     deleteOrder,
+    getShippingOptions,
+    shippingQuote,
+    syncOrderTracking,
+    syncAllOrderTracking,
     // Shared with the Deleted Items restore, which re-reserves the
     // stock a soft delete returned and re-records the coupon
     // redemption it released.
