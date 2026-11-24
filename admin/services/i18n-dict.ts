@@ -1568,4 +1568,10 @@ export const T_X5: Dict = {
   "{title}: plan details filled in — {fields}": { ur: "{title}: پلان کی تفصیلات بھر دی گئیں — {fields}", ar: "{title}: تم ملء تفاصيل الخطة — {fields}", hi: "{title}: प्लान विवरण भर दिए गए — {fields}", bn: "{title}: প্ল্যানের বিবরণ পূরণ করা হয়েছে — {fields}", es: "{title}: detalles del plan completados — {fields}", fr: "{title} : détails du forfait remplis — {fields}", de: "{title}: Plandetails eingetragen — {fields}", tr: "{title}: plan ayrıntıları dolduruldu — {fields}", zh: "{title}：套餐详情已填写——{fields}" },
 };
 
-export const T: Dict = { ...T_CORE, ...T_SET1, ...T_SET2, ...T_SET3, ...T_DASH, ...T_CRUD, ...T_MEDIA, ...T_FORM, ...T_X1, ...T_X2, ...T_CFG1, ...T_CFG2, ...T_X3, ...T_PALETTE, ...T_UROLE, ...T_X4, ...T_X5 };
+export const T_X6: Dict = {
+  "Auto": { ur: "خودکار", ar: "تلقائي", hi: "ऑटो", bn: "অটো", es: "Automático", fr: "Automatique", de: "Automatisch", tr: "Otomatik", zh: "自动" },
+  "Auto → {entry}": { ur: "خودکار → {entry}", ar: "تلقائي → {entry}", hi: "ऑटो → {entry}", bn: "অটো → {entry}", es: "Automático → {entry}", fr: "Automatique → {entry}", de: "Automatisch → {entry}", tr: "Otomatik → {entry}", zh: "自动 → {entry}" },
+  "{entry} is switched off — uploads are using Auto → {target}": { ur: "{entry} بند ہے — اپ لوڈز خودکار → {target} استعمال کر رہی ہیں", ar: "{entry} مغلق — عمليات التحميل تستخدم تلقائي → {target}", hi: "{entry} बंद है — अपलोड ऑटो → {target} का उपयोग कर रहे हैं", bn: "{entry} বন্ধ আছে — আপলোড অটো → {target} ব্যবহার করছে", es: "{entry} está desactivado — las subidas usan Automático → {target}", fr: "{entry} est désactivé — les envois utilisent Automatique → {target}", de: "{entry} ist ausgeschaltet — Uploads nutzen Automatisch → {target}", tr: "{entry} kapalı — yüklemeler Otomatik → {target} kullanıyor", zh: "{entry} 已关闭 — 上传正在使用自动 → {target}" },
+};
+
+export const T: Dict = { ...T_CORE, ...T_SET1, ...T_SET2, ...T_SET3, ...T_DASH, ...T_CRUD, ...T_MEDIA, ...T_FORM, ...T_X1, ...T_X2, ...T_CFG1, ...T_CFG2, ...T_X3, ...T_PALETTE, ...T_UROLE, ...T_X4, ...T_X5, ...T_X6 };

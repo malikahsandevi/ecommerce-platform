@@ -37,7 +37,12 @@ interface StorageInfo {
   library: { files: number; usedBytes: number };
   providers: Record<string, { usedBytes: number; files: number }>;
   entries: StorageEntryView[];
+  /** The entry new uploads will actually land on (pin or Auto). */
   uploadTarget: string;
+  /** The stored destination choice: "auto" or a pinned entry slug. */
+  uploadTargetChoice: string;
+  /** A pin is stored but Auto is in effect (its entry is off). */
+  uploadTargetFallback: boolean;
   cloudinary: EntryUsage | null;
 }
 
@@ -72,8 +77,12 @@ const GB = 1024 * 1024 * 1024;
  * Entries that point at the SAME provider account (same Cloudinary
  * cloud name) report one and the same account usage — it is counted
  * ONCE in every total, and their lines note the shared account.
- * Below the cards, when more than one entry can receive uploads, a
- * control chooses which one new uploads go to.
+ * The Storage Providers card also carries the upload-destination
+ * control: "Auto" (the server-side rotation policy fills one storage
+ * at a time and shifts at 80% of its account quota) or a pin on one
+ * entry. The card names the entry uploads currently land on, and
+ * says when a stored pin is being overridden by Auto because its
+ * entry is switched off.
  * Everything is computed from the API — nothing is hard-coded.
  */
 export default function MediaStats({ items, isLoading = false }: { items: Row[]; isLoading?: boolean }) {
@@ -105,7 +114,6 @@ export default function MediaStats({ items, isLoading = false }: { items: Row[];
     () => entries.filter((entry) => entry.subService === "cloudinary" && entry.configured && entry.isConnected),
     [entries],
   );
-  const uploadTarget = storage?.uploadTarget || uploadableEntries[0]?.slug || "";
 
   const handleTargetChange = async (slug: string) => {
     setTargetBusy(true);
@@ -213,6 +221,46 @@ export default function MediaStats({ items, isLoading = false }: { items: Row[];
           .join(" · ")
       : t("Connected · AWS S3 & Firebase not configured");
 
+    // Card 3's destination control — Auto (the rotation policy) or a
+    // pin on one entry. The select shows the choice actually in
+    // effect: while a stored pin's entry is switched off, Auto is
+    // what decides, so Auto is what the select shows, and the line
+    // under it says why. With a pin in effect no line is needed —
+    // the select itself names the destination.
+    const choiceRaw = storage?.uploadTargetChoice || "auto";
+    const pinEntry =
+      choiceRaw !== "auto" ? entries.find((entry) => entry.slug === choiceRaw) : undefined;
+    const pinInEffect = Boolean(storage && !storage.uploadTargetFallback && pinEntry);
+    const selectValue = pinInEffect ? choiceRaw : "auto";
+    const providersExtra =
+      uploadableEntries.length > 1 ? (
+        <div className="flex flex-col gap-1.5">
+          <Select
+            value={selectValue}
+            options={[
+              { label: t("Auto"), value: "auto" },
+              ...uploadableEntries.map((entry) => ({ label: entry.title, value: entry.slug })),
+            ]}
+            onChange={handleTargetChange}
+            disabled={targetBusy}
+            variant="secondary"
+            size="md"
+            menuWide
+          />
+          {storage?.uploadTargetFallback && pinEntry ? (
+            <span className="text-[11px] text-[var(--text-muted)]">
+              {t("{entry} is switched off — uploads are using Auto → {target}")
+                .replace("{entry}", pinEntry.title)
+                .replace("{target}", targetEntry?.title || "")}
+            </span>
+          ) : selectValue === "auto" && targetEntry ? (
+            <span className="text-[11px] text-[var(--text-muted)]">
+              {t("Auto → {entry}").replace("{entry}", targetEntry.title)}
+            </span>
+          ) : null}
+        </div>
+      ) : undefined;
+
     // Card 4 — space per provider: the SAME account-usage total as
     // card 2, broken down per entry. Each entry leads with its
     // ACCOUNT's usage — the space that provider has actually
@@ -274,6 +322,7 @@ export default function MediaStats({ items, isLoading = false }: { items: Row[];
         period: providersPeriod,
         icon: Cloud,
         theme: "orange",
+        extra: providersExtra,
       },
       {
         title: t("Space by Provider"),
@@ -285,32 +334,15 @@ export default function MediaStats({ items, isLoading = false }: { items: Row[];
         theme: "purple",
       },
     ] as StatCardProps[];
-  }, [items, storage, entries, isLoading, t]);
+  }, [items, storage, entries, uploadableEntries, targetBusy, handleTargetChange, isLoading, t]);
 
   return (
-    <div className="w-full flex flex-col gap-4">
+    <div className="w-full">
       <div className="w-full grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4 text-[var(--text)]">
         {cards.map((stat, index) => (
           <StatCard key={`${stat.title}-${index}`} {...stat} />
         ))}
       </div>
-      {uploadableEntries.length > 1 && (
-        <div className="flex flex-wrap items-center gap-3 text-[var(--text)]">
-          <span className="text-sm font-medium">{t("New uploads go to")}</span>
-          <Select
-            value={uploadTarget}
-            options={uploadableEntries.map((entry) => ({ label: entry.title, value: entry.slug }))}
-            onChange={handleTargetChange}
-            disabled={targetBusy}
-            variant="secondary"
-            size="md"
-            menuWide
-          />
-          <span className="text-xs text-[var(--text-muted)]">
-            {t("Existing files stay on the storage they already live on.")}
-          </span>
-        </div>
-      )}
     </div>
   );
 }

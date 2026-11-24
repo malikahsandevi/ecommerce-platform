@@ -16,6 +16,11 @@ export interface StatCardProps {
   period?: string;
   icon?: LucideIcon;
   theme?: CardTheme;
+  /** Optional extra content rendered inside the card, under the
+   *  period line (e.g. the Media page's upload-destination control
+   *  inside its Storage Providers card). Cards that pass nothing
+   *  render exactly as before. */
+  extra?: React.ReactNode;
 }
 
 // The four variants are steps of ONE ramp of the Admin Panel Color
@@ -48,6 +53,7 @@ const StatCard: React.FC<StatCardProps> = ({
   period = "vs last week",
   icon: Icon,
   theme = "green",
+  extra,
 }) => {
   const { t } = useLanguage();
   const accent = variantColor(theme, useAdminColor());
@@ -89,6 +95,8 @@ const StatCard: React.FC<StatCardProps> = ({
         </h3>
 
         <p className="text-[11px] text-[var(--text-muted)] mt-0.5">{t(period)}</p>
+
+        {extra ? <div className="mt-3">{extra}</div> : null}
       </div>
     </div>
   );

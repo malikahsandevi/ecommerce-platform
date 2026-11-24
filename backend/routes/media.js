@@ -14,6 +14,7 @@ const {
     getStorageEntryBySlug,
     getStorageEntryByCloudName,
     resolveUploadTarget,
+    resolveUploadTargetDetailed,
     setUploadTarget,
 } = require('../utils/credentials');
 const cloudinaryClient = require('../utils/cloudinaryClient');
@@ -98,12 +99,22 @@ const fetchResource = async (entry, publicId, resourceType, type) => {
 };
 
 /**
- * Gate for upload flows: resolves the upload target and refuses when
- * there is nothing configured to receive uploads or the target entry
- * is switched off. Returns the target entry, or null after responding.
+ * Gate for upload flows: resolves the upload destination through the
+ * Auto rotation / pin policy (utils/credentials) and refuses when the
+ * policy stops the upload (destination at the 98% stop line, or the
+ * file fits nowhere), when there is nothing configured to receive
+ * uploads, or when the resolved entry is switched off. `fileSize`
+ * (bytes, when the caller knows it) feeds the policy's fit check.
+ * Returns { entry, warning } — warning is the ≥90% notice the client
+ * shows at upload time — or null after responding.
  */
-const requireUploadTarget = async (res) => {
-    const target = await resolveUploadTarget();
+const requireUploadTarget = async (res, fileSize = null) => {
+    const detail = await resolveUploadTargetDetailed({ fileSize });
+    if (detail.blocked) {
+        res.status(400).json({ message: detail.blockMessage });
+        return null;
+    }
+    const target = detail.entry;
     if (!target || !target.configured) {
         res.status(400).json({
             message: 'No storage is configured for uploads — add a Cloudinary entry with its credentials in Settings → API / Integrations first.',
@@ -116,7 +127,7 @@ const requireUploadTarget = async (res) => {
         });
         return null;
     }
-    return target;
+    return { entry: target, warning: detail.warning };
 };
 
 // Mime types the Media schema accepts.
@@ -215,13 +226,22 @@ router.get('/storage', protect, requirePermission('Media', 'view'), async (req, 
             }),
         );
 
-        const target = await resolveUploadTarget();
+        const targetDetail = await resolveUploadTargetDetailed();
 
         res.json({
             library: { files: records.length, usedBytes: libraryBytes },
             providers,
             entries: entryViews,
-            uploadTarget: target?.slug || defaultSlug,
+            // The entry new uploads will actually land on (pin or Auto
+            // resolution), the admin's stored choice ("auto" or an
+            // entry slug), and whether a stored pin is currently being
+            // overridden by Auto (its entry is off/unconfigured, or
+            // the pin was removed) — the Media page card renders the
+            // destination control from these three.
+            uploadTarget: targetDetail.entry?.slug || defaultSlug,
+            uploadTargetChoice: targetDetail.choice,
+            uploadTargetFallback:
+                targetDetail.choice !== 'auto' && targetDetail.mode === 'auto',
             // Back-compat: the original entry's account usage, as before.
             cloudinary: entryViews.find((view) => view.slug === defaultSlug)?.usage ?? null,
         });
@@ -230,12 +250,17 @@ router.get('/storage', protect, requirePermission('Media', 'view'), async (req, 
     }
 });
 
-// PUT /api/media/storage/target — choose which configured storage entry
-// receives NEW uploads. Persisted in the Setting document; existing
-// media stay on the entry they already live on.
+// PUT /api/media/storage/target — choose where NEW uploads go: "auto"
+// (the rotation policy decides) or the slug of one configured storage
+// entry (a pin that overrides Auto). Persisted in the Setting
+// document; existing media stay on the entry they already live on.
 router.put('/storage/target', protect, requirePermission('Media', 'edit'), async (req, res) => {
     try {
         const slug = String(req.body?.slug || '');
+        if (slug === 'auto') {
+            await setUploadTarget('auto');
+            return res.json({ uploadTarget: 'auto' });
+        }
         const entry = (await getStorageEntries()).find((item) => item.slug === slug);
         if (!entry || entry.subService !== 'cloudinary' || !entry.configured) {
             return res.status(400).json({
@@ -259,9 +284,18 @@ router.put('/storage/target', protect, requirePermission('Media', 'edit'), async
 // is never treated as a document id.
 router.post('/upload', protect, requirePermission('Media', 'create'), express.json({ limit: '15mb' }), async (req, res) => {
     try {
-        const target = await requireUploadTarget(res);
-        if (!target) return;
         const { dataUrl, filename, altText, title, description, status } = req.body || {};
+        // The rotation policy's fit check needs the file's size before
+        // anything is written — a base64 payload's byte size is 3/4 of
+        // its character length.
+        let fileSize = null;
+        if (dataUrl && typeof dataUrl === 'string' && dataUrl.startsWith('data:')) {
+            const comma = dataUrl.indexOf(',');
+            if (comma > 0) fileSize = Math.floor(((dataUrl.length - comma - 1) * 3) / 4);
+        }
+        const resolved = await requireUploadTarget(res, fileSize);
+        if (!resolved) return;
+        const target = resolved.entry;
 
         if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:')) {
             return res.status(400).json({ message: 'A file (base64 data URL) is required.' });
@@ -323,7 +357,9 @@ router.post('/upload', protect, requirePermission('Media', 'create'), express.js
             status: ['published', 'draft', 'archived'].includes(status) ? status : 'published',
         });
 
-        res.status(201).json(media);
+        const payload = media.toJSON();
+        if (resolved.warning) payload.storageWarning = resolved.warning;
+        res.status(201).json(payload);
     } catch (error) {
         res.status(400).json({ message: error.message });
     }
@@ -336,8 +372,16 @@ router.post('/upload', protect, requirePermission('Media', 'create'), express.js
 // straight to Cloudinary with this one-time signature and only the small
 // registration JSON (below) ever touches the serverless function.
 router.get('/upload-signature', protect, requireStaff, requirePermission('Media', 'create'), async (req, res) => {
-    const target = await requireUploadTarget(res);
-    if (!target) return;
+    // The client reports the file's size so the rotation policy can
+    // run its fit check (and its 98% stop) before a signature is
+    // issued — a refused upload never leaves an orphan on Cloudinary.
+    const parsedSize = Number(req.query.size);
+    const resolved = await requireUploadTarget(
+        res,
+        Number.isFinite(parsedSize) && parsedSize > 0 ? parsedSize : null,
+    );
+    if (!resolved) return;
+    const target = resolved.entry;
     const timestamp = Math.round(Date.now() / 1000);
     // The caller's purpose picks the destination folder (storage
     // organization); only the fixed purpose keys are honoured.
@@ -363,6 +407,9 @@ router.get('/upload-signature', protect, requireStaff, requirePermission('Media'
         folder,
         type: 'authenticated',
         entry: target.slug,
+        // The ≥90% destination warning, when the policy produced one —
+        // the client shows it at upload time.
+        storageWarning: resolved.warning || null,
     });
 });
 

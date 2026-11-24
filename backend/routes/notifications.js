@@ -6,6 +6,7 @@ const Order = require('../models/Order');
 const Review = require('../models/Review');
 const User = require('../models/User');
 const { NOT_DELETED } = require('../utils/softDelete');
+const { getStorageEntries, resolveUploadTargetDetailed } = require('../utils/credentials');
 
 const router = express.Router();
 
@@ -30,6 +31,8 @@ const displayName = (user) => {
 //     · products out of stock (stock 0) and low on stock (1..5)
 //     · the newest orders not yet delivered/cancelled
 //     · ONE aggregate item when reviews await moderation
+//     · a storage rotation shift, while one is in effect (a storage
+//       account at 80% of quota → Auto uploads moved to the next one)
 //   inbox (messages — customer-originated):
 //     · each review awaiting moderation, individually
 //     · the newest customer signups
@@ -127,6 +130,36 @@ router.get('/', async (req, res) => {
                 recordId: newest ? String(newest._id) : null,
                 search: newest ? newest.code || newest.product?.name || null : null,
             });
+        }
+
+        // Storage rotation: when Auto has shifted new uploads off a
+        // storage whose account reached 80% of its quota, say so.
+        // Derived live from the same resolver state that decides the
+        // uploads themselves, so the notice can never drift from
+        // reality; it only exists while the shift is in effect (a
+        // pinned destination never produces one). A storage check
+        // must never break the feed, hence the guarded block.
+        try {
+            const storageEntries = await getStorageEntries();
+            const usable = storageEntries.filter(
+                (entry) => entry.subService === 'cloudinary' && entry.configured && entry.isConnected,
+            );
+            if (usable.length > 1) {
+                const detail = await resolveUploadTargetDetailed();
+                if (detail.mode === 'auto' && detail.shiftedFrom && detail.pool) {
+                    notifications.push({
+                        id: `storage-shift:${detail.shiftedFrom.key}:${detail.pool.key}`,
+                        type: 'storage_shift',
+                        title: `Storage space: ${detail.shiftedFrom.title} is ${Math.round(detail.shiftedFrom.percent)}% used — uploads have shifted to ${detail.pool.title}`,
+                        time: new Date(),
+                        path: '/media',
+                        recordId: null,
+                        search: null,
+                    });
+                }
+            }
+        } catch {
+            /* storage state is best-effort in this feed */
         }
 
         notifications.sort((a, b) => new Date(b.time) - new Date(a.time));

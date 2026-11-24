@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { apiClient } from './api';
+import { toast } from '@/components/ui/Toast';
 
 export interface ServiceCapabilities {
   canCreate: boolean;
@@ -456,10 +457,15 @@ export const mediaService = {
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   uploadAsset: async (file: File, purpose?: MediaPurpose): Promise<any> => {
+    // The file's size travels with the signature request: the
+    // backend's storage rotation policy runs its fit check (and its
+    // 98% stop) before issuing the signature, and answers with the
+    // entry the file will land on plus a warning when that storage
+    // is over 90% full.
     const sigRes = await apiClient.get('/media/upload-signature', {
-      params: purpose ? { purpose } : undefined,
+      params: { ...(purpose ? { purpose } : {}), size: file.size },
     });
-    const { signature, timestamp, apiKey, cloudName, folder, type, entry } = sigRes.data;
+    const { signature, timestamp, apiKey, cloudName, folder, type, entry, storageWarning } = sigRes.data;
 
     const form = new FormData();
     form.append('file', file);
@@ -477,10 +483,13 @@ export const mediaService = {
         form,
         { timeout: 120000 },
       );
+      // The ≥90% destination warning is shown at upload time, here
+      // in the one helper every upload entry point shares.
+      if (storageWarning) toast.info(storageWarning);
       // The entry + cloud this asset landed on (the upload target's
       // account) travel with the facts — registration and replace
       // verify the asset against that same entry.
-      return { ...res.data, cloudName, entry };
+      return { ...res.data, cloudName, entry, storageWarning };
     } catch (uploadError) {
       // Surface Cloudinary's own explanation when it provides one.
       const cloudinaryMessage = (
