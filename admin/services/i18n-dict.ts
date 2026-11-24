@@ -1586,4 +1586,12 @@ export const T_X8: Dict = {
   "No deleted items match the selected filters.": { ur: "منتخب فلٹرز کے مطابق کوئی حذف شدہ آئٹم نہیں ملا۔", ar: "لا توجد عناصر محذوفة مطابقة لعوامل التصفية المحددة.", hi: "चुने गए फ़िल्टर से कोई हटाई गई वस्तु मेल नहीं खाती।", bn: "নির্বাচিত ফিল্টারের সাথে কোনো মুছে ফেলা আইটেম মিলছে না।", es: "Ningún elemento eliminado coincide con los filtros seleccionados.", fr: "Aucun élément supprimé ne correspond aux filtres sélectionnés.", de: "Keine gelöschten Einträge entsprechen den ausgewählten Filtern.", tr: "Seçilen filtrelerle eşleşen silinmiş öğe yok.", zh: "没有已删除项目与所选筛选条件匹配。" },
 };
 
-export const T: Dict = { ...T_CORE, ...T_SET1, ...T_SET2, ...T_SET3, ...T_DASH, ...T_CRUD, ...T_MEDIA, ...T_FORM, ...T_X1, ...T_X2, ...T_CFG1, ...T_CFG2, ...T_X3, ...T_PALETTE, ...T_UROLE, ...T_X4, ...T_X5, ...T_X6, ...T_X7, ...T_X8 };
+export const T_X9: Dict = {
+  "Used": { ur: "استعمال شدہ", ar: "المستخدم", hi: "उपयोग किया गया", bn: "ব্যবহৃত", es: "Usado", fr: "Utilisé", de: "Verwendet", tr: "Kullanılan", zh: "已用" },
+  "Available": { ur: "دستیاب", ar: "المتاح", hi: "उपलब्ध", bn: "উপলব্ধ", es: "Disponible", fr: "Disponible", de: "Verfügbar", tr: "Kullanılabilir", zh: "可用" },
+  "Accounts": { ur: "اکاؤنٹس", ar: "الحسابات", hi: "खाते", bn: "অ্যাকাউন্টসমূহ", es: "Cuentas", fr: "Comptes", de: "Konten", tr: "Hesaplar", zh: "账户" },
+  "Plan": { ur: "پلان", ar: "الخطة", hi: "प्लान", bn: "প্ল্যান", es: "Plan", fr: "Forfait", de: "Plan", tr: "Plan", zh: "套餐" },
+  "total not set": { ur: "کل مقرر نہیں", ar: "الإجمالي غير محدد", hi: "कुल निर्धारित नहीं है", bn: "মোট নির্ধারিত নয়", es: "total no definido", fr: "total non défini", de: "Gesamt nicht festgelegt", tr: "toplam belirlenmedi", zh: "未设置总量" },
+};
+
+export const T: Dict = { ...T_CORE, ...T_SET1, ...T_SET2, ...T_SET3, ...T_DASH, ...T_CRUD, ...T_MEDIA, ...T_FORM, ...T_X1, ...T_X2, ...T_CFG1, ...T_CFG2, ...T_X3, ...T_PALETTE, ...T_UROLE, ...T_X4, ...T_X5, ...T_X6, ...T_X7, ...T_X8, ...T_X9 };

@@ -86,23 +86,52 @@ function parsePlanLimitBytes(text?: string | null): number | null {
 }
 
 /**
+ * Label → value rows, the structured detail the Media cards show
+ * under their headline instead of a running sentence (Ahsan's
+ * order): one row per figure, label on the left in muted text, the
+ * figure itself on the right.
+ */
+function StatRows({ rows }: { rows: Array<{ label: string; value: string }> }) {
+  return (
+    <div className="flex flex-col gap-1">
+      {rows.map((row) => (
+        <div
+          key={row.label}
+          className="flex items-baseline justify-between gap-2 text-[11px] leading-tight"
+        >
+          <span className="text-[var(--text-muted)]">{row.label}</span>
+          <span className="font-semibold text-[var(--text)]">{row.value}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
  * The Media page's four summary cards (replacing the generic StatsGrid):
- *  1. library counts by lifecycle status,
- *  2. storage used / available / total across every configured entry —
+ *  1. library counts by lifecycle status — the total as the headline,
+ *     the per-status counts as separate label/count rows under it,
+ *  2. storage used across every configured entry as the headline —
  *     the ACCOUNT usage each provider reports (that is what consumes
- *     quota), falling back to library-measured bytes per entry,
+ *     quota), falling back to library-measured bytes per entry — with
+ *     the available / total / accounts figures as label/value rows
+ *     under it,
  *  3. the upload destination: the entry uploads currently land on,
  *     with a small dropdown-arrow menu beside its name to switch
  *     between "Auto" (the server-side rotation policy fills one
  *     storage at a time and shifts at 80% of its account quota) and
  *     a pin on one entry; under the name, plain detail lines say
  *     where uploads go and list every entry with its plain status,
- *  4. space per provider — the same account-usage total as card 2,
- *     broken down per entry: each entry shows its USED space (its
- *     ACCOUNT's usage — the space that provider has actually
- *     consumed), its TOTAL (the space written in the entry's
- *     Settings plan field when filled, otherwise the total the
- *     provider reports) and the AVAILABLE remainder on card 2's
+ *     sitting directly under the uploads-go-to line (no gap),
+ *  4. space per provider — the headline is the TOTAL SPACE BY ALL
+ *     PROVIDERS: the combined total capacity summed over every
+ *     linked account, each account's total taken per the settled
+ *     preference order (the space written in its Settings plan
+ *     field when filled, otherwise the total the provider
+ *     reports). Broken down per entry as a rows/columns block:
+ *     each entry shows its USED space (its ACCOUNT's usage — the
+ *     space that provider has actually consumed), its TOTAL (same
+ *     preference order) and the AVAILABLE remainder on card 2's
  *     basis, keeping this library's own bytes + file count as the
  *     secondary detail.
  * Entries that point at the SAME provider account (same Cloudinary
@@ -283,8 +312,12 @@ export default function MediaStats({ items, isLoading = false }: { items: Row[];
           aria-label={t("Upload destination")}
         />
       ) : undefined;
+    // The -mt-3 cancels the extra slot's own top margin for THIS
+    // card only (Ahsan's order): the per-entry status lines sit
+    // directly under the "Auto → …" uploads line, with no empty
+    // space between them.
     const providersExtra = entries.length ? (
-      <div className="flex flex-col gap-0.5">
+      <div className="-mt-3 flex flex-col gap-0.5">
         {entries.map((entry) => (
           <span key={entry.slug} className="text-[11px] text-[var(--text-muted)]">
             {entry.title} — {entryStatus(entry)}
@@ -293,58 +326,109 @@ export default function MediaStats({ items, isLoading = false }: { items: Row[];
       </div>
     ) : undefined;
 
-    // Card 4 — space per provider: the SAME account-usage total as
-    // card 2, broken down per entry. Each entry shows three plain
-    // numbers (Ahsan's order): USED — its ACCOUNT's usage, the
-    // space that provider has actually consumed (an entry whose
-    // provider reports no account usage falls back to its library
-    // bytes); TOTAL — the space written in the entry's Settings
-    // plan field when that is filled, otherwise the total the
-    // provider itself reports (Cloudinary: its credit limit);
-    // AVAILABLE — the remainder on card 2's basis: on Cloudinary
-    // the CREDIT remainder (the total in effect minus the used
-    // credit share), never total − storage bytes. An entry with
-    // no total from either source shows its used figure with a
-    // plain "total not set" note — no number is ever invented.
-    // This library's bytes + file count on the entry stay visible
-    // as the secondary detail. Entries sharing one account show
-    // that account's figures on each of their lines (noted as a
-    // shared account), while the headline counts it only once.
-    const providerSummary = [
-      ...entries.map((entry) => {
-        const account = accountUsedOf(entry);
-        const usedFigure = account ?? entry.usedBytes;
+    // Card 4 — space per provider. The headline is the TOTAL
+    // SPACE BY ALL PROVIDERS (Ahsan's words): the combined total
+    // capacity summed over every linked account, each account's
+    // total taken per the settled preference order — the space
+    // written in the entry's Settings plan field when filled,
+    // otherwise the total the provider itself reports (below,
+    // groupTotal). Like card 2's quota it is all-or-nothing: an
+    // account with no total from either source makes the headline
+    // "—" rather than a partial sum dressed up as the total (its
+    // own block still shows its figures with the "total not set"
+    // note). Under the headline, one rows/columns block per
+    // linked account (Ahsan's order — no running paragraph): the
+    // account's name, then three label/value rows. USED — its
+    // ACCOUNT's usage, the space that provider has actually
+    // consumed (an entry whose provider reports no account usage
+    // falls back to its library bytes); TOTAL — the space written
+    // in the entry's Settings plan field when that is filled,
+    // otherwise the total the provider itself reports (Cloudinary:
+    // its credit limit); AVAILABLE — the remainder on card 2's
+    // basis: on Cloudinary the CREDIT remainder (the total in
+    // effect minus the used credit share), never total − storage
+    // bytes. An entry with no total from either source shows a
+    // plain "total not set" note in its Total row — no number is
+    // ever invented. This library's bytes + file count on the
+    // entry stay visible as the secondary detail under the rows.
+    // Entries sharing one account show that account's figures on
+    // each of their blocks (noted as a shared account), while the
+    // headline counts it only once.
+    // One account group's total per the preference order: the
+    // first Settings plan limit written on any of its entries,
+    // else the provider-reported total (Cloudinary credit limit).
+    const groupTotal = (group: StorageEntryView[]): number | null => {
+      for (const entry of group) {
         const settingsTotal = parsePlanLimitBytes(entry.planStorageLimit);
-        const reportedTotal =
-          entry.usage?.creditsLimit != null ? entry.usage.creditsLimit * GB : null;
-        const total = settingsTotal ?? reportedTotal;
-        let available: number | null = null;
-        if (total != null) {
-          available =
-            entry.usage?.creditsUsed != null
-              ? Math.max(0, total / GB - entry.usage.creditsUsed) * GB
-              : Math.max(0, total - usedFigure);
-        }
-        const figures =
-          total != null
-            ? t("{used} used · {available} available · {total} total")
-                .replace("{used}", formatBytes(usedFigure))
-                .replace("{available}", formatBytes(available))
-                .replace("{total}", formatBytes(total))
-            : t("{used} used · total not set").replace("{used}", formatBytes(usedFigure));
-        const detail = [
-          `${t("library")} ${formatBytes(entry.usedBytes)}`,
-          `${entry.files} ${t("files")}`,
-        ];
-        if ((accountGroups.get(accountKeyOf(entry))?.length || 0) > 1) {
-          detail.push(t("shared account"));
-        }
-        return `${entry.title} ${figures} (${detail.join(" · ")})`;
-      }),
-      ...Object.entries(storage?.providers || {})
-        .filter(([key]) => !entrySlugs.has(key))
-        .map(([key, bucket]) => `${PROVIDER_LABELS[key] || key} ${formatBytes(bucket?.usedBytes || 0)}`),
-    ].join(" · ");
+        if (settingsTotal != null) return settingsTotal;
+      }
+      const usage = groupUsage(group);
+      return usage?.creditsLimit != null ? usage.creditsLimit * GB : null;
+    };
+    const totalSpace =
+      groups.length > 0 && groups.every((group) => groupTotal(group) != null)
+        ? groups.reduce((sum, group) => sum + (groupTotal(group) as number), 0)
+        : null;
+    const legacyBuckets = Object.entries(storage?.providers || {}).filter(
+      ([key]) => !entrySlugs.has(key),
+    );
+    const providerBlocks = (
+      <div className="flex flex-col gap-2.5">
+        {entries.map((entry) => {
+          const account = accountUsedOf(entry);
+          const usedFigure = account ?? entry.usedBytes;
+          const settingsTotal = parsePlanLimitBytes(entry.planStorageLimit);
+          const reportedTotal =
+            entry.usage?.creditsLimit != null ? entry.usage.creditsLimit * GB : null;
+          const total = settingsTotal ?? reportedTotal;
+          let available: number | null = null;
+          if (total != null) {
+            available =
+              entry.usage?.creditsUsed != null
+                ? Math.max(0, total / GB - entry.usage.creditsUsed) * GB
+                : Math.max(0, total - usedFigure);
+          }
+          const detail = [
+            `${t("library")} ${formatBytes(entry.usedBytes)}`,
+            `${entry.files} ${t("files")}`,
+          ];
+          if ((accountGroups.get(accountKeyOf(entry))?.length || 0) > 1) {
+            detail.push(t("shared account"));
+          }
+          return (
+            <div key={entry.slug} className="flex flex-col gap-1">
+              <span className="text-[11px] font-semibold text-[var(--text)]">
+                {entry.title}
+              </span>
+              <StatRows
+                rows={[
+                  { label: t("Used"), value: formatBytes(usedFigure) },
+                  { label: t("Available"), value: formatBytes(available) },
+                  {
+                    label: t("Total"),
+                    value: total != null ? formatBytes(total) : t("total not set"),
+                  },
+                ]}
+              />
+              <span className="text-[11px] text-[var(--text-muted)]">
+                {detail.join(" · ")}
+              </span>
+            </div>
+          );
+        })}
+        {legacyBuckets.map(([key, bucket]) => (
+          <div key={key} className="flex flex-col gap-1">
+            <span className="text-[11px] font-semibold text-[var(--text)]">
+              {PROVIDER_LABELS[key] || key}
+            </span>
+            <StatRows
+              rows={[{ label: t("Used"), value: formatBytes(bucket?.usedBytes || 0) }]}
+            />
+          </div>
+        ))}
+      </div>
+    );
+    const hasProviderBlocks = entries.length > 0 || legacyBuckets.length > 0;
 
     return [
       {
@@ -352,7 +436,16 @@ export default function MediaStats({ items, isLoading = false }: { items: Row[];
         value: placeholder ?? items.length.toLocaleString(),
         change: "",
         isPositive: true,
-        period: t("{published} published · {draft} draft · {archived} archived").replace("{published}", String(published)).replace("{draft}", String(draft)).replace("{archived}", String(archived)),
+        period: "",
+        extra: (
+          <StatRows
+            rows={[
+              { label: t("Published"), value: placeholder ?? String(published) },
+              { label: t("Draft"), value: placeholder ?? String(draft) },
+              { label: t("Archived"), value: placeholder ?? String(archived) },
+            ]}
+          />
+        ),
         icon: ImageIcon,
         theme: "blue",
       },
@@ -361,12 +454,20 @@ export default function MediaStats({ items, isLoading = false }: { items: Row[];
         value: placeholder ?? formatBytes(storage ? totalUsed : undefined),
         change: "",
         isPositive: true,
-        period:
-          totalQuota != null
-            ? groups.length <= 1
-              ? t("{available} available of {total} ({plan} plan)").replace("{available}", formatBytes(totalAvailable)).replace("{total}", formatBytes(totalQuota)).replace("{plan}", singlePlan || "Cloudinary")
-              : `${formatBytes(totalAvailable)} ${t("available of")} ${formatBytes(totalQuota)} (${groups.length} ${t("storage accounts")})`
-            : t("Cloudinary usage unavailable"),
+        period: totalQuota != null ? "" : t("Cloudinary usage unavailable"),
+        extra:
+          totalQuota != null ? (
+            <StatRows
+              rows={[
+                { label: t("Available"), value: formatBytes(totalAvailable) },
+                { label: t("Total"), value: formatBytes(totalQuota) },
+                { label: t("Accounts"), value: String(groups.length) },
+                ...(singleGroup
+                  ? [{ label: t("Plan"), value: singlePlan || "Cloudinary" }]
+                  : []),
+              ]}
+            />
+          ) : undefined,
         icon: HardDrive,
         theme: "green",
       },
@@ -383,10 +484,11 @@ export default function MediaStats({ items, isLoading = false }: { items: Row[];
       },
       {
         title: t("Space by Provider"),
-        value: placeholder ?? formatBytes(storage ? totalUsed : undefined),
+        value: placeholder ?? formatBytes(storage ? totalSpace : undefined),
         change: "",
         isPositive: true,
-        period: providerSummary,
+        period: "",
+        extra: hasProviderBlocks ? providerBlocks : undefined,
         icon: Database,
         theme: "purple",
       },
