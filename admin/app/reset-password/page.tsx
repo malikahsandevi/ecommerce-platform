@@ -57,8 +57,11 @@ function ResetPasswordForm() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ backgroundColor: "var(--background)" }}>
-      <div className="flex-1 flex items-center justify-center p-4">
+    // Card + credit line are centred as ONE group, so the footer sits
+    // tight under the card — the old flex-1 centring wrapper pushed
+    // the card to the middle and left the footer at the very bottom
+    // of a tall window, hundreds of px below the card.
+    <div className="min-h-screen flex flex-col items-center justify-center p-4" style={{ backgroundColor: "var(--background)" }}>
       <div
         className="w-full max-w-sm p-6 rounded-2xl shadow-2xl"
         style={{
@@ -159,7 +162,6 @@ function ResetPasswordForm() {
             </form>
           </>
         )}
-      </div>
       </div>
       <BuiltByFooter />
     </div>
