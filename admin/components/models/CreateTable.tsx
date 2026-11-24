@@ -277,7 +277,7 @@ export function CreateTable<T extends Record<string, any>>({
       const mins = measured.map((_, i) => {
         const label = headerCells?.[i]?.textContent?.trim() ?? "";
         ruler.textContent = label;
-        return Math.max(ruler.getBoundingClientRect().width + 22, 60);
+        return Math.max(ruler.getBoundingClientRect().width + 18, 60);
       });
       const widths = measured.map((w, i) => Math.max(w, mins[i]));
 
@@ -293,6 +293,21 @@ export function CreateTable<T extends Record<string, any>>({
         if (pillNeed > widths[statusIdx]) {
           widths[statusIdx] = pillNeed;
           mins[statusIdx] = Math.max(mins[statusIdx], pillNeed);
+        }
+      }
+
+      // Same guarantee for the actions cell: its view/edit buttons
+      // are fixed-size, so the last column never shrinks below the
+      // width they need (its cell's scrollWidth includes padding).
+      if (showActions) {
+        const actionsIdx = firstRow.cells.length - 1;
+        const actionsCell = firstRow.cells[actionsIdx];
+        if (actionsCell) {
+          const actionsNeed = actionsCell.scrollWidth;
+          if (actionsNeed > widths[actionsIdx]) {
+            widths[actionsIdx] = actionsNeed;
+            mins[actionsIdx] = Math.max(mins[actionsIdx], actionsNeed);
+          }
         }
       }
 
@@ -358,7 +373,7 @@ export function CreateTable<T extends Record<string, any>>({
       <div ref={headerWrapRef} className="overflow-hidden shrink-0">
         <table
           ref={headerTableRef}
-          className="sync-table w-full min-w-170 text-left border-collapse"
+          className="sync-table w-full min-w-170 md:min-w-0 text-left border-collapse"
         >
           <thead className="bg-[var(--surface)] border-b border-[var(--border)] text-[var(--text-muted)] font-semibold text-[11px] uppercase tracking-wide">
             <tr>
@@ -367,7 +382,7 @@ export function CreateTable<T extends Record<string, any>>({
                 return (
                   <th
                     key={String(colKey) + index}
-                    className={`px-2.5 py-3 whitespace-nowrap ${align === "center" ? "text-center" : "text-left"}`}
+                    className={`px-2 py-3 whitespace-nowrap ${align === "center" ? "text-center" : "text-left"}`}
                   >
                     <div className={`flex items-center gap-1 select-none whitespace-nowrap ${align === "center" ? "justify-center" : ""}`}>
                       {t(columnHeaders?.[colKey] ?? String(colKey))}
@@ -375,7 +390,7 @@ export function CreateTable<T extends Record<string, any>>({
                   </th>
                 );
               })}
-              {showActions && <th className="px-2.5 py-3 w-20 whitespace-nowrap text-center">{t("Actions")}</th>}
+              {showActions && <th className="px-2 py-3 w-20 whitespace-nowrap text-center">{t("Actions")}</th>}
             </tr>
           </thead>
         </table>
@@ -392,7 +407,7 @@ export function CreateTable<T extends Record<string, any>>({
       >
         <table
           ref={bodyTableRef}
-          className={`sync-table w-full min-w-170 text-left border-collapse ${hasData ? "" : "h-full"}`}
+          className={`sync-table w-full min-w-170 md:min-w-0 text-left border-collapse ${hasData ? "" : "h-full"}`}
         >
           <tbody className="divide-y divide-[var(--border)] text-xs text-[var(--text)]">
           {hasData ? (
@@ -431,7 +446,7 @@ export function CreateTable<T extends Record<string, any>>({
                       return (
                         <td
                           key={String(colKey) + idx}
-                          className={`px-2.5 py-2.5 align-middle font-mono text-[11px] text-[var(--text-muted)] whitespace-nowrap overflow-hidden ${alignClass}`}
+                          className={`px-2 py-2.5 align-middle font-mono text-[11px] text-[var(--text-muted)] whitespace-nowrap overflow-hidden ${alignClass}`}
                           title={displayId}
                         >
                           <span className="block truncate">{displayId}</span>
@@ -442,7 +457,7 @@ export function CreateTable<T extends Record<string, any>>({
                     // 2. Status Column (Pill)
                     if (colKeyStr === "status") {
                       return (
-                        <td key={String(colKey) + idx} className={`px-2.5 py-2.5 align-middle overflow-hidden ${alignClass}`}>
+                        <td key={String(colKey) + idx} className={`px-2 py-2.5 align-middle overflow-hidden ${alignClass}`}>
                           <StatusPill status={rawValue} />
                         </td>
                       );
@@ -464,10 +479,10 @@ export function CreateTable<T extends Record<string, any>>({
                       return (
                         <td
                           key={String(colKey) + idx}
-                          className={`px-2.5 py-2.5 align-middle overflow-hidden ${alignClass}`}
+                          className={`px-2 py-2.5 align-middle overflow-hidden ${alignClass}`}
                           title={rawValue !== undefined && rawValue !== null ? String(rawValue) : undefined}
                         >
-                          <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="flex items-center gap-2 min-w-0">
                             {enableAvatarViewer && isUrl ? (
                               <AvatarViewerTrigger
                                 key={imgUrl as string}
@@ -577,7 +592,7 @@ export function CreateTable<T extends Record<string, any>>({
                     return (
                       <td
                         key={String(colKey) + idx}
-                        className={`px-2.5 py-2.5 align-middle overflow-hidden ${alignClass}`}
+                        className={`px-2 py-2.5 align-middle overflow-hidden ${alignClass}`}
                         title={
                           typeof rawValue === "string" || typeof rawValue === "number"
                             ? String(rawValue)
@@ -585,7 +600,7 @@ export function CreateTable<T extends Record<string, any>>({
                         }
                       >
                         {userPhotoSrc ? (
-                          <span className="flex items-center gap-2.5 min-w-0">
+                          <span className="flex items-center gap-2 min-w-0">
                             <UserCellPhoto key={userPhotoSrc} src={userPhotoSrc} alt={displayText} />
                             <span className="truncate">{previewText}</span>
                           </span>
@@ -599,7 +614,7 @@ export function CreateTable<T extends Record<string, any>>({
                   })}
 
                   {showActions && (
-                    <td className="px-2.5 py-2.5 align-middle overflow-hidden text-center">
+                    <td className="px-2 py-2.5 align-middle overflow-hidden text-center">
                       {/* Row actions are ALWAYS visible: muted gray on
                           rest, full colour on the hovered (or selected)
                           row — edit in the primary tone, delete in full
