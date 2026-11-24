@@ -2133,6 +2133,48 @@ const entryConfigured = (entry: ServiceEntryState): boolean => {
  * problems, save results, test results — goes through the Toast
  * system; this panel renders NO inline alert/banner bars.
  */
+/**
+ * The Stripe entry's webhook address — read-only. Stripe delivers
+ * payment confirmations to this URL; the owner copies it into their
+ * Stripe dashboard (Developers → Webhooks) once, and from then on a
+ * completed Stripe payment marks its order Paid automatically. The
+ * address is derived from the same API base the panel already talks
+ * to, so it always points at this store's own backend.
+ */
+function StripeWebhookUrl() {
+  const { t } = useLanguage();
+  const [copied, setCopied] = useState(false);
+  const base = String(apiClient.defaults.baseURL ?? "").replace(/\/+$/, "");
+  const webhookUrl = `${base}/payments/webhook/stripe`;
+  const copyUrl = async () => {
+    try {
+      await navigator.clipboard.writeText(webhookUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* clipboard unavailable — the address is visible to copy manually */
+    }
+  };
+  return (
+    <div>
+      <span className="mb-2 block text-xs font-medium text-[var(--text-soft)]">
+        {t("Webhook URL")}
+      </span>
+      <div className="flex items-center gap-2">
+        <code className="flex-1 break-all rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 font-mono text-xs text-[var(--text)]">
+          {webhookUrl}
+        </code>
+        <Button variant="outline" size="sm" icon={Copy} onClick={() => void copyUrl()}>
+          {copied ? t("Copied") : t("Copy")}
+        </Button>
+      </div>
+      <p className="mt-2 text-xs text-[var(--text-muted)]">
+        {t("Add this address in your Stripe dashboard under Developers → Webhooks. When a customer pays, Stripe tells this address and the order is marked Paid automatically.")}
+      </p>
+    </div>
+  );
+}
+
 function ServiceBuilderPanel({
   data,
   categoryIds,
@@ -2761,6 +2803,7 @@ function ServiceBuilderPanel({
                       ),
                     )}
                   </div>
+                  {item.subService === "stripe" && <StripeWebhookUrl />}
                 </>
               ) : (
                 <>
