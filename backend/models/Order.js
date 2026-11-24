@@ -64,6 +64,17 @@ const orderSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId, 
     ref: 'Coupon' 
   },
+  // Whether this order's coupon redemption is currently inside the
+  // coupon's usedCount. The redemption counts exactly while the order
+  // is live (not trashed) and its status is not cancelled/refunded;
+  // every state crossing moves the counter and this marker together,
+  // so a release or a re-record can never happen twice. Orders saved
+  // before this field existed carry no marker — the order controller
+  // treats a missing marker on a coupon order as "counted" (the old
+  // code recorded the use at creation and never released it).
+  couponCounted: {
+    type: Boolean
+  },
   total: { 
     type: Number, 
     required: true 

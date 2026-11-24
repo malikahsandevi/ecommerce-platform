@@ -24,7 +24,7 @@ const {
     Setting,
 } = require('../models');
 const { planRestore, applyRestore } = require('../utils/softDelete');
-const { adjustStock } = require('./orderController');
+const { adjustStock, statusReturnsStock, syncCouponUse } = require('./orderController');
 const { syncProductRating } = require('./reviewController');
 const {
     refreshCredentials,
@@ -242,11 +242,17 @@ const restoreItem = async (req, res) => {
 
         // Module side effects the soft delete applied, reversed:
         // a restored order re-reserves the stock its delete returned
-        // (cancelled orders never held stock, so they skip this,
-        // mirroring the delete), and a restored review counts toward
-        // its product's rating again.
-        if (segment === 'orders' && doc.status !== 'cancelled') {
-            await adjustStock(doc.items, -1);
+        // (cancelled/refunded orders never held stock, so they skip
+        // this, mirroring the delete) and re-records the coupon
+        // redemption its delete released; a restored review counts
+        // toward its product's rating again.
+        if (segment === 'orders') {
+            if (!statusReturnsStock(doc.status)) {
+                await adjustStock(doc.items, -1);
+            }
+            if (await syncCouponUse(doc)) {
+                await doc.save();
+            }
         }
         if (segment === 'reviews') {
             await syncProductRating(doc.product);

@@ -2,7 +2,7 @@ const Order = require('../models/Order');
 const Product = require('../models/Product');
 const User = require('../models/User');
 const { logActivity } = require('../utils/activity');
-const { resolveCoupon, recordCouponUse } = require('../utils/coupon');
+const { resolveCoupon, recordCouponUse, releaseCouponUse } = require('../utils/coupon');
 const { sendOrderConfirmationEmail, sendOrderStatusEmail } = require('../utils/emailTemplates');
 const { NOT_DELETED, applySoftDelete } = require('../utils/softDelete');
 
@@ -25,6 +25,58 @@ const generateOrderNumber = () => {
 const customerLabel = (userDoc) => {
     const name = [userDoc?.firstName, userDoc?.lastName].filter(Boolean).join(' ').trim();
     return name || userDoc?.email || 'A customer';
+};
+
+// The two order statuses in which the order's stock is RETURNED to
+// the shelf and its coupon redemption is NOT counted. One state rule
+// drives both resources, symmetrically, on every crossing:
+//
+//   stock is out ⟺ the order is live (not trashed) and its status is
+//   not cancelled/refunded — and the coupon's usedCount includes this
+//   order under exactly the same condition.
+//
+// Entering the set returns the units and releases the redemption;
+// leaving it takes the units back out and re-records the redemption
+// (without re-checking the coupon's limits — the use was legitimate
+// when it was made); moving INSIDE the set (cancelled ↔ refunded)
+// moves nothing. Trashing behaves like entering the set, restoring
+// like leaving it.
+const STOCK_RETURNED_STATUSES = ['cancelled', 'refunded'];
+const statusReturnsStock = (status) => STOCK_RETURNED_STATUSES.includes(status);
+
+/**
+ * Whether this order's coupon redemption is currently inside the
+ * coupon's usedCount, per the marker stored on the order. Orders
+ * saved before the marker existed have none: the old code recorded
+ * the use at creation and never released it, so their use is still
+ * counted — a missing marker reads as true.
+ */
+const couponIsCounted = (order) => {
+    if (!order.coupon) return false;
+    if (typeof order.couponCounted === 'boolean') return order.couponCounted;
+    return true;
+};
+
+/**
+ * Brings the coupon's usedCount in line with the order's current
+ * state (the rule above), moving the counter only on a real crossing
+ * and pinning the marker on the order to match. Returns true when the
+ * marker on the passed document changed — the caller saves it (every
+ * call site saves the order around its side effects anyway).
+ */
+const syncCouponUse = async (order) => {
+    if (!order.coupon) return false;
+    const shouldCount = !order.deletedAt && !statusReturnsStock(order.status);
+    const counted = couponIsCounted(order);
+    if (shouldCount !== counted) {
+        if (shouldCount) await recordCouponUse(order.coupon);
+        else await releaseCouponUse(order.coupon);
+    }
+    if (order.couponCounted !== shouldCount) {
+        order.couponCounted = shouldCount;
+        return true;
+    }
+    return false;
 };
 
 // Moves stock for every line of an order. direction -1 takes stock out
@@ -172,6 +224,10 @@ const createOrder = async (req, res) => {
         // skip this entirely and keep their exact previous behaviour.
         const couponCode = typeof data.couponCode === 'string' ? data.couponCode.trim() : '';
         delete data.couponCode;
+        // The coupon-counted marker is server-owned: a fresh order
+        // starts uncounted, and the sync after the save records the
+        // redemption when the created state is a counted one.
+        data.couponCounted = false;
         let appliedCoupon = null;
         if (couponCode) {
             const resolved = await resolveCoupon(couponCode, {
@@ -226,10 +282,18 @@ const createOrder = async (req, res) => {
         }
         if (!order) throw lastError || new Error('Could not create the order.');
 
-        // The redemption counts only once the order carrying it exists.
-        if (appliedCoupon) await recordCouponUse(appliedCoupon._id);
-
-        await adjustStock(order.items, -1);
+        // The state rule applies from birth: an order created directly
+        // in a stock-returned status (cancelled/refunded) never takes
+        // stock out and its redemption never counts; any other order
+        // takes its stock out now, and the redemption is recorded now
+        // that the order carrying it exists.
+        const stockOut = !statusReturnsStock(order.status);
+        if (stockOut) {
+            await adjustStock(order.items, -1);
+        }
+        if (await syncCouponUse(order)) {
+            await order.save();
+        }
 
         const userDoc = order.user
             ? await User.findById(order.user).select('firstName lastName email').lean()
@@ -239,7 +303,7 @@ const createOrder = async (req, res) => {
             `Order ${order.orderNumber} placed by ${customerLabel(userDoc)} — $${Number(order.total || 0).toFixed(2)}`,
             { orderId: order._id, customerId: order.user || undefined }
         );
-        await logLowStockAlerts(order.items);
+        if (stockOut) await logLowStockAlerts(order.items);
 
         // Order confirmation email to the customer. Fail-soft: the
         // helper never throws (no email service configured → logged and
@@ -303,16 +367,27 @@ const updateOrder = async (req, res) => {
 
         const updated = await order.save();
 
+        // The coupon redemption follows the state rule on EVERY
+        // update: entering cancelled/refunded releases it, leaving
+        // re-records it (no limit re-check — the use was legitimate
+        // when made), moving inside the set changes nothing. The
+        // marker on the order makes each crossing happen exactly once.
+        if (await syncCouponUse(order)) {
+            await order.save();
+        }
+
         if (nextStatus !== previousStatus) {
-            // Stock follows the cancelled state symmetrically: entering
-            // cancelled returns the reserved units, LEAVING cancelled
-            // (un-cancel) takes them back out — the exact inverse,
-            // mirroring how a trash restore re-reserves. Without the
-            // second half the units of a revived order stayed sellable
-            // and could be sold twice.
-            if (nextStatus === 'cancelled') {
+            // Stock follows the same rule, crossing the boundary of
+            // the stock-returned set: entering it (cancelled OR
+            // refunded) returns the reserved units, LEAVING it takes
+            // them back out — the exact inverse, mirroring how a trash
+            // restore re-reserves. Moving inside the set (cancelled ↔
+            // refunded) moves nothing: the units are already back.
+            const wasReturned = statusReturnsStock(previousStatus);
+            const isReturned = statusReturnsStock(nextStatus);
+            if (isReturned && !wasReturned) {
                 await adjustStock(order.items, +1);
-            } else if (previousStatus === 'cancelled') {
+            } else if (wasReturned && !isReturned) {
                 await adjustStock(order.items, -1);
             }
             await logActivity(
@@ -357,12 +432,20 @@ const deleteOrder = async (req, res) => {
         applySoftDelete(Order, order, req.user?._id);
         await order.save();
 
-        // A deleted live order frees its stock again; a cancelled order
-        // already returned it when it was cancelled. Restoring the
-        // order (Settings → Deleted Items) takes the stock back out —
-        // the exact inverse, run by the trash controller.
-        if (order.status !== 'cancelled') {
+        // A deleted live order frees its stock again; a cancelled or
+        // refunded order already returned it when it entered that
+        // status. Restoring the order (Settings → Deleted Items) takes
+        // the stock back out — the exact inverse, run by the trash
+        // controller.
+        if (!statusReturnsStock(order.status)) {
             await adjustStock(order.items, +1);
+        }
+
+        // Trashing also releases the order's coupon redemption — the
+        // redemption counts only while the order is live (the state
+        // rule). Restoring the order re-records it.
+        if (await syncCouponUse(order)) {
+            await order.save();
         }
 
         res.json({ message: 'Order removed successfully' });
@@ -378,6 +461,9 @@ module.exports = {
     updateOrder,
     deleteOrder,
     // Shared with the Deleted Items restore, which re-reserves the
-    // stock a soft delete returned.
-    adjustStock
+    // stock a soft delete returned and re-records the coupon
+    // redemption it released.
+    adjustStock,
+    statusReturnsStock,
+    syncCouponUse
 };

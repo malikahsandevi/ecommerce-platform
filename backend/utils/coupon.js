@@ -16,8 +16,11 @@
 // `perCustomerLimit` follows the same semantics per customer: null =
 // no per-customer limit, 0 = no customer may redeem, N = each customer
 // may redeem at most N times. A customer's count is their prior orders
-// carrying this coupon that are not trashed and not cancelled — a
-// cancelled order's redemption does not consume the allowance.
+// carrying this coupon whose redemption currently counts — live (not
+// trashed) and not cancelled/refunded, the same state rule the global
+// usedCount follows (see orderController's coupon marker), so the two
+// counts can never diverge: a cancelled, refunded or trashed order's
+// redemption does not consume the allowance.
 //
 // Scoping: when applicableUsers is non-empty only those customers may
 // redeem. When applicableProducts and/or applicableCategories are
@@ -82,8 +85,9 @@ const resolveCoupon = async (rawCode, context = {}) => {
     }
 
     // Per-customer limit: same null/0/N semantics as the global limit,
-    // counted from the customer's own live, non-cancelled orders that
-    // carry this coupon.
+    // counted from the customer's own orders that carry this coupon
+    // and whose redemption currently counts (live, not
+    // cancelled/refunded — the usedCount state rule).
     if (coupon.perCustomerLimit != null) {
         if (!userId) {
             throw new Error('This coupon is limited per customer — select the customer first.');
@@ -92,7 +96,7 @@ const resolveCoupon = async (rawCode, context = {}) => {
             user: userId,
             coupon: coupon._id,
             ...NOT_DELETED,
-            status: { $ne: 'cancelled' },
+            status: { $nin: ['cancelled', 'refunded'] },
         });
         if (priorUses >= coupon.perCustomerLimit) {
             throw new Error('This customer has already used this coupon the maximum number of times.');
@@ -147,4 +151,18 @@ const recordCouponUse = async (couponId) => {
     await Coupon.updateOne({ _id: couponId }, { $inc: { usedCount: 1 } });
 };
 
-module.exports = { resolveCoupon, recordCouponUse };
+/**
+ * Releases one redemption — the inverse of recordCouponUse, run when
+ * the order carrying the coupon leaves the counted state (cancelled,
+ * refunded or trashed). The match on a positive usedCount keeps the
+ * counter from ever dropping below zero.
+ */
+const releaseCouponUse = async (couponId) => {
+    if (!couponId) return;
+    await Coupon.updateOne(
+        { _id: couponId, usedCount: { $gt: 0 } },
+        { $inc: { usedCount: -1 } }
+    );
+};
+
+module.exports = { resolveCoupon, recordCouponUse, releaseCouponUse };
