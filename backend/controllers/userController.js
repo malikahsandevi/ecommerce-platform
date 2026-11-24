@@ -402,7 +402,7 @@ const resetUserTwoFactor = async (req, res) => {
         // strip its own second factor with no code at all).
         if (String(req.user?._id) === String(target._id)) {
             return res.status(400).json({
-                message: "You can't reset your own two-factor authentication. Ask another Super Admin to reset it for you."
+                message: "You can't reset your own two-factor authentication."
             });
         }
 

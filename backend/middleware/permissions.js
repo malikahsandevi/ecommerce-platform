@@ -13,7 +13,7 @@ const requirePermission = (module, action) => async (req, res, next) => {
         const allowed = await roleHasPermission(req.user.role, module, action);
         if (!allowed) {
             return res.status(403).json({
-                message: `Your role (${req.user.role}) doesn't have permission to ${action} ${module}. Ask a Super Admin to change it in Settings → Users & Roles.`,
+                message: `You don't have permission to ${action} ${module}.`,
             });
         }
         next();
@@ -35,7 +35,7 @@ const requireAnyPermission = (pairs) => async (req, res, next) => {
             if (await roleHasPermission(req.user.role, module, action)) return next();
         }
         return res.status(403).json({
-            message: `Your role (${req.user.role}) doesn't have permission for this. Ask a Super Admin to change it in Settings → Users & Roles.`,
+            message: `You don't have permission for this.`,
         });
     } catch (error) {
         sendError(res, error, 500);

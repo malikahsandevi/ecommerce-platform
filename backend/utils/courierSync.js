@@ -96,7 +96,7 @@ const getTrackingStatus = async (courier, trackingNumber) => {
         return {
             ok: false,
             code: 'NO_CREDENTIALS',
-            message: `Live tracking for ${courier.name} needs that courier's API credentials — add them in Settings → Shipping.`,
+            message: `Live tracking for ${courier.name} needs that courier's API credentials.`,
         };
     }
     const base = String(courier.apiBaseUrl).trim().replace(/\/+$/, '');
@@ -131,7 +131,7 @@ const getTrackingStatus = async (courier, trackingNumber) => {
         return {
             ok: false,
             code: 'SYNC_FAILED',
-            message: `Could not reach ${courier.name} for tracking. Check the courier's API address in Settings → Shipping.`,
+            message: `Could not reach ${courier.name} for tracking.`,
         };
     }
 };

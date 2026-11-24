@@ -55,8 +55,7 @@ const folderForPurpose = (purpose) =>
 // uploads, upload signatures, registrations and asset mutations. The
 // stored library records themselves are untouched and come back the
 // moment the service is switched on again.
-const CLOUDINARY_OFF_MESSAGE =
-    'Cloudinary is switched off in Settings → API / Integrations — media operations are unavailable until it is switched back on.';
+const CLOUDINARY_OFF_MESSAGE = 'Cloudinary is switched off.';
 const refuseIfCloudinaryOff = async (res) => {
     if (await isCloudinaryActive()) return false;
     res.status(403).json({ message: CLOUDINARY_OFF_MESSAGE });
@@ -120,13 +119,13 @@ const requireUploadTarget = async (res, fileSize = null) => {
     const target = detail.entry;
     if (!target || !target.configured) {
         res.status(400).json({
-            message: 'No storage is configured for uploads — add a Cloudinary entry with its credentials in Settings → API / Integrations first.',
+            message: 'No storage is configured for uploads.',
         });
         return null;
     }
     if (!target.isConnected) {
         res.status(403).json({
-            message: `${target.title} is switched off in Settings → API / Integrations — media operations are unavailable until it is switched back on.`,
+            message: `${target.title} is switched off.`,
         });
         return null;
     }
@@ -277,7 +276,7 @@ router.put('/storage/target', protect, requirePermission('Media', 'edit'), async
         }
         if (!entry.isConnected) {
             return res.status(400).json({
-                message: `${entry.title} is switched off in Settings → API / Integrations — switch it on before sending uploads to it.`,
+                message: `${entry.title} is switched off.`,
             });
         }
         await setUploadTarget(slug);
@@ -447,7 +446,7 @@ router.post('/register', protect, requireStaff, requirePermission('Media', 'crea
         }
         if (!entry.isConnected) {
             return res.status(403).json({
-                message: `${entry.title} is switched off in Settings → API / Integrations — media operations are unavailable until it is switched back on.`,
+                message: `${entry.title} is switched off.`,
             });
         }
         const entryCreds = credsOf(entry);
@@ -728,7 +727,7 @@ router.put('/:id/file', protect, requirePermission('Media', 'edit'), async (req,
         }
         if (!newEntry.isConnected) {
             return res.status(403).json({
-                message: `${newEntry.title} is switched off in Settings → API / Integrations — media operations are unavailable until it is switched back on.`,
+                message: `${newEntry.title} is switched off.`,
             });
         }
         const newEntryCreds = credsOf(newEntry);

@@ -342,7 +342,7 @@ const getJwtSignSecret = async () => {
     const values = await refreshCredentials();
     if (!values.jwtSigningActive) {
         const error = new Error(
-            'Sign-in is disabled: the Store Session (JWT) service is switched off in Settings → API / Integrations.',
+            'Sign-in is disabled: the Store Session (JWT) service is switched off.',
         );
         error.code = 'JWT_SIGNING_DISABLED';
         throw error;
@@ -557,9 +557,7 @@ const pickAutoPool = (pools, fileSize) => {
     if (leastFull && leastFull.percent >= STOP_AT_PERCENT) {
         return {
             pool: null,
-            blockMessage:
-                `Upload stopped: ${leastFull.title} is ${Math.round(leastFull.percent)}% full — ` +
-                'storage stops accepting uploads at 98%. Free up space or add another storage first.',
+            blockMessage: `Upload stopped: ${leastFull.title} is ${Math.round(leastFull.percent)}% full — storage stops accepting uploads at 98%.`,
         };
     }
     const maxRemaining = Math.max(...known.map((pool) => pool.remainingBytes ?? 0));
@@ -618,9 +616,7 @@ const resolveUploadTargetDetailed = async ({ fileSize = null } = {}) => {
                     pinUsable: true,
                     pool,
                     blocked: true,
-                    blockMessage:
-                        `Upload stopped: ${pinned.title} is ${Math.round(pool.percent)}% full — ` +
-                        'storage stops accepting uploads at 98%. Free up space or add another storage first.',
+                    blockMessage: `Upload stopped: ${pinned.title} is ${Math.round(pool.percent)}% full — storage stops accepting uploads at 98%.`,
                 };
             }
             const fitsPin =
