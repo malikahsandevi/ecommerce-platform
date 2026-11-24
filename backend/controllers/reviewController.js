@@ -21,7 +21,10 @@ const syncProductRating = async (productId) => {
 };
 
 const populateReview = (query) => query
-    .populate('product', 'name')
+    // The product's image rides along: the Reviews list's Product cell
+    // renders the product's photo, and a name-only populate left every
+    // row on the initial-letter tile (the avatar-round bug class).
+    .populate('product', 'name image images')
     .populate('user', 'firstName lastName username email avatar');
 
 // @desc    List reviews (with product + author populated for the panel)

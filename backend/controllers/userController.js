@@ -412,12 +412,21 @@ const resetUserTwoFactor = async (req, res) => {
 // orders), order count, average order value, last order date and the
 // distinct coupons used with their counts — so it can never go stale
 // and nothing is invented for customers without orders.
+// A product's main image: the `image` mirror first, then the gallery
+// (main entry, else first) — a record whose mirror was never written
+// still shows its photo instead of the initial-letter tile.
+const mainImageOf = (product) =>
+    product.image ||
+    product.images?.find((entry) => entry && (entry.isMain ?? entry.isPrimary))?.url ||
+    product.images?.[0]?.url ||
+    '';
+
 const productBrief = (product) =>
     product
         ? {
               id: product._id,
               name: product.name || '',
-              image: product.image || '',
+              image: mainImageOf(product),
               price: product.price ?? null,
           }
         : null;
@@ -426,9 +435,9 @@ const getUserProfile = async (req, res) => {
     try {
         const user = await User.findOne({ _id: req.params.id, ...NOT_DELETED })
             .select('-password')
-            .populate('favorites', 'name image price')
-            .populate('liked', 'name image price')
-            .populate('cart.product', 'name image price')
+            .populate('favorites', 'name image images price')
+            .populate('liked', 'name image images price')
+            .populate('cart.product', 'name image images price')
             .populate('favoriteCategories', 'name image');
         if (!user) {
             return res.status(404).json({ message: 'User not found' });
@@ -438,6 +447,9 @@ const getUserProfile = async (req, res) => {
         const orders = await Order.find({ user: user._id, ...NOT_DELETED })
             .sort({ createdAt: -1 })
             .populate('coupon', 'code discountType discountValue')
+            // Line items fall back to the product's own image when the
+            // order's snapshot carries none (older/seeded orders).
+            .populate('items.product', 'image images')
             .lean();
 
         const activeOrders = orders.filter((order) => order.status !== 'cancelled');
@@ -464,6 +476,15 @@ const getUserProfile = async (req, res) => {
             couponUsage.set(coupon.code, entry);
         }
 
+        // The line's own snapshot wins; the populated product is the
+        // fallback for orders whose snapshot never carried an image.
+        const itemImage = (item) => {
+            if (item.image) return item.image;
+            const product =
+                item.product && typeof item.product === 'object' ? item.product : null;
+            return product ? mainImageOf(product) : '';
+        };
+
         const orderBrief = (order) => ({
             id: order._id,
             orderNumber: order.orderNumber,
@@ -474,7 +495,7 @@ const getUserProfile = async (req, res) => {
                 name: item.name,
                 quantity: item.quantity,
                 price: item.price,
-                image: item.image || '',
+                image: itemImage(item),
             })),
         });
 
@@ -508,7 +529,7 @@ const getUserProfile = async (req, res) => {
             purchasedProducts: activeOrders.flatMap((order) =>
                 (order.items || []).map((item) => ({
                     name: item.name,
-                    image: item.image || '',
+                    image: itemImage(item),
                     quantity: item.quantity,
                     price: item.price,
                     orderNumber: order.orderNumber,

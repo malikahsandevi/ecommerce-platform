@@ -5,7 +5,12 @@ export interface ProductReview {
   code?: string;
   _id?: string;
   id?: number;
-  product?: string | { _id?: string; name?: string };
+  product?: string | {
+    _id?: string;
+    name?: string;
+    image?: string;
+    images?: { url?: string; isMain?: boolean; isPrimary?: boolean }[];
+  };
   user?: string | { _id?: string; firstName?: string; lastName?: string; username?: string; email?: string; avatar?: string };
   productId?: string;
   productName?: string;
@@ -30,6 +35,21 @@ const referenceLabel = (reference: ReviewReference): string => {
   return ["firstName" in reference ? reference.firstName : "", "lastName" in reference ? reference.lastName : ""]
     .filter(Boolean)
     .join(" ") || ("username" in reference ? reference.username : "") || ("email" in reference ? reference.email : "") || "";
+};
+
+// The reviewed product's main image (gallery main → first gallery
+// entry → the `image` mirror), for the list's Product cell thumbnail.
+// Empty when the product genuinely has no image — the cell then keeps
+// its initial-letter tile.
+const productImage = (review: ProductReview): string => {
+  const product = review.product;
+  if (!product || typeof product === "string") return "";
+  return (
+    product.images?.find((img) => img.isMain ?? img.isPrimary)?.url ||
+    product.images?.[0]?.url ||
+    product.image ||
+    ""
+  );
 };
 
 // The reviewer's uploaded profile photo, when the account has one —
@@ -108,6 +128,7 @@ export const reviewConfig = {
     _id: review._id || String(review.id),
     code: review.code,
     productName: referenceLabel(review.product) || review.productName || "",
+    productImage: productImage(review),
     customerName: referenceLabel(review.user) || review.customerName || "",
     userImage: userAvatar(review),
     rating: `${review.rating} ★`,
