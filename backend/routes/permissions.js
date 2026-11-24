@@ -183,6 +183,17 @@ router.put('/', requireSettingsSavePassword, async (req, res) => {
         }
         const customRoles = await getCustomRoles();
         const matrix = sanitizeMatrix(req.body?.matrix ?? req.body, customRoles);
+        // A payload carrying no recognizable role at all is a malformed
+        // save, not an intentional "clear everything": refuse it
+        // instead of replacing the stored matrix with an empty one and
+        // silently wiping every role's grants (custom roles have no
+        // code defaults to fall back to). The panel always sends the
+        // complete matrix, so a legitimate save never trips this.
+        if (Object.keys(matrix).length === 0) {
+            return res.status(400).json({
+                message: 'A valid permission matrix is required — nothing was saved.',
+            });
+        }
         await RolePermission.findOneAndUpdate(
             { key: 'matrix' },
             { $set: { matrix, updatedBy: req.user._id } },

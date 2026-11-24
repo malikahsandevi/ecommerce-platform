@@ -4,6 +4,11 @@ const Brand = require('../models/Brand');
 const mongoose = require('mongoose');
 const { logActivity } = require('../utils/activity');
 const { NOT_DELETED, applySoftDelete } = require('../utils/softDelete');
+const { duplicateKeyMessage } = require('../utils/duplicateKey');
+
+// A duplicate slug/SKU answers with a clean sentence, never the raw
+// MongoDB E11000 driver text.
+const errorMessage = (error) => duplicateKeyMessage(error, 'product') || error.message;
 
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -167,7 +172,7 @@ const createProduct = async (req, res) => {
         const createdProduct = await product.save();
         res.status(201).json(shapeProduct(createdProduct));
     } catch (error) {
-        res.status(400).json({ message: error.message });
+        res.status(400).json({ message: errorMessage(error) });
     }
 };
 
@@ -200,7 +205,7 @@ const updateProduct = async (req, res) => {
 
         res.json(shapeProduct(product));
     } catch (error) {
-        res.status(400).json({ message: error.message });
+        res.status(400).json({ message: errorMessage(error) });
     }
 };
 

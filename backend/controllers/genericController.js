@@ -3,6 +3,11 @@ const {
     supportsSoftDelete,
     applySoftDelete,
 } = require('../utils/softDelete');
+const { duplicateKeyMessage } = require('../utils/duplicateKey');
+
+// A duplicate unique field (slug / code / …) answers with a clean
+// sentence, never the raw MongoDB E11000 driver text.
+const errorMessage = (error, noun) => duplicateKeyMessage(error, noun) || error.message;
 
 // Shared CRUD for the simple catalogue modules. Models carrying the
 // soft-delete fields (utils/softDelete) read as if trashed records do
@@ -39,7 +44,7 @@ const genericController = (Model) => {
                 const item = new Model(req.body);
                 const saved = await item.save();
                 res.status(201).json(saved);
-            } catch (error) { res.status(400).json({ message: error.message }); }
+            } catch (error) { res.status(400).json({ message: errorMessage(error, 'record') }); }
         },
         update: async (req, res) => {
             try {
@@ -52,7 +57,7 @@ const genericController = (Model) => {
                     : await Model.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
                 if (!updated) return res.status(404).json({ message: 'Not found' });
                 res.json(updated);
-            } catch (error) { res.status(400).json({ message: error.message }); }
+            } catch (error) { res.status(400).json({ message: errorMessage(error, 'record') }); }
         },
         remove: async (req, res) => {
             try {
