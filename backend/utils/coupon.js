@@ -166,10 +166,17 @@ const resolveCoupon = async (rawCode, context = {}) => {
     return { coupon, discount };
 };
 
-/** Records one redemption after the order carrying it has been saved. */
-const recordCouponUse = async (couponId) => {
+/** Records one redemption after the order carrying it has been saved.
+ *  `session` (optional) joins the write to the caller's transaction —
+ *  see utils/transactions; omitted, the write stands on its own,
+ *  exactly as before. */
+const recordCouponUse = async (couponId, session) => {
     if (!couponId) return;
-    await Coupon.updateOne({ _id: couponId }, { $inc: { usedCount: 1 } });
+    await Coupon.updateOne(
+        { _id: couponId },
+        { $inc: { usedCount: 1 } },
+        session ? { session } : undefined
+    );
 };
 
 /**
@@ -182,7 +189,7 @@ const recordCouponUse = async (couponId) => {
  * limit of 0 never claims. Callers release the claim with
  * releaseCouponUse when the order does not go through after all.
  */
-const claimCouponUse = async (couponId) => {
+const claimCouponUse = async (couponId, session) => {
     if (!couponId) return false;
     const result = await Coupon.updateOne(
         {
@@ -194,7 +201,8 @@ const claimCouponUse = async (couponId) => {
                 ],
             },
         },
-        { $inc: { usedCount: 1 } }
+        { $inc: { usedCount: 1 } },
+        session ? { session } : undefined
     );
     return result.modifiedCount === 1;
 };
@@ -205,11 +213,12 @@ const claimCouponUse = async (couponId) => {
  * refunded or trashed). The match on a positive usedCount keeps the
  * counter from ever dropping below zero.
  */
-const releaseCouponUse = async (couponId) => {
+const releaseCouponUse = async (couponId, session) => {
     if (!couponId) return;
     await Coupon.updateOne(
         { _id: couponId, usedCount: { $gt: 0 } },
-        { $inc: { usedCount: -1 } }
+        { $inc: { usedCount: -1 } },
+        session ? { session } : undefined
     );
 };
 

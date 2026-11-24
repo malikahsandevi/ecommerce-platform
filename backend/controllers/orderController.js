@@ -5,6 +5,23 @@ const { logActivity } = require('../utils/activity');
 const { resolveCoupon, recordCouponUse, releaseCouponUse, claimCouponUse } = require('../utils/coupon');
 const { sendOrderConfirmationEmail, sendOrderStatusEmail } = require('../utils/emailTemplates');
 const { NOT_DELETED } = require('../utils/softDelete');
+const { transactionsSupported, withTransaction } = require('../utils/transactions');
+
+/**
+ * Thrown inside a TRANSACTIONAL placement when the order-number
+ * lottery collides: a failed insert can poison the transaction it
+ * ran in, so instead of retrying the save inside it, the whole unit
+ * is retried with a fresh number — the abort leaves nothing behind,
+ * so the fresh attempt starts clean. The sequential path never
+ * throws this: it retries the save in place, as it always has.
+ */
+class OrderNumberRetry extends Error {
+    constructor(cause) {
+        super(cause.message);
+        this.name = 'OrderNumberRetry';
+        this.cause = cause;
+    }
+}
 
 // Human-readable, unique order numbers: ORD-YYMMDD-XXXX where XXXX is a
 // random block. The admin panel used to invent these in the browser from a
@@ -64,13 +81,13 @@ const couponIsCounted = (order) => {
  * marker on the passed document changed — the caller saves it (every
  * call site saves the order around its side effects anyway).
  */
-const syncCouponUse = async (order) => {
+const syncCouponUse = async (order, session) => {
     if (!order.coupon) return false;
     const shouldCount = !order.deletedAt && !statusReturnsStock(order.status);
     const counted = couponIsCounted(order);
     if (shouldCount !== counted) {
-        if (shouldCount) await recordCouponUse(order.coupon);
-        else await releaseCouponUse(order.coupon);
+        if (shouldCount) await recordCouponUse(order.coupon, session);
+        else await releaseCouponUse(order.coupon, session);
     }
     if (order.couponCounted !== shouldCount) {
         order.couponCounted = shouldCount;
@@ -82,12 +99,14 @@ const syncCouponUse = async (order) => {
 // Moves stock for every line of an order. direction -1 takes stock out
 // (order placed), +1 puts it back (order cancelled / deleted). Products
 // that no longer exist are skipped — the order snapshot stays valid.
-const adjustStock = async (items, direction) => {
+// `session` (optional) joins the writes to the caller's transaction.
+const adjustStock = async (items, direction, session) => {
     for (const item of items || []) {
         if (!item.product || !item.quantity) continue;
         await Product.updateOne(
             { _id: item.product },
-            { $inc: { stock: direction * item.quantity } }
+            { $inc: { stock: direction * item.quantity } },
+            session ? { session } : undefined
         );
     }
 };
@@ -277,134 +296,192 @@ const createOrder = async (req, res) => {
         const bornStatus = data.status || 'pending';
         const stockOut = !statusReturnsStock(bornStatus);
 
-        // ── Atomic stock reservation ────────────────────────────────
-        // Each product's units are taken with ONE conditional update
-        // (stock must still cover the aggregated quantity), so two
-        // orders placed at the same moment can never both take the
-        // last units or drive the stock negative — the loser fails
-        // here and every reservation already made for this order is
-        // rolled back before the refusal answers.
-        const reservations = [];
-        const rollbackReservations = async () => {
-            for (const held of reservations) {
-                // eslint-disable-next-line no-await-in-loop
-                await Product.updateOne({ _id: held.id }, { $inc: { stock: held.qty } });
-            }
-            reservations.length = 0;
-        };
-        if (stockOut) {
-            for (const [productKey, qty] of reservationQty) {
-                if (!qty) continue;
-                const product = productById.get(productKey);
-                if (!product) continue;
-                // eslint-disable-next-line no-await-in-loop
-                const taken = await Product.updateOne(
-                    { _id: product._id, ...NOT_DELETED, stock: { $gte: qty } },
-                    { $inc: { stock: -qty } }
-                );
-                if (taken.modifiedCount !== 1) {
+        // ── Placement: reservations + coupon claim + the order ──────
+        // The writes below form ONE unit — the order must never exist
+        // without its stock out and its redemption counted, nor the
+        // reverse. When the deployment's MongoDB supports
+        // transactions (Atlas / any replica set), the unit runs in a
+        // session transaction (utils/transactions): it commits whole
+        // or aborts whole, so even a hard crash mid-sequence leaves
+        // nothing partial behind. On a standalone server the SAME
+        // steps run sequentially with the manual rollbacks — every
+        // step already atomic on its own — exactly as before. A
+        // refusal inside the unit is thrown as an Error and answered
+        // by the outer catch with the same 400 + message the direct
+        // returns produced.
+        const placeOrder = async (session) => {
+            // ── Atomic stock reservation ────────────────────────────
+            // Each product's units are taken with ONE conditional
+            // update (stock must still cover the aggregated quantity),
+            // so two orders placed at the same moment can never both
+            // take the last units or drive the stock negative — the
+            // loser fails here and every reservation already made for
+            // this order is rolled back before the refusal answers.
+            // (Inside a transaction the manual rollback stands down:
+            // the abort undoes the reservations itself.)
+            const reservations = [];
+            const rollbackReservations = async () => {
+                if (session) return;
+                for (const held of reservations) {
                     // eslint-disable-next-line no-await-in-loop
-                    const fresh = await Product.findOne({ _id: product._id, ...NOT_DELETED })
-                        .select('stock')
-                        .lean();
+                    await Product.updateOne({ _id: held.id }, { $inc: { stock: held.qty } });
+                }
+                reservations.length = 0;
+            };
+            if (stockOut) {
+                for (const [productKey, qty] of reservationQty) {
+                    if (!qty) continue;
+                    const product = productById.get(productKey);
+                    if (!product) continue;
+                    // eslint-disable-next-line no-await-in-loop
+                    const taken = await Product.updateOne(
+                        { _id: product._id, ...NOT_DELETED, stock: { $gte: qty } },
+                        { $inc: { stock: -qty } },
+                        session ? { session } : undefined
+                    );
+                    if (taken.modifiedCount !== 1) {
+                        // eslint-disable-next-line no-await-in-loop
+                        const fresh = await Product.findOne({ _id: product._id, ...NOT_DELETED })
+                            .select('stock')
+                            .lean();
+                        // eslint-disable-next-line no-await-in-loop
+                        await rollbackReservations();
+                        if (!fresh) {
+                            throw new Error('One of the ordered products no longer exists.');
+                        }
+                        throw new Error(
+                            `Not enough stock for "${product.name}" — ${fresh.stock ?? 0} left, ${qty} requested.`
+                        );
+                    }
+                    reservations.push({ id: product._id, qty });
+                }
+            }
+
+            // ── Atomic coupon claim ─────────────────────────────────
+            // The redemption is claimed against the global usage limit
+            // with the same one-shot conditional update (see
+            // claimCouponUse): under parallel orders the counter can
+            // never pass the limit. The claim precedes the save; if
+            // the save ultimately fails, the claim and the
+            // reservations are released again, so a failed order
+            // consumes nothing.
+            let couponClaimed = false;
+            if (appliedCoupon && stockOut) {
+                couponClaimed = await claimCouponUse(appliedCoupon._id, session);
+                if (!couponClaimed) {
                     await rollbackReservations();
-                    if (!fresh) {
-                        return res.status(400).json({
-                            message: 'One of the ordered products no longer exists.',
-                        });
-                    }
-                    return res.status(400).json({
-                        message: `Not enough stock for "${product.name}" — ${fresh.stock ?? 0} left, ${qty} requested.`,
-                    });
+                    throw new Error('This coupon has reached its usage limit.');
                 }
-                reservations.push({ id: product._id, qty });
+                data.couponCounted = true;
             }
-        }
 
-        // ── Atomic coupon claim ─────────────────────────────────────
-        // The redemption is claimed against the global usage limit
-        // with the same one-shot conditional update (see
-        // claimCouponUse): under parallel orders the counter can
-        // never pass the limit. The claim precedes the save; if the
-        // save ultimately fails, the claim and the reservations are
-        // released again, so a failed order consumes nothing.
-        let couponClaimed = false;
-        if (appliedCoupon && stockOut) {
-            couponClaimed = await claimCouponUse(appliedCoupon._id);
-            if (!couponClaimed) {
+            // Generate the order number here unless the caller supplied one.
+            let order = null;
+            let lastError = null;
+            try {
+                // Inside a transaction the save gets ONE attempt: a
+                // collision signals OrderNumberRetry and the caller
+                // retries the whole unit with a fresh number (below).
+                const saveAttempts = session ? 1 : 5;
+                for (let attempt = 0; attempt < saveAttempts && !order; attempt++) {
+                    try {
+                        // eslint-disable-next-line no-await-in-loop
+                        order = await new Order({
+                            ...data,
+                            orderNumber: data.orderNumber || generateOrderNumber(),
+                        }).save(session ? { session } : undefined);
+                    } catch (error) {
+                        // 11000 = duplicate key. Only an order-number collision is
+                        // worth retrying (with a fresh number); anything else is a
+                        // real validation problem.
+                        if (error.code === 11000 && !data.orderNumber) {
+                            lastError = error;
+                            continue;
+                        }
+                        throw error;
+                    }
+                }
+                if (!order) {
+                    if (session && lastError) throw new OrderNumberRetry(lastError);
+                    throw lastError || new Error('Could not create the order.');
+                }
+            } catch (saveError) {
+                if (saveError instanceof OrderNumberRetry) throw saveError;
                 await rollbackReservations();
-                return res.status(400).json({
-                    message: 'This coupon has reached its usage limit.',
-                });
+                if (couponClaimed && !session) await releaseCouponUse(appliedCoupon._id);
+                throw saveError;
             }
-            data.couponCounted = true;
-        }
 
-        // Generate the order number here unless the caller supplied one.
-        let order = null;
-        let lastError = null;
-        try {
-            for (let attempt = 0; attempt < 5 && !order; attempt++) {
+            // ── Per-customer limit: the ordinal recount ─────────────
+            // The resolver's pre-check races under parallel orders by
+            // the SAME customer (both reads count the same prior
+            // orders), so once this order exists it is counted in
+            // (createdAt, _id) order among the customer's counted
+            // orders carrying the coupon: if its ordinal passes the
+            // limit, THIS order — and only this order — is rolled
+            // back (document removed, claim and reservations
+            // released) and the refusal answers. Inside a transaction
+            // the throw alone rolls the whole unit back.
+            if (appliedCoupon && stockOut && appliedCoupon.perCustomerLimit != null) {
+                const countedQuery = Order.find({
+                    user: order.user,
+                    coupon: appliedCoupon._id,
+                    ...NOT_DELETED,
+                    status: { $nin: STOCK_RETURNED_STATUSES },
+                })
+                    .sort({ createdAt: 1, _id: 1 })
+                    .select('_id')
+                    .lean();
+                if (session) countedQuery.session(session);
+                const countedOrders = await countedQuery;
+                const ordinal =
+                    countedOrders.findIndex((entry) => String(entry._id) === String(order._id)) + 1;
+                if (ordinal > appliedCoupon.perCustomerLimit) {
+                    if (!session) {
+                        await Order.deleteOne({ _id: order._id });
+                        if (couponClaimed) await releaseCouponUse(appliedCoupon._id);
+                        await rollbackReservations();
+                    }
+                    throw new Error(
+                        'This customer has already used this coupon the maximum number of times.'
+                    );
+                }
+            }
+
+            // The stock is already out (the reservation above) and the
+            // redemption is already counted (the claim above set the
+            // marker to match), so this sync is a no-op safeguard that
+            // keeps the state rule in exactly one place.
+            if (await syncCouponUse(order, session)) {
+                await order.save(session ? { session } : undefined);
+            }
+
+            return order;
+        };
+
+        let order;
+        if (await transactionsSupported()) {
+            // The order-number lottery gets the same five attempts
+            // the sequential path gives the save alone — each retry
+            // is a fresh transaction, and the aborted one left
+            // nothing behind, so a retry starts from a clean slate.
+            // After the fifth collision the last duplicate-key error
+            // answers, exactly as the sequential path answers it.
+            let attempt = 0;
+            // eslint-disable-next-line no-constant-condition
+            while (true) {
+                attempt += 1;
                 try {
-                    order = await new Order({
-                        ...data,
-                        orderNumber: data.orderNumber || generateOrderNumber(),
-                    }).save();
+                    // eslint-disable-next-line no-await-in-loop
+                    order = await withTransaction(placeOrder);
+                    break;
                 } catch (error) {
-                    // 11000 = duplicate key. Only an order-number collision is
-                    // worth retrying (with a fresh number); anything else is a
-                    // real validation problem.
-                    if (error.code === 11000 && !data.orderNumber) {
-                        lastError = error;
-                        continue;
-                    }
-                    throw error;
+                    if (error instanceof OrderNumberRetry && attempt < 5) continue;
+                    throw error instanceof OrderNumberRetry ? error.cause : error;
                 }
             }
-            if (!order) throw lastError || new Error('Could not create the order.');
-        } catch (saveError) {
-            await rollbackReservations();
-            if (couponClaimed) await releaseCouponUse(appliedCoupon._id);
-            throw saveError;
-        }
-
-        // ── Per-customer limit: the ordinal recount ─────────────────
-        // The resolver's pre-check races under parallel orders by the
-        // SAME customer (both reads count the same prior orders), so
-        // once this order exists it is counted in (createdAt, _id)
-        // order among the customer's counted orders carrying the
-        // coupon: if its ordinal passes the limit, THIS order — and
-        // only this order — is rolled back (document removed, claim
-        // and reservations released) and the refusal answers.
-        if (appliedCoupon && stockOut && appliedCoupon.perCustomerLimit != null) {
-            const countedOrders = await Order.find({
-                user: order.user,
-                coupon: appliedCoupon._id,
-                ...NOT_DELETED,
-                status: { $nin: STOCK_RETURNED_STATUSES },
-            })
-                .sort({ createdAt: 1, _id: 1 })
-                .select('_id')
-                .lean();
-            const ordinal =
-                countedOrders.findIndex((entry) => String(entry._id) === String(order._id)) + 1;
-            if (ordinal > appliedCoupon.perCustomerLimit) {
-                await Order.deleteOne({ _id: order._id });
-                if (couponClaimed) await releaseCouponUse(appliedCoupon._id);
-                await rollbackReservations();
-                return res.status(400).json({
-                    message:
-                        'This customer has already used this coupon the maximum number of times.',
-                });
-            }
-        }
-
-        // The stock is already out (the reservation above) and the
-        // redemption is already counted (the claim above set the
-        // marker to match), so this sync is a no-op safeguard that
-        // keeps the state rule in exactly one place.
-        if (await syncCouponUse(order)) {
-            await order.save();
+        } else {
+            order = await placeOrder(null);
         }
 
         const userDoc = order.user
@@ -482,53 +559,78 @@ const updateOrder = async (req, res) => {
         // update only lands while the stored status is still the one
         // this request read, so when two updates race the same
         // transition (a double-click, two staff members), exactly one
-        // of them wins and runs the stock/coupon/activity/email side
-        // effects below. The loser answers with the order as it now
-        // stands and moves nothing — a cancel can never return the
-        // same units twice.
+        // of them wins and runs the stock/coupon side effects. The
+        // loser answers with the order as it now stands and moves
+        // nothing — a cancel can never return the same units twice.
+        //
+        // The claim and its paired adjustments (coupon counter, then
+        // stock) run as ONE unit — inside a MongoDB transaction when
+        // the deployment supports it (utils/transactions), so a hard
+        // crash between the claim and the adjustments can no longer
+        // leave them split; on a standalone server the same steps run
+        // sequentially, each already atomic on its own, exactly as
+        // before. The activity log and the status email stay outside
+        // the unit — they are notifications ABOUT the change, not
+        // part of it, and both are fail-soft.
         let updated;
         if (nextStatus !== previousStatus) {
-            updated = await Order.findOneAndUpdate(
-                { _id: req.params.id, ...NOT_DELETED, status: previousStatus },
-                { $set: updates },
-                { new: true }
-            );
-            if (!updated) {
+            const outcome = await withTransaction(async (session) => {
+                const claimed = await Order.findOneAndUpdate(
+                    { _id: req.params.id, ...NOT_DELETED, status: previousStatus },
+                    { $set: updates },
+                    { new: true, ...(session ? { session } : {}) }
+                );
+                if (!claimed) return { lost: true };
+
+                // The coupon redemption follows the state rule:
+                // entering cancelled/refunded releases it, leaving
+                // re-records it (no limit re-check — the use was
+                // legitimate when made), moving inside the set
+                // changes nothing. The marker on the order makes
+                // each crossing happen exactly once.
+                if (await syncCouponUse(claimed, session)) {
+                    await claimed.save(session ? { session } : undefined);
+                }
+
+                // Stock follows the same rule, crossing the boundary
+                // of the stock-returned set: entering it (cancelled
+                // OR refunded) returns the reserved units, LEAVING it
+                // takes them back out — the exact inverse, mirroring
+                // how a trash restore re-reserves. Moving inside the
+                // set (cancelled ↔ refunded) moves nothing: the units
+                // are already back.
+                const wasReturned = statusReturnsStock(previousStatus);
+                const isReturned = statusReturnsStock(nextStatus);
+                if (isReturned && !wasReturned) {
+                    await adjustStock(claimed.items, +1, session);
+                } else if (wasReturned && !isReturned) {
+                    await adjustStock(claimed.items, -1, session);
+                }
+                return { order: claimed };
+            });
+            if (outcome.lost) {
                 const current = await Order.findOne({ _id: req.params.id, ...NOT_DELETED });
                 if (!current) {
                     return res.status(404).json({ message: 'Order not found' });
                 }
                 return res.json(current);
             }
-            order = updated;
+            order = outcome.order;
+            updated = outcome.order;
         } else {
             for (const [field, value] of Object.entries(updates)) order[field] = value;
             updated = await order.save();
-        }
 
-        // The coupon redemption follows the state rule on EVERY
-        // update: entering cancelled/refunded releases it, leaving
-        // re-records it (no limit re-check — the use was legitimate
-        // when made), moving inside the set changes nothing. The
-        // marker on the order makes each crossing happen exactly once.
-        if (await syncCouponUse(order)) {
-            await order.save();
+            // The coupon redemption follows the state rule on EVERY
+            // update — on a non-status update only the marker can
+            // need pinning (the counted state cannot change without
+            // a status change), and the save below is that pin.
+            if (await syncCouponUse(order)) {
+                await order.save();
+            }
         }
 
         if (nextStatus !== previousStatus) {
-            // Stock follows the same rule, crossing the boundary of
-            // the stock-returned set: entering it (cancelled OR
-            // refunded) returns the reserved units, LEAVING it takes
-            // them back out — the exact inverse, mirroring how a trash
-            // restore re-reserves. Moving inside the set (cancelled ↔
-            // refunded) moves nothing: the units are already back.
-            const wasReturned = statusReturnsStock(previousStatus);
-            const isReturned = statusReturnsStock(nextStatus);
-            if (isReturned && !wasReturned) {
-                await adjustStock(order.items, +1);
-            } else if (wasReturned && !isReturned) {
-                await adjustStock(order.items, -1);
-            }
             await logActivity(
                 'STATUS_CHANGE',
                 `Order ${order.orderNumber} status changed from ${previousStatus} to ${nextStatus}`,
@@ -567,29 +669,40 @@ const deleteOrder = async (req, res) => {
         // — the loser answers 404 and the stock below can never be
         // returned twice. (Orders carry no tombstoned unique values,
         // so this stamp is the whole of applySoftDelete for them.)
-        const order = await Order.findOneAndUpdate(
-            { _id: req.params.id, ...NOT_DELETED },
-            { $set: { deletedAt: new Date(), deletedBy: req.user?._id || null } },
-            { new: true }
-        );
-        if (!order) {
+        //
+        // The stamp and its paired adjustments (stock return, coupon
+        // release) run as ONE unit — inside a MongoDB transaction
+        // when the deployment supports it (utils/transactions), so a
+        // hard crash between them can no longer leave them split; on
+        // a standalone server the same steps run sequentially, each
+        // already atomic on its own, exactly as before.
+        const outcome = await withTransaction(async (session) => {
+            const claimed = await Order.findOneAndUpdate(
+                { _id: req.params.id, ...NOT_DELETED },
+                { $set: { deletedAt: new Date(), deletedBy: req.user?._id || null } },
+                { new: true, ...(session ? { session } : {}) }
+            );
+            if (!claimed) return { lost: true };
+
+            // A deleted live order frees its stock again; a cancelled
+            // or refunded order already returned it when it entered
+            // that status. Restoring the order (Settings → Deleted
+            // Items) takes the stock back out — the exact inverse,
+            // run by the trash controller.
+            if (!statusReturnsStock(claimed.status)) {
+                await adjustStock(claimed.items, +1, session);
+            }
+
+            // Trashing also releases the order's coupon redemption —
+            // the redemption counts only while the order is live (the
+            // state rule). Restoring the order re-records it.
+            if (await syncCouponUse(claimed, session)) {
+                await claimed.save(session ? { session } : undefined);
+            }
+            return { order: claimed };
+        });
+        if (outcome.lost) {
             return res.status(404).json({ message: 'Order not found' });
-        }
-
-        // A deleted live order frees its stock again; a cancelled or
-        // refunded order already returned it when it entered that
-        // status. Restoring the order (Settings → Deleted Items) takes
-        // the stock back out — the exact inverse, run by the trash
-        // controller.
-        if (!statusReturnsStock(order.status)) {
-            await adjustStock(order.items, +1);
-        }
-
-        // Trashing also releases the order's coupon redemption — the
-        // redemption counts only while the order is live (the state
-        // rule). Restoring the order re-records it.
-        if (await syncCouponUse(order)) {
-            await order.save();
         }
 
         res.json({ message: 'Order removed successfully' });

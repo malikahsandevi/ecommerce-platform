@@ -24,6 +24,7 @@ const {
     Setting,
 } = require('../models');
 const { planRestore, applyRestore, NOT_DELETED } = require('../utils/softDelete');
+const { withTransaction } = require('../utils/transactions');
 const { adjustStock, statusReturnsStock, syncCouponUse } = require('./orderController');
 const { syncProductRating } = require('./reviewController');
 const {
@@ -275,26 +276,36 @@ const restoreItem = async (req, res) => {
         // carry no tombstoned unique values, so restoreValues is
         // empty for them and the claim is the whole write.)
         if (segment === 'orders') {
-            const claimed = await Order.findOneAndUpdate(
-                { _id: doc._id, deletedAt: { $ne: null } },
-                {
-                    $set: { ...restoreValues, deletedAt: null, deletedBy: null },
-                    $unset: { deletedUniques: '' },
-                },
-                { new: true }
-            );
-            if (!claimed) {
+            // The claim and its paired adjustments (stock re-reserve,
+            // coupon re-record) run as ONE unit — inside a MongoDB
+            // transaction when the deployment supports it
+            // (utils/transactions), so a hard crash between them can
+            // no longer leave them split; on a standalone server the
+            // same steps run sequentially, exactly as before.
+            const outcome = await withTransaction(async (session) => {
+                const claimed = await Order.findOneAndUpdate(
+                    { _id: doc._id, deletedAt: { $ne: null } },
+                    {
+                        $set: { ...restoreValues, deletedAt: null, deletedBy: null },
+                        $unset: { deletedUniques: '' },
+                    },
+                    { new: true, ...(session ? { session } : {}) }
+                );
+                if (!claimed) return { lost: true };
+                if (!statusReturnsStock(claimed.status)) {
+                    await adjustStock(claimed.items, -1, session);
+                }
+                if (await syncCouponUse(claimed, session)) {
+                    await claimed.save(session ? { session } : undefined);
+                }
+                return { restored: true };
+            });
+            if (outcome.lost) {
                 const live = await Order.findOne({ _id: doc._id, ...NOT_DELETED });
                 if (live) return res.json({ message: 'Item restored.' });
                 return res.status(404).json({
                     message: 'This item is not in Deleted Items.',
                 });
-            }
-            if (!statusReturnsStock(claimed.status)) {
-                await adjustStock(claimed.items, -1);
-            }
-            if (await syncCouponUse(claimed)) {
-                await claimed.save();
             }
             return res.json({ message: 'Item restored.' });
         }
