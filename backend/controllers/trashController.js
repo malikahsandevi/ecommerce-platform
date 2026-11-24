@@ -233,6 +233,15 @@ const restoreItem = async (req, res) => {
 
         const doc = await def.Model.findOne({ _id: req.params.id, ...TRASHED });
         if (!doc) {
+            // Restore is idempotent for orders: when a parallel
+            // restore (or the first half of a double-click) already
+            // brought the order back, the end state this request
+            // asked for holds — answer success and move nothing. An
+            // order that exists nowhere still answers 404.
+            if (segment === 'orders') {
+                const live = await Order.findOne({ _id: req.params.id, ...NOT_DELETED });
+                if (live) return res.json({ message: 'Item restored.' });
+            }
             return res.status(404).json({ message: 'This item is not in Deleted Items.' });
         }
 
@@ -255,6 +264,41 @@ const restoreItem = async (req, res) => {
         }
 
         const restoreValues = await planRestore(def.Model, doc);
+
+        // Orders restore through an ATOMIC claim: the conditional
+        // update only lands while the order is still trashed, so a
+        // burst of parallel restores (or a double-click) produces
+        // exactly one winner that re-reserves the stock and
+        // re-records the coupon redemption. A loser whose order is
+        // live again answers success without moving anything — the
+        // restore it asked for has happened, exactly once. (Orders
+        // carry no tombstoned unique values, so restoreValues is
+        // empty for them and the claim is the whole write.)
+        if (segment === 'orders') {
+            const claimed = await Order.findOneAndUpdate(
+                { _id: doc._id, deletedAt: { $ne: null } },
+                {
+                    $set: { ...restoreValues, deletedAt: null, deletedBy: null },
+                    $unset: { deletedUniques: '' },
+                },
+                { new: true }
+            );
+            if (!claimed) {
+                const live = await Order.findOne({ _id: doc._id, ...NOT_DELETED });
+                if (live) return res.json({ message: 'Item restored.' });
+                return res.status(404).json({
+                    message: 'This item is not in Deleted Items.',
+                });
+            }
+            if (!statusReturnsStock(claimed.status)) {
+                await adjustStock(claimed.items, -1);
+            }
+            if (await syncCouponUse(claimed)) {
+                await claimed.save();
+            }
+            return res.json({ message: 'Item restored.' });
+        }
+
         applyRestore(doc, restoreValues);
         try {
             await doc.save();
@@ -270,20 +314,10 @@ const restoreItem = async (req, res) => {
             throw error;
         }
 
-        // Module side effects the soft delete applied, reversed:
-        // a restored order re-reserves the stock its delete returned
-        // (cancelled/refunded orders never held stock, so they skip
-        // this, mirroring the delete) and re-records the coupon
-        // redemption its delete released; a restored review counts
-        // toward its product's rating again.
-        if (segment === 'orders') {
-            if (!statusReturnsStock(doc.status)) {
-                await adjustStock(doc.items, -1);
-            }
-            if (await syncCouponUse(doc)) {
-                await doc.save();
-            }
-        }
+        // Module side effects the soft delete applied, reversed: a
+        // restored review counts toward its product's rating again.
+        // (Orders run their side effects inside the atomic claim
+        // above and never reach this path.)
         if (segment === 'reviews') {
             await syncProductRating(doc.product);
         }

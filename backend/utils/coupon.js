@@ -37,6 +37,27 @@ const { NOT_DELETED } = require('./softDelete');
 
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Whether a coupon's validity has ended at `now`. A DATE-ONLY
+ * validUntil — stored at exactly UTC midnight, which is what the
+ * admin form's date input saves — covers that whole day: the coupon
+ * expires at the END of its end date, not at its start (a coupon set
+ * to end today must still work today). A validUntil carrying a time
+ * compares exactly. The admin's derived status displays
+ * (couponConfig / resourceRegistry) and the export's mirror apply
+ * this same rule, so the panel, the export and redemption can never
+ * disagree about whether a coupon is expired.
+ */
+const couponExpired = (validUntil, now = new Date()) => {
+    if (!validUntil) return false;
+    const end = new Date(validUntil).getTime();
+    if (Number.isNaN(end)) return false;
+    const dateOnly = end % DAY_MS === 0;
+    return now.getTime() > (dateOnly ? end + DAY_MS - 1 : end);
+};
+
 /**
  * Resolves a redeem code against an order.
  * context: {
@@ -63,7 +84,7 @@ const resolveCoupon = async (rawCode, context = {}) => {
     if (coupon.validFrom && now < new Date(coupon.validFrom)) {
         throw new Error('This coupon is not valid yet.');
     }
-    if (coupon.validUntil && now > new Date(coupon.validUntil)) {
+    if (couponExpired(coupon.validUntil, now)) {
         throw new Error('This coupon has expired.');
     }
     // Global usage limit: null = unlimited; 0 = dead (usedCount 0 is
@@ -152,6 +173,33 @@ const recordCouponUse = async (couponId) => {
 };
 
 /**
+ * Atomically claims one redemption against the coupon's global usage
+ * limit — the limit check and the increment are ONE conditional
+ * update, so two orders placed at the same moment can never both
+ * pass a limit of 1 (the resolver's read-then-check alone races:
+ * both reads see the old count). Returns true when the claim landed.
+ * A null (or absent) usageLimit is unlimited and always claims; a
+ * limit of 0 never claims. Callers release the claim with
+ * releaseCouponUse when the order does not go through after all.
+ */
+const claimCouponUse = async (couponId) => {
+    if (!couponId) return false;
+    const result = await Coupon.updateOne(
+        {
+            _id: couponId,
+            $expr: {
+                $or: [
+                    { $eq: ['$usageLimit', null] },
+                    { $lt: [{ $ifNull: ['$usedCount', 0] }, '$usageLimit'] },
+                ],
+            },
+        },
+        { $inc: { usedCount: 1 } }
+    );
+    return result.modifiedCount === 1;
+};
+
+/**
  * Releases one redemption — the inverse of recordCouponUse, run when
  * the order carrying the coupon leaves the counted state (cancelled,
  * refunded or trashed). The match on a positive usedCount keeps the
@@ -165,4 +213,4 @@ const releaseCouponUse = async (couponId) => {
     );
 };
 
-module.exports = { resolveCoupon, recordCouponUse, releaseCouponUse };
+module.exports = { resolveCoupon, recordCouponUse, releaseCouponUse, claimCouponUse, couponExpired };
