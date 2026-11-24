@@ -21,6 +21,11 @@ export interface StatCardProps {
    *  inside its Storage Providers card). Cards that pass nothing
    *  render exactly as before. */
   extra?: React.ReactNode;
+  /** Optional small control rendered inline, right beside the value
+   *  (e.g. the Media page's upload-destination arrow menu beside the
+   *  Storage Providers card's destination name). Cards that pass
+   *  nothing render exactly as before. */
+  valueAddon?: React.ReactNode;
 }
 
 // The four variants are steps of ONE ramp of the Admin Panel Color
@@ -54,6 +59,7 @@ const StatCard: React.FC<StatCardProps> = ({
   icon: Icon,
   theme = "green",
   extra,
+  valueAddon,
 }) => {
   const { t } = useLanguage();
   const accent = variantColor(theme, useAdminColor());
@@ -90,9 +96,12 @@ const StatCard: React.FC<StatCardProps> = ({
 
       {/* Main Content */}
       <div className="mt-2">
-        <h3 className="text-xl font-bold tracking-tight text-[var(--text)]">
-          {value}
-        </h3>
+        <div className="flex items-center gap-1">
+          <h3 className="text-xl font-bold tracking-tight text-[var(--text)]">
+            {value}
+          </h3>
+          {valueAddon}
+        </div>
 
         <p className="text-[11px] text-[var(--text-muted)] mt-0.5">{t(period)}</p>
 

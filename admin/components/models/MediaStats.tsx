@@ -31,6 +31,9 @@ interface StorageEntryView {
   files: number;
   /** The provider ACCOUNT's own usage, when its API reports it. */
   usage: EntryUsage | null;
+  /** The space written in this entry's Settings plan field
+   *  (storageLimit, e.g. "25 GB"; "" when the admin left it empty). */
+  planStorageLimit?: string | null;
 }
 
 interface StorageInfo {
@@ -64,25 +67,47 @@ const PROVIDER_LABELS: Record<string, string> = {
 const GB = 1024 * 1024 * 1024;
 
 /**
+ * Parse the space written in a Settings plan field ("25 GB",
+ * "500 MB", "1 TB", a bare number = GB) into bytes. Returns null
+ * when the field is empty or holds no usable size — the caller
+ * then falls back to the provider-reported total, and shows a
+ * plain "total not set" note when neither exists.
+ */
+function parsePlanLimitBytes(text?: string | null): number | null {
+  if (!text) return null;
+  const match = String(text).replace(/,/g, "").match(/(\d+(?:\.\d+)?)\s*(TB|GB|MB|KB|B)?/i);
+  if (!match) return null;
+  const value = parseFloat(match[1]);
+  if (!Number.isFinite(value) || value <= 0) return null;
+  const unit = (match[2] || "GB").toUpperCase();
+  const multiplier =
+    unit === "TB" ? GB * 1024 : unit === "GB" ? GB : unit === "MB" ? 1024 * 1024 : unit === "KB" ? 1024 : 1;
+  return value * multiplier;
+}
+
+/**
  * The Media page's four summary cards (replacing the generic StatsGrid):
  *  1. library counts by lifecycle status,
  *  2. storage used / available / total across every configured entry —
  *     the ACCOUNT usage each provider reports (that is what consumes
  *     quota), falling back to library-measured bytes per entry,
- *  3. every configured storage entry with its connected status,
+ *  3. the upload destination: the entry uploads currently land on,
+ *     with a small dropdown-arrow menu beside its name to switch
+ *     between "Auto" (the server-side rotation policy fills one
+ *     storage at a time and shifts at 80% of its account quota) and
+ *     a pin on one entry; under the name, plain detail lines say
+ *     where uploads go and list every entry with its plain status,
  *  4. space per provider — the same account-usage total as card 2,
- *     broken down per entry: each entry leads with its ACCOUNT's usage
- *     (the space that provider has actually consumed) and keeps this
- *     library's own bytes + file count as the secondary detail.
+ *     broken down per entry: each entry shows its USED space (its
+ *     ACCOUNT's usage — the space that provider has actually
+ *     consumed), its TOTAL (the space written in the entry's
+ *     Settings plan field when filled, otherwise the total the
+ *     provider reports) and the AVAILABLE remainder on card 2's
+ *     basis, keeping this library's own bytes + file count as the
+ *     secondary detail.
  * Entries that point at the SAME provider account (same Cloudinary
  * cloud name) report one and the same account usage — it is counted
  * ONCE in every total, and their lines note the shared account.
- * The Storage Providers card also carries the upload-destination
- * control: "Auto" (the server-side rotation policy fills one storage
- * at a time and shifts at 80% of its account quota) or a pin on one
- * entry. The card names the entry uploads currently land on, and
- * says when a stored pin is being overridden by Auto because its
- * entry is switched off.
  * Everything is computed from the API — nothing is hard-coded.
  */
 export default function MediaStats({ items, isLoading = false }: { items: Row[]; isLoading?: boolean }) {
@@ -202,80 +227,111 @@ export default function MediaStats({ items, isLoading = false }: { items: Row[];
     const singleGroup = groups.length === 1 ? groups[0] : undefined;
     const singlePlan = singleGroup ? groupUsage(singleGroup)?.plan ?? null : null;
 
-    // Card 3 — every configured entry with its status.
+    // Card 3 — the upload destination. The value names the entry
+    // uploads currently land on. The destination choice is a small
+    // dropdown-arrow button beside that name (Ahsan's order — the
+    // full select box that used to sit in the card body is gone):
+    // the house Select rendered as an arrow-only trigger, opening
+    // the same compact menu ("Auto" or a pin on one entry) with the
+    // same persistence and semantics as before. The menu shows the
+    // choice actually in effect: while a stored pin's entry is
+    // switched off, Auto is what decides, so Auto is what the menu
+    // marks. Under the name, plain detail in simple words: one line
+    // saying where uploads go (or why Auto took over), then every
+    // entry with its plain status — Connected / Switched off / not
+    // configured — so no information the old period line carried
+    // is lost.
     const targetEntry =
       entries.find((entry) => entry.slug === storage?.uploadTarget) || entries[0];
     const providersValue = targetEntry?.title || "Cloudinary";
-    const providersPeriod = entries.length
-      ? entries
-          .map(
-            (entry) =>
-              `${entry.title} ${
-                !entry.configured
-                  ? t("not configured")
-                  : entry.isConnected
-                    ? t("Connected")
-                    : t("Switched off")
-              }`,
-          )
-          .join(" · ")
-      : t("Connected · AWS S3 & Firebase not configured");
-
-    // Card 3's destination control — Auto (the rotation policy) or a
-    // pin on one entry. The select shows the choice actually in
-    // effect: while a stored pin's entry is switched off, Auto is
-    // what decides, so Auto is what the select shows, and the line
-    // under it says why. With a pin in effect no line is needed —
-    // the select itself names the destination.
+    const entryStatus = (entry: StorageEntryView) =>
+      !entry.configured
+        ? t("not configured")
+        : entry.isConnected
+          ? t("Connected")
+          : t("Switched off");
     const choiceRaw = storage?.uploadTargetChoice || "auto";
     const pinEntry =
       choiceRaw !== "auto" ? entries.find((entry) => entry.slug === choiceRaw) : undefined;
     const pinInEffect = Boolean(storage && !storage.uploadTargetFallback && pinEntry);
     const selectValue = pinInEffect ? choiceRaw : "auto";
-    const providersExtra =
+    const providersPeriod = !entries.length
+      ? t("Connected · AWS S3 & Firebase not configured")
+      : storage?.uploadTargetFallback && pinEntry
+        ? t("{entry} is switched off — uploads are using Auto → {target}")
+            .replace("{entry}", pinEntry.title)
+            .replace("{target}", targetEntry?.title || "")
+        : pinInEffect && pinEntry
+          ? t("Uploads go to {entry}").replace("{entry}", pinEntry.title)
+          : targetEntry
+            ? t("Auto → {entry}").replace("{entry}", targetEntry.title)
+            : t("Connected · AWS S3 & Firebase not configured");
+    const providersAddon =
       uploadableEntries.length > 1 ? (
-        <div className="flex flex-col gap-1.5">
-          <Select
-            value={selectValue}
-            options={[
-              { label: t("Auto"), value: "auto" },
-              ...uploadableEntries.map((entry) => ({ label: entry.title, value: entry.slug })),
-            ]}
-            onChange={handleTargetChange}
-            disabled={targetBusy}
-            variant="secondary"
-            size="md"
-            menuWide
-          />
-          {storage?.uploadTargetFallback && pinEntry ? (
-            <span className="text-[11px] text-[var(--text-muted)]">
-              {t("{entry} is switched off — uploads are using Auto → {target}")
-                .replace("{entry}", pinEntry.title)
-                .replace("{target}", targetEntry?.title || "")}
-            </span>
-          ) : selectValue === "auto" && targetEntry ? (
-            <span className="text-[11px] text-[var(--text-muted)]">
-              {t("Auto → {entry}").replace("{entry}", targetEntry.title)}
-            </span>
-          ) : null}
-        </div>
+        <Select
+          value={selectValue}
+          options={[
+            { label: t("Auto"), value: "auto" },
+            ...uploadableEntries.map((entry) => ({ label: entry.title, value: entry.slug })),
+          ]}
+          onChange={handleTargetChange}
+          disabled={targetBusy}
+          variant="ghost"
+          size="sm"
+          triggerLabel=""
+          menuWide
+          aria-label={t("Upload destination")}
+        />
       ) : undefined;
+    const providersExtra = entries.length ? (
+      <div className="flex flex-col gap-0.5">
+        {entries.map((entry) => (
+          <span key={entry.slug} className="text-[11px] text-[var(--text-muted)]">
+            {entry.title} — {entryStatus(entry)}
+          </span>
+        ))}
+      </div>
+    ) : undefined;
 
     // Card 4 — space per provider: the SAME account-usage total as
-    // card 2, broken down per entry. Each entry leads with its
-    // ACCOUNT's usage — the space that provider has actually
-    // consumed; this library's bytes + file count on the entry stay
-    // visible as the secondary detail. An entry whose provider
-    // reports no account usage falls back to its library bytes as
-    // the figure. Entries sharing one account show that account's
-    // figure on each of their lines (noted as a shared account),
-    // while the headline counts the account only once.
+    // card 2, broken down per entry. Each entry shows three plain
+    // numbers (Ahsan's order): USED — its ACCOUNT's usage, the
+    // space that provider has actually consumed (an entry whose
+    // provider reports no account usage falls back to its library
+    // bytes); TOTAL — the space written in the entry's Settings
+    // plan field when that is filled, otherwise the total the
+    // provider itself reports (Cloudinary: its credit limit);
+    // AVAILABLE — the remainder on card 2's basis: on Cloudinary
+    // the CREDIT remainder (the total in effect minus the used
+    // credit share), never total − storage bytes. An entry with
+    // no total from either source shows its used figure with a
+    // plain "total not set" note — no number is ever invented.
+    // This library's bytes + file count on the entry stay visible
+    // as the secondary detail. Entries sharing one account show
+    // that account's figures on each of their lines (noted as a
+    // shared account), while the headline counts it only once.
     const providerSummary = [
       ...entries.map((entry) => {
         const account = accountUsedOf(entry);
-        if (account == null) {
-          return `${entry.title} ${formatBytes(entry.usedBytes)} (${entry.files} ${t("files")})`;
+        const usedFigure = account ?? entry.usedBytes;
+        const settingsTotal = parsePlanLimitBytes(entry.planStorageLimit);
+        const reportedTotal =
+          entry.usage?.creditsLimit != null ? entry.usage.creditsLimit * GB : null;
+        const total = settingsTotal ?? reportedTotal;
+        let available: number | null = null;
+        if (total != null) {
+          available =
+            entry.usage?.creditsUsed != null
+              ? Math.max(0, total / GB - entry.usage.creditsUsed) * GB
+              : Math.max(0, total - usedFigure);
         }
+        const figures =
+          total != null
+            ? t("{used} used · {available} available · {total} total")
+                .replace("{used}", formatBytes(usedFigure))
+                .replace("{available}", formatBytes(available))
+                .replace("{total}", formatBytes(total))
+            : t("{used} used · total not set").replace("{used}", formatBytes(usedFigure));
         const detail = [
           `${t("library")} ${formatBytes(entry.usedBytes)}`,
           `${entry.files} ${t("files")}`,
@@ -283,7 +339,7 @@ export default function MediaStats({ items, isLoading = false }: { items: Row[];
         if ((accountGroups.get(accountKeyOf(entry))?.length || 0) > 1) {
           detail.push(t("shared account"));
         }
-        return `${entry.title} ${formatBytes(account)} (${detail.join(" · ")})`;
+        return `${entry.title} ${figures} (${detail.join(" · ")})`;
       }),
       ...Object.entries(storage?.providers || {})
         .filter(([key]) => !entrySlugs.has(key))
@@ -323,6 +379,7 @@ export default function MediaStats({ items, isLoading = false }: { items: Row[];
         icon: Cloud,
         theme: "orange",
         extra: providersExtra,
+        valueAddon: providersAddon,
       },
       {
         title: t("Space by Provider"),

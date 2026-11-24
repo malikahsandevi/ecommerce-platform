@@ -299,6 +299,12 @@ const refreshCredentials = async (force = false) => {
                     cloudName,
                     apiKey,
                     apiSecret,
+                    // The admin-typed plan space for this entry
+                    // (Settings → API / Integrations, the plan round's
+                    // storageLimit field, e.g. "25 GB") — the Media
+                    // page's Space by Provider card prefers it over
+                    // the provider-reported total when it is filled.
+                    planStorageLimit: fields.storageLimit || '',
                     configured: isCloudinary
                         ? Boolean(cloudName && apiKey && apiSecret)
                         : Object.keys(fields).length > 0 ||

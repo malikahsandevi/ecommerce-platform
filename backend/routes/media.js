@@ -219,6 +219,11 @@ router.get('/storage', protect, requirePermission('Media', 'view'), async (req, 
                     isConnected: entry.isConnected,
                     configured: entry.configured,
                     ...(entry.subService === 'cloudinary' ? { cloudName: entry.cloudName } : {}),
+                    // The space the admin wrote in this entry's
+                    // Settings plan field ("" when not filled) — the
+                    // Space by Provider card shows it as the total in
+                    // preference to the provider-reported quota.
+                    planStorageLimit: entry.planStorageLimit || '',
                     usedBytes: bucket.usedBytes,
                     files: bucket.files,
                     usage,
