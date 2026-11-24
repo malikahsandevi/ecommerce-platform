@@ -23,13 +23,28 @@ const startOfDay = (date) => {
     return d;
 };
 
+// Revenue sums an order's total only while the order is neither
+// cancelled nor refunded — a refund hands the money back, so it is no
+// longer income. Order COUNTS follow a different, older rule: every
+// order except cancelled counts (a refunded order still happened).
+// Mixed aggregates therefore match on NOT_DELETED alone and let these
+// two conditional sums apply each rule to its own figure.
+const revenueTotalSum = {
+    $sum: { $cond: [{ $in: ['$status', ['cancelled', 'refunded']] }, 0, '$total'] },
+};
+const nonCancelledCount = {
+    $sum: { $cond: [{ $eq: ['$status', 'cancelled'] }, 0, 1] },
+};
+
 const getDashboardData = async (req, res) => {
     try {
         const now = new Date();
 
         // Windows used by the series / comparison blocks. All of them are
         // computed from the real Order and User collections — cancelled
-        // orders never count as revenue or as orders in the charts.
+        // orders never count as revenue or as orders in the charts, and a
+        // refunded order's money is not revenue either, though the order
+        // itself still counts as an order.
         const sixMonthsStart = new Date(now.getFullYear(), now.getMonth() - 5, 1);
         const eightDaysStart = startOfDay(new Date(now.getTime() - 7 * DAY_MS));
         const thisWeekStart = new Date(now.getTime() - 7 * DAY_MS);
@@ -37,15 +52,17 @@ const getDashboardData = async (req, res) => {
         const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
         const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
 
-        const nonCancelled = { status: { $ne: 'cancelled' }, ...NOT_DELETED };
+        // Revenue-only match: neither a cancelled nor a refunded order's
+        // money is income.
+        const revenueOrders = { status: { $nin: ['cancelled', 'refunded'] }, ...NOT_DELETED };
         const sumInWindow = (from, to) => [
             {
                 $match: {
-                    ...nonCancelled,
+                    ...NOT_DELETED,
                     createdAt: to ? { $gte: from, $lt: to } : { $gte: from },
                 },
             },
-            { $group: { _id: null, revenue: { $sum: '$total' }, orders: { $sum: 1 } } },
+            { $group: { _id: null, revenue: revenueTotalSum, orders: nonCancelledCount } },
         ];
 
         // Run every query in parallel — sequentially awaiting the round
@@ -77,12 +94,12 @@ const getDashboardData = async (req, res) => {
             User.countDocuments({ role: 'Customer', ...NOT_DELETED }),
             Product.countDocuments({ ...NOT_DELETED }),
             Order.countDocuments({ ...NOT_DELETED }),
-            // Headline revenue matches the charts: a cancelled order is
-            // not revenue. (This aggregate used to sum EVERY order, so a
-            // cancelled $999 order inflated the stat card while the chart
-            // below it honestly showed $0 for it.)
+            // Headline revenue matches the charts: a cancelled or
+            // refunded order is not revenue. (This aggregate used to sum
+            // EVERY order, so a cancelled $999 order inflated the stat
+            // card while the chart below it honestly showed $0 for it.)
             Order.aggregate([
-                { $match: nonCancelled },
+                { $match: revenueOrders },
                 { $group: { _id: null, total: { $sum: '$total' } } },
             ]),
             Order.find({ ...NOT_DELETED }).sort({ createdAt: -1 }).limit(5).populate('user', 'firstName lastName email avatar'),
@@ -92,10 +109,11 @@ const getDashboardData = async (req, res) => {
                 { $match: { ...NOT_DELETED } },
                 { $group: { _id: '$category', count: { $sum: 1 } } },
             ]),
-            // Per-category SALES: every line of a non-cancelled order
-            // counts price × quantity toward its product's category.
+            // Per-category SALES: every line of a non-cancelled,
+            // non-refunded order counts price × quantity toward its
+            // product's category.
             Order.aggregate([
-                { $match: nonCancelled },
+                { $match: revenueOrders },
                 { $unwind: '$items' },
                 {
                     $lookup: {
@@ -117,22 +135,22 @@ const getDashboardData = async (req, res) => {
             ]),
             Analytics.findOne(),
             Order.aggregate([
-                { $match: { createdAt: { $gte: sixMonthsStart }, ...nonCancelled } },
+                { $match: { createdAt: { $gte: sixMonthsStart }, ...NOT_DELETED } },
                 {
                     $group: {
                         _id: { year: { $year: '$createdAt' }, month: { $month: '$createdAt' } },
-                        revenue: { $sum: '$total' },
-                        orders: { $sum: 1 },
+                        revenue: revenueTotalSum,
+                        orders: nonCancelledCount,
                     },
                 },
             ]),
             Order.aggregate([
-                { $match: { createdAt: { $gte: eightDaysStart }, ...nonCancelled } },
+                { $match: { createdAt: { $gte: eightDaysStart }, ...NOT_DELETED } },
                 {
                     $group: {
                         _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
-                        revenue: { $sum: '$total' },
-                        orders: { $sum: 1 },
+                        revenue: revenueTotalSum,
+                        orders: nonCancelledCount,
                     },
                 },
             ]),
@@ -264,7 +282,8 @@ const getDashboardData = async (req, res) => {
         };
 
         // Top Categories ranks by SALES, not by catalog size: revenue is
-        // summed from real (non-cancelled) order lines per category.
+        // summed from real (non-cancelled, non-refunded) order lines per
+        // category.
         // Ties fall back to product count, then name, so the ranking is
         // stable. Only the top 5 are returned; totalSales sums revenue
         // across ALL categories so the donut centre is store-wide.
@@ -353,15 +372,14 @@ const getRevenueRange = async (req, res) => {
             {
                 $match: {
                     createdAt: { $gte: fromDate, $lt: new Date(toDate.getTime() + DAY_MS) },
-                    status: { $ne: 'cancelled' },
                     ...NOT_DELETED,
                 },
             },
             {
                 $group: {
                     _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
-                    revenue: { $sum: '$total' },
-                    orders: { $sum: 1 },
+                    revenue: revenueTotalSum,
+                    orders: nonCancelledCount,
                 },
             },
         ]);
