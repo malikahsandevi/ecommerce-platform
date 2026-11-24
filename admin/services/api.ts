@@ -24,9 +24,12 @@ apiClient.interceptors.request.use((config) => {
     // Settings Lock: the full Settings reads require the short-lived
     // unlock proof minted by POST /settings/verify-password (see
     // services/settingsLock.ts, which owns the storage keys). Present
-    // it on settings requests only — the server enforces it; an
+    // it on every request the server gates with that proof — the
+    // /settings reads AND the Deleted Items list (/trash), which sits
+    // behind the same entry gate. The server enforces it; an
     // absent/expired proof simply earns a 403 SETTINGS_LOCKED.
-    if ((config.url || '').includes('/settings')) {
+    const requestUrl = config.url || '';
+    if (requestUrl.includes('/settings') || requestUrl.includes('/trash')) {
       try {
         const unlock = sessionStorage.getItem('settings-unlock-token');
         const exp = Number(sessionStorage.getItem('settings-unlock-exp') || 0);
@@ -59,6 +62,28 @@ apiClient.interceptors.response.use(
         localStorage.removeItem('adminUser');
         window.dispatchEvent(new Event('admin:session-expired'));
       }
+      throw error;
+    }
+
+    // A 403 SETTINGS_LOCKED means the Settings unlock proof is gone or
+    // expired (15 minutes). Drop the stored proof and broadcast it —
+    // the Settings page answers with its lock screen, so no caller
+    // should surface this refusal as an error toast of its own. (The
+    // verify-password refusal carries no such code and never lands
+    // here.)
+    if (
+      error.response?.status === 403 &&
+      (error.response.data as { code?: string } | undefined)?.code ===
+        'SETTINGS_LOCKED' &&
+      typeof window !== 'undefined'
+    ) {
+      try {
+        sessionStorage.removeItem('settings-unlock-token');
+        sessionStorage.removeItem('settings-unlock-exp');
+      } catch {
+        /* storage unavailable — the server still enforces expiry */
+      }
+      window.dispatchEvent(new Event('admin:settings-locked'));
       throw error;
     }
 

@@ -29,6 +29,7 @@ import {
   clearSettingsUnlock,
   hasSettingsUnlock,
   isSettingsLockedError,
+  isUnauthorizedError,
 } from "@/services/settingsLock";
 import { settingsService } from "@/services/settingsService";
 import { extractApiError } from "@/services/api";
@@ -118,7 +119,9 @@ export default function SettingsPage() {
           // lock screen, never an error toast.
           clearSettingsUnlock();
           setLocked(true);
-        } else {
+        } else if (!isUnauthorizedError(loadError)) {
+          // A 401 belongs to the auth layer (session-expired notice +
+          // login popup) — no second toast from here.
           toast.error(loadError instanceof Error ? loadError.message : t("Unable to load settings."));
         }
       })
@@ -126,6 +129,20 @@ export default function SettingsPage() {
         setLoading(false);
       });
   }, [t]);
+
+  // Any settings-area fetch can learn the unlock proof died mid-
+  // session (the api layer broadcasts a 403 SETTINGS_LOCKED as this
+  // event): drop straight back to the lock screen, whichever section
+  // is open — no panel content, no error toast.
+  useEffect(() => {
+    const handleSettingsLocked = () => {
+      clearSettingsUnlock();
+      setLocked(true);
+    };
+    window.addEventListener("admin:settings-locked", handleSettingsLocked);
+    return () =>
+      window.removeEventListener("admin:settings-locked", handleSettingsLocked);
+  }, []);
 
   // The settings API requires the admin token — wait for the session
   // before loading, and reload once it appears (the shell renders this
@@ -155,7 +172,15 @@ export default function SettingsPage() {
         if (!cancelled) setUsers(data);
       })
       .catch((loadError: unknown) => {
-        if (!cancelled) toast.error(loadError instanceof Error ? loadError.message : t("Unable to load users."));
+        // Locked (the page is switching to the lock screen) and 401
+        // (the auth layer owns it) are not error toasts.
+        if (
+          !cancelled &&
+          !isSettingsLockedError(loadError) &&
+          !isUnauthorizedError(loadError)
+        ) {
+          toast.error(loadError instanceof Error ? loadError.message : t("Unable to load users."));
+        }
       });
 
     return () => {

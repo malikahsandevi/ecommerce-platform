@@ -22,6 +22,10 @@ import {
 } from "@/services/currency";
 import { getTimeZoneOptions, resolveTimeZoneValue } from "@/services/timeZones";
 import { settingsService } from "@/services/settingsService";
+import {
+  isSettingsLockedError,
+  isUnauthorizedError,
+} from "@/services/settingsLock";
 import { toast } from "@/components/ui/Toast";
 import { useAdminAuth } from "@/services/authContext";
 import type {
@@ -1276,7 +1280,11 @@ function RolePermissionsPanel({
       .catch((loadError: unknown) => {
         if (!cancelled) {
           setLoadFailed(true);
-          toast.error(extractApiError(loadError));
+          // A 401 belongs to the auth layer (session-expired notice +
+          // login popup) — the load-failed note is enough from here.
+          if (!isUnauthorizedError(loadError)) {
+            toast.error(extractApiError(loadError));
+          }
         }
       })
       .finally(() => {
@@ -1672,7 +1680,11 @@ function SecurityPanel() {
       .catch((statusError) => {
         if (!cancelled) {
           setLoadFailed(true);
-          toast.error(extractApiError(statusError));
+          // A 401 belongs to the auth layer (session-expired notice +
+          // login popup) — no second toast from here.
+          if (!isUnauthorizedError(statusError)) {
+            toast.error(extractApiError(statusError));
+          }
         }
       });
     return () => {
@@ -3069,18 +3081,29 @@ function DeletedItemsPanel({ timeZone }: { timeZone?: string }) {
   const [items, setItems] = useState<DeletedItem[]>([]);
   const [moduleFilter, setModuleFilter] = useState("all");
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setLoadFailed(false);
     settingsService
       .getDeletedItems(moduleFilter === "all" ? undefined : moduleFilter)
       .then((data) => {
         if (!cancelled) setItems(data);
       })
       .catch((loadError: unknown) => {
-        if (!cancelled) toast.error(extractApiError(loadError));
+        if (cancelled) return;
+        // A refused fetch is NOT an empty trash: mark the load failed
+        // so the empty state below can never render for it. The locked
+        // refusal stays silent (the page is switching to the lock
+        // screen — the api layer broadcast it) and a 401 stays silent
+        // (the auth layer owns the session-expired path).
+        setLoadFailed(true);
+        if (!isSettingsLockedError(loadError) && !isUnauthorizedError(loadError)) {
+          toast.error(extractApiError(loadError));
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -3199,6 +3222,10 @@ function DeletedItemsPanel({ timeZone }: { timeZone?: string }) {
           <LoaderCircle size={18} className="animate-spin" />
           <span>{t("Loading...")}</span>
         </div>
+      ) : loadFailed ? (
+        <p className="rounded-lg border border-red-300 bg-red-500/10 p-3 text-xs text-red-600" role="alert">
+          {t("Deleted items could not be loaded.")}
+        </p>
       ) : items.length === 0 ? (
         <div className="flex flex-col items-center gap-2 py-10 text-center">
           <Trash2 size={28} className="text-[var(--text-muted)]" />

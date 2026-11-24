@@ -81,3 +81,13 @@ export function isSettingsLockedError(error: unknown): boolean {
     err?.response?.data?.code === "SETTINGS_LOCKED"
   );
 }
+
+/** True when an API error is a dead or absent session (401). The auth
+ *  layer owns that state — the api interceptor clears the token and
+ *  the auth provider surfaces the session-expired notice + login
+ *  popup — so settings-area fetches stay silent on 401 instead of
+ *  adding an error toast of their own. */
+export function isUnauthorizedError(error: unknown): boolean {
+  const err = error as { response?: { status?: number } };
+  return err?.response?.status === 401;
+}
