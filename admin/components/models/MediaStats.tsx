@@ -128,15 +128,13 @@ function StatRows({ rows }: { rows: Array<{ label: string; value: string }> }) {
  *     linked account, each account's total taken per the settled
  *     preference order (the space written in its Settings plan
  *     field when filled, otherwise the total the provider
- *     reports). Broken down per entry as a rows/columns block:
- *     each entry shows its USED space (its ACCOUNT's usage — the
- *     space that provider has actually consumed), its TOTAL (same
- *     preference order) and the AVAILABLE remainder on card 2's
- *     basis, keeping this library's own bytes + file count as the
- *     secondary detail.
+ *     reports). Under the headline, one block per linked account
+ *     showing ONLY the account's name and its total storage (same
+ *     preference order; a plain "total not set" note when neither
+ *     source has one) — used/available figures live on card 2.
  * Entries that point at the SAME provider account (same Cloudinary
  * cloud name) report one and the same account usage — it is counted
- * ONCE in every total, and their lines note the shared account.
+ * ONCE in every total.
  * Everything is computed from the API — nothing is hard-coded.
  */
 export default function MediaStats({ items, isLoading = false }: { items: Row[]; isLoading?: boolean }) {
@@ -335,24 +333,15 @@ export default function MediaStats({ items, isLoading = false }: { items: Row[];
     // groupTotal). Like card 2's quota it is all-or-nothing: an
     // account with no total from either source makes the headline
     // "—" rather than a partial sum dressed up as the total (its
-    // own block still shows its figures with the "total not set"
-    // note). Under the headline, one rows/columns block per
-    // linked account (Ahsan's order — no running paragraph): the
-    // account's name, then three label/value rows. USED — its
-    // ACCOUNT's usage, the space that provider has actually
-    // consumed (an entry whose provider reports no account usage
-    // falls back to its library bytes); TOTAL — the space written
-    // in the entry's Settings plan field when that is filled,
-    // otherwise the total the provider itself reports (Cloudinary:
-    // its credit limit); AVAILABLE — the remainder on card 2's
-    // basis: on Cloudinary the CREDIT remainder (the total in
-    // effect minus the used credit share), never total − storage
-    // bytes. An entry with no total from either source shows a
-    // plain "total not set" note in its Total row — no number is
-    // ever invented. This library's bytes + file count on the
-    // entry stay visible as the secondary detail under the rows.
-    // Entries sharing one account show that account's figures on
-    // each of their blocks (noted as a shared account), while the
+    // own block still shows the "total not set" note). Under the
+    // headline, one block per linked account showing ONLY the
+    // account's name and its total storage (Ahsan's order — the
+    // Used/Available rows and the library detail line that used
+    // to sit in these blocks are gone; used and available live
+    // on card 2). An entry with no total from either source
+    // shows the plain "total not set" note beside its name — no
+    // number is ever invented. Entries sharing one account show
+    // that account's total on each of their blocks, while the
     // headline counts it only once.
     // One account group's total per the preference order: the
     // first Settings plan limit written on any of its entries,
@@ -375,55 +364,31 @@ export default function MediaStats({ items, isLoading = false }: { items: Row[];
     const providerBlocks = (
       <div className="flex flex-col gap-2.5">
         {entries.map((entry) => {
-          const account = accountUsedOf(entry);
-          const usedFigure = account ?? entry.usedBytes;
           const settingsTotal = parsePlanLimitBytes(entry.planStorageLimit);
           const reportedTotal =
             entry.usage?.creditsLimit != null ? entry.usage.creditsLimit * GB : null;
           const total = settingsTotal ?? reportedTotal;
-          let available: number | null = null;
-          if (total != null) {
-            available =
-              entry.usage?.creditsUsed != null
-                ? Math.max(0, total / GB - entry.usage.creditsUsed) * GB
-                : Math.max(0, total - usedFigure);
-          }
-          const detail = [
-            `${t("library")} ${formatBytes(entry.usedBytes)}`,
-            `${entry.files} ${t("files")}`,
-          ];
-          if ((accountGroups.get(accountKeyOf(entry))?.length || 0) > 1) {
-            detail.push(t("shared account"));
-          }
           return (
-            <div key={entry.slug} className="flex flex-col gap-1">
-              <span className="text-[11px] font-semibold text-[var(--text)]">
-                {entry.title}
-              </span>
-              <StatRows
-                rows={[
-                  { label: t("Used"), value: formatBytes(usedFigure) },
-                  { label: t("Available"), value: formatBytes(available) },
-                  {
-                    label: t("Total"),
-                    value: total != null ? formatBytes(total) : t("total not set"),
-                  },
-                ]}
-              />
-              <span className="text-[11px] text-[var(--text-muted)]">
-                {detail.join(" · ")}
+            <div
+              key={entry.slug}
+              className="flex items-baseline justify-between gap-2 text-[11px] leading-tight"
+            >
+              <span className="font-semibold text-[var(--text)]">{entry.title}</span>
+              <span className="font-semibold text-[var(--text)]">
+                {total != null ? formatBytes(total) : t("total not set")}
               </span>
             </div>
           );
         })}
-        {legacyBuckets.map(([key, bucket]) => (
-          <div key={key} className="flex flex-col gap-1">
-            <span className="text-[11px] font-semibold text-[var(--text)]">
+        {legacyBuckets.map(([key]) => (
+          <div
+            key={key}
+            className="flex items-baseline justify-between gap-2 text-[11px] leading-tight"
+          >
+            <span className="font-semibold text-[var(--text)]">
               {PROVIDER_LABELS[key] || key}
             </span>
-            <StatRows
-              rows={[{ label: t("Used"), value: formatBytes(bucket?.usedBytes || 0) }]}
-            />
+            <span className="font-semibold text-[var(--text)]">{t("total not set")}</span>
           </div>
         ))}
       </div>
