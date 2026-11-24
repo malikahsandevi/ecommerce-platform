@@ -9,6 +9,11 @@ const app = express();
 // Content-Disposition is exposed so the admin panel can read the
 // export filename the server sets on .xlsx downloads.
 app.use(cors({ exposedHeaders: ['Content-Disposition'] }));
+// Stripe webhook: signature verification runs over the RAW request
+// body (any JSON round-trip would change the bytes and break it), so
+// this one path is parsed raw BEFORE the JSON parser below and the
+// payments route receives a Buffer.
+app.use('/api/payments/webhook', express.raw({ type: '*/*', limit: '5mb' }));
 // 15mb: media uploads travel as base64 data URLs in JSON bodies. The
 // default 100kb limit silently rejected any real photo before the media
 // route's own parser ever saw the request.
@@ -70,6 +75,7 @@ app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/dashboard', require('./routes/dashboard'));
 app.use('/api/products', require('./routes/products'));
 app.use('/api/orders', require('./routes/orders'));
+app.use('/api/payments', require('./routes/payments'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/categories', require('./routes/categories'));
 app.use('/api/brands', require('./routes/brands'));

@@ -103,7 +103,14 @@ function signedUrl(value) {
 }
 
 const isPlainObject = (v) =>
-    v !== null && typeof v === 'object' && !Array.isArray(v) && !(v instanceof Date);
+    v !== null &&
+    typeof v === 'object' &&
+    !Array.isArray(v) &&
+    !(v instanceof Date) &&
+    // A raw Buffer body (the Stripe webhook path) is not JSON-shaped:
+    // walking it would rebuild it as a {0: byte, 1: byte, …} object
+    // and destroy the exact bytes a signature is verified over.
+    !(v instanceof Uint8Array);
 
 /** Deep-walk a JSON-shaped value, mapping every string through fn. */
 function mapStrings(value, fn, depth = 0) {
