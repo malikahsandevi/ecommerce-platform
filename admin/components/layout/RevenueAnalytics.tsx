@@ -2,9 +2,9 @@
 
 import React, { useEffect, useState } from "react";
 import {
+  Area,
   CartesianGrid,
-  Line,
-  LineChart,
+  ComposedChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -242,7 +242,23 @@ export const RevenueAnalytics: React.FC<RevenueAnalyticsProps> = ({
               chart box with air on both sides — with left: 0 the labels
               started flush at the box edge and read as clipped/cramped
               at narrower card widths (Ahsan's mark on the $ labels). */}
-          <LineChart data={data} margin={{ top: 10, right: 6, left: 8, bottom: 4 }}>
+          <ComposedChart data={data} margin={{ top: 10, right: 6, left: 8, bottom: 4 }}>
+            {/* Soft shade under each line (Ahsan's order): a gradient
+                of the series' own palette colour, strongest at the
+                line and fading to transparent at the baseline. The
+                stops are built from the same live palette values as
+                the strokes, so previewing or switching any palette
+                re-shades the fills instantly. */}
+            <defs>
+              <linearGradient id="revenueAreaFill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={REVENUE_COLOR} stopOpacity={0.28} />
+                <stop offset="100%" stopColor={REVENUE_COLOR} stopOpacity={0} />
+              </linearGradient>
+              <linearGradient id="ordersAreaFill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={ORDERS_COLOR} stopOpacity={0.12} />
+                <stop offset="100%" stopColor={ORDERS_COLOR} stopOpacity={0} />
+              </linearGradient>
+            </defs>
             <CartesianGrid
               strokeDasharray="4 4"
               stroke="rgba(148,163,184,0.22)"
@@ -286,26 +302,28 @@ export const RevenueAnalytics: React.FC<RevenueAnalyticsProps> = ({
               domain={[0, (dataMax: number) => Math.max(2, Math.ceil(dataMax * 1.8))]}
             />
             <Tooltip content={<ChartTooltip />} cursor={{ stroke: `color-mix(in srgb, ${REVENUE_COLOR} 25%, transparent)` }} />
-            <Line
+            <Area
               yAxisId="revenue"
               type="monotone"
               dataKey="revenue"
               stroke={REVENUE_COLOR}
               strokeWidth={2.5}
+              fill="url(#revenueAreaFill)"
               dot={false}
               activeDot={{ r: 4.5, fill: REVENUE_COLOR, stroke: "#fff", strokeWidth: 2 }}
             />
-            <Line
+            <Area
               yAxisId="orders"
               type="monotone"
               dataKey="orders"
               stroke={ORDERS_COLOR}
               strokeWidth={2}
               strokeDasharray="6 6"
+              fill="url(#ordersAreaFill)"
               dot={false}
               activeDot={{ r: 4, fill: ORDERS_COLOR, stroke: "#fff", strokeWidth: 2 }}
             />
-          </LineChart>
+          </ComposedChart>
         </ResponsiveContainer>
       </div>
     </div>
