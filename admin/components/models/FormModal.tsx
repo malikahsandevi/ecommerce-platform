@@ -111,7 +111,7 @@ export interface FormModalProps {
   itemTypeLabel?: string;
   formData: ItemFormData;
   setFormData: React.Dispatch<React.SetStateAction<ItemFormData>>;
-  handleSave: (e: React.FormEvent) => void;
+  handleSave: (e: React.FormEvent) => void | Promise<void>;
   fields?: FormField[]; // Dynamic fields defined in page config
   categoryOptions?: SelectOption[];
   brandOptions?: SelectOption[];
@@ -207,6 +207,40 @@ export const FormModal: React.FC<FormModalProps> = ({
   // above this one, so a click on their backdrop targets their overlay,
   // not this one, and only closes the child.
   const backdropPressRef = useRef(false);
+
+  // Double-submit guard: while a save is in flight, repeat submits
+  // (a double-click on Create, an Enter mash, an impatient re-click)
+  // are ignored and the submit button is disabled, so one form can
+  // never create or update the same record twice. The ref blocks
+  // even same-frame repeats, before React has re-rendered the
+  // disabled state; the state drives the button's disabled look.
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const submittingRef = useRef(false);
+  const handleSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    setIsSubmitting(true);
+    const release = () => {
+      submittingRef.current = false;
+      setIsSubmitting(false);
+    };
+    try {
+      Promise.resolve(handleSave(event)).then(release, release);
+    } catch {
+      release();
+    }
+  };
+
+  // A modal closed mid-save must never reopen with the guard stuck
+  // on — closing always releases it (the save itself continues in
+  // the page handler, exactly as before).
+  useEffect(() => {
+    if (!isOpen) {
+      submittingRef.current = false;
+      setIsSubmitting(false);
+    }
+  }, [isOpen]);
 
   // Esc follows the same stacking: cropper first, then the picker,
   // then the form itself.
@@ -999,7 +1033,7 @@ export const FormModal: React.FC<FormModalProps> = ({
         {/* MODAL DYNAMIC FORM BODY */}
         <form
           id="itemFormModal"
-          onSubmit={handleSave}
+          onSubmit={handleSubmit}
           className="p-4 sm:p-6 space-y-6 overflow-y-auto flex flex-col flex-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-[var(--surface-muted)] [&::-webkit-scrollbar-thumb]:bg-[var(--primary)] [&::-webkit-scrollbar-thumb]:rounded-full"
         >
           {groupedSections.length > 0 ? (
@@ -1026,7 +1060,7 @@ export const FormModal: React.FC<FormModalProps> = ({
             {t("Cancel")}
           </Button>
 
-          <Button type="submit" form="itemFormModal" variant="primary" size="md">
+          <Button type="submit" form="itemFormModal" variant="primary" size="md" disabled={isSubmitting}>
             {formMode === "add" ? t("Create {item}").replace("{item}", t(itemTypeLabel)) : t("Save Changes")}
           </Button>
         </div>
