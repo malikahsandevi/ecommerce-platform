@@ -307,6 +307,7 @@ function MediaUrlField({
             alt={t("{label} preview").replace("{label}", t(label))}
             width={40}
             height={40}
+            loading="lazy"
             unoptimized
             className="h-10 w-10 shrink-0 rounded-lg border border-[var(--border)] object-contain"
           />
@@ -1817,6 +1818,8 @@ function SecurityPanel() {
               <img
                 src={setupData.qrCode}
                 alt={t("Two-factor enrolment QR code")}
+                loading="lazy"
+                decoding="async"
                 width={160}
                 height={160}
                 className="rounded-lg border border-[var(--border)] bg-white p-1"

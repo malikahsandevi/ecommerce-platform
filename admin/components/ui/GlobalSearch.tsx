@@ -444,6 +444,8 @@ export const GlobalSearch: React.FC = () => {
                         <img
                           src={result.image}
                           alt=""
+                          loading="lazy"
+                          decoding="async"
                           className="h-full w-full object-cover"
                         />
                       ) : (

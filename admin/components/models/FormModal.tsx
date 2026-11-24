@@ -858,6 +858,8 @@ export const FormModal: React.FC<FormModalProps> = ({
                   <img
                     src={rawValue}
                     alt={t("Preview")}
+                    loading="lazy"
+                    decoding="async"
                     className="w-9 h-9 rounded-lg object-cover border border-[var(--border)]"
                     onError={(e) => ((e.target as HTMLElement).style.display = "none")}
                   />

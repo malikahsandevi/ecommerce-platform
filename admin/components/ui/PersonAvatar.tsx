@@ -53,6 +53,8 @@ export const PersonAvatar: React.FC<{
       <img
         src={photo}
         alt={name}
+        loading="lazy"
+        decoding="async"
         className={`${sizeClass} rounded-full object-cover shrink-0 border border-[var(--border)]`}
         onError={() => setFailedSrc(photo)}
       />

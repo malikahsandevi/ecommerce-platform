@@ -228,6 +228,8 @@ export function DetailPanel<T extends DetailPanelData>({
                     <img
                       src={currentImage}
                       alt={selectedItem.title}
+                      loading="lazy"
+                      decoding="async"
                       className="max-h-full max-w-full object-contain"
                     />
                   </div>
@@ -239,6 +241,8 @@ export function DetailPanel<T extends DetailPanelData>({
                       <img
                         key={idx}
                         src={img}
+                        loading="lazy"
+                        decoding="async"
                         onClick={() => setActiveImage(img)}
                         className={`w-10 h-10 shrink-0 rounded-lg object-cover border cursor-pointer transition-all ${
                           currentImage === img

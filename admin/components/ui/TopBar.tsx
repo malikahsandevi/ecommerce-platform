@@ -177,6 +177,8 @@ export const TopBar = <T extends SearchableEntityRecord>({
     <img
       src={avatarSrc}
       alt={user.name}
+      loading="lazy"
+      decoding="async"
       onError={() => avatarSrc && setFailedAvatar(avatarSrc)}
       className="w-9 h-9 min-w-9 min-h-9 shrink-0 rounded-full object-cover ring-2 ring-(--primary)"
     />

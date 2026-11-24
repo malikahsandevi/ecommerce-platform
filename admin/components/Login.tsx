@@ -355,6 +355,8 @@ export const AdminLoginPopup: React.FC<AdminLoginPopupProps> = ({
                   <img
                     src={setupData.qrCode}
                     alt={t("Two-factor authentication QR code")}
+                    loading="lazy"
+                    decoding="async"
                     className="w-44 h-44 rounded-xl"
                     style={{ borderColor: "var(--border)", borderWidth: "1px", borderStyle: "solid" }}
                   />

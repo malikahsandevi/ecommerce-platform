@@ -106,6 +106,8 @@ const MobileNav: React.FC = () => {
               <img
                 src={avatarSrc}
                 alt={user.name || "Admin"}
+                loading="lazy"
+                decoding="async"
                 onError={() => setFailedAvatarUrl(avatarSrc ?? null)}
                 className="w-7 h-7 shrink-0 rounded-full object-cover ring-2 ring-(--primary)"
               />

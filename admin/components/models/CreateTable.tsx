@@ -125,6 +125,8 @@ function CellThumb({ src, alt }: { src: string; alt: string }) {
     <img
       src={src}
       alt={alt}
+      loading="lazy"
+      decoding="async"
       className="w-full h-full object-cover"
       onError={() => setFailed(true)}
     />

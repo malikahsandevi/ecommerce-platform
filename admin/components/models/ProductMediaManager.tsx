@@ -120,6 +120,8 @@ export const ProductMediaManager: React.FC<ProductMediaManagerProps> = ({
                 <img
                   src={entry.url}
                   alt={entryAlt(entry)}
+                  loading="lazy"
+                  decoding="async"
                   className="w-full h-full object-cover"
                 />
                 {isMain && (

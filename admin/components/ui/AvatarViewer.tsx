@@ -191,6 +191,8 @@ export const AvatarViewerTrigger: React.FC<AvatarViewerTriggerProps> = ({
         <img
           src={src}
           alt={alt}
+          loading="lazy"
+          decoding="async"
           onError={() => {
             setFailed(true);
             onError?.();
@@ -220,6 +222,8 @@ export const AvatarViewerTrigger: React.FC<AvatarViewerTriggerProps> = ({
             <img
               src={src}
               alt={alt}
+              loading="lazy"
+              decoding="async"
               data-avatar-viewer-image
               className="fixed z-[95] object-cover shadow-2xl"
               style={{

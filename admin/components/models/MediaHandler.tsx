@@ -980,12 +980,14 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
           <img
             src={item.effUrl || item.previewUrl}
             alt={item.altText || item.title || ""}
+            loading="lazy"
+            decoding="async"
             className="w-full h-full object-cover"
           />
         );
       case "video":
         return (
-          <video src={item.previewUrl} className="w-full h-full object-cover" />
+          <video src={item.previewUrl} preload="none" className="w-full h-full object-cover" />
         );
       case "audio":
         return <Music className="w-8 h-8 text-[var(--primary)]" />;
@@ -1596,6 +1598,8 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
           <img
             src={item.effUrl || item.previewUrl}
             alt={item.altText || item.title || ""}
+            loading="lazy"
+            decoding="async"
             className="max-h-full max-w-full object-contain"
           />
         );
@@ -1603,6 +1607,7 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
         return (
           <video
             src={item.previewUrl}
+            preload="none"
             controls
             className="max-h-full max-w-full object-contain"
           />
@@ -1730,6 +1735,8 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
               <img
                 src={entity.image}
                 alt=""
+                loading="lazy"
+                decoding="async"
                 className="h-full w-full object-cover"
               />
             ) : (

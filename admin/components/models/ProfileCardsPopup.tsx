@@ -48,6 +48,8 @@ const Thumb: React.FC<{ src?: string; name: string; size?: string }> = ({
     <img
       src={src}
       alt=""
+      loading="lazy"
+      decoding="async"
       className={`${size} shrink-0 rounded-lg border border-[var(--border)] object-cover`}
     />
   ) : (
