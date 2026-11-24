@@ -29,6 +29,19 @@ export interface StatCardProps {
    *  the value off the shared headline line. Cards that pass
    *  nothing render exactly as before. */
   valueAddon?: React.ReactNode;
+  /** Render ONLY the frame + title + icon — no value, no period
+   *  line, no extra. Used while a card's data is still loading:
+   *  the Media page's stat cards show nothing at all until their
+   *  figures arrive (Ahsan's order) instead of placeholder values
+   *  or fallback status lines. Cards that pass nothing render
+   *  exactly as before. */
+  bare?: boolean;
+  /** Tighter vertical rhythm (the Media page's stat cards, Ahsan's
+   *  order): less card padding, the detail block sits directly
+   *  under the value instead of being anchored to the card's
+   *  bottom edge, and an empty period line takes no space. Cards
+   *  that pass nothing render exactly as before. */
+  compact?: boolean;
 }
 
 // The four variants are steps of ONE ramp of the Admin Panel Color
@@ -63,12 +76,16 @@ const StatCard: React.FC<StatCardProps> = ({
   theme = "green",
   extra,
   valueAddon,
+  bare = false,
+  compact = false,
 }) => {
   const { t } = useLanguage();
   const accent = variantColor(theme, useAdminColor());
 
   return (
-    <div className="w-full min-w-0 flex flex-col p-4 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-xl transition-all">
+    <div
+      className={`w-full min-w-0 flex flex-col ${compact ? "p-3" : "p-4"} bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-xl transition-all`}
+    >
       {/* Top Header */}
       <div className="flex items-center justify-between gap-1">
         <div className="flex items-center gap-1.5">
@@ -97,30 +114,46 @@ const StatCard: React.FC<StatCardProps> = ({
         )}
       </div>
 
-      {/* Main Content — pinned directly under the header: the value
-          row sits at the same height in every card of a strip, no
-          matter how much detail each card carries below it. (The
-          card used to spread header and content apart with
-          justify-between, which pushed the value down by however
-          much shorter its card's detail block was.) */}
-      <div className="mt-2">
-        <div className="flex items-center gap-1">
-          <h3 className="min-w-0 truncate text-xl font-bold tracking-tight text-[var(--text)]">
-            {value}
-          </h3>
-          {valueAddon ? (
-            <div className="flex h-7 shrink-0 items-center">{valueAddon}</div>
+      {/* While the card's data is loading (bare), nothing at all
+          renders under the header — no placeholder value, no
+          fallback line (Ahsan's order). */}
+      {!bare && (
+        <>
+          {/* Main Content — pinned directly under the header: the value
+              row sits at the same height in every card of a strip, no
+              matter how much detail each card carries below it. (The
+              card used to spread header and content apart with
+              justify-between, which pushed the value down by however
+              much shorter its card's detail block was.) */}
+          <div className="mt-2">
+            <div className="flex items-center gap-1">
+              <h3 className="min-w-0 truncate text-xl font-bold tracking-tight text-[var(--text)]">
+                {value}
+              </h3>
+              {valueAddon ? (
+                <div className="flex h-7 shrink-0 items-center">{valueAddon}</div>
+              ) : null}
+            </div>
+
+            {/* In compact mode an empty period line takes no space
+                at all instead of reserving an empty text line. */}
+            {!compact || period ? (
+              <p className="text-[11px] text-[var(--text-muted)] mt-0.5">{t(period)}</p>
+            ) : null}
+          </div>
+
+          {/* Extra detail — anchored to the card's bottom edge (the
+              mt-auto absorbs whatever height the grid's stretch adds),
+              with the same 12px separation from the period line the
+              in-flow mt-3 used to give. In compact mode it instead
+              sits directly under the value block with that same 12px
+              separation, so a shorter card carries no empty gap
+              between its value and its detail rows. */}
+          {extra ? (
+            <div className={compact ? "mt-3" : "mt-auto pt-3"}>{extra}</div>
           ) : null}
-        </div>
-
-        <p className="text-[11px] text-[var(--text-muted)] mt-0.5">{t(period)}</p>
-      </div>
-
-      {/* Extra detail — anchored to the card's bottom edge (the
-          mt-auto absorbs whatever height the grid's stretch adds),
-          with the same 12px separation from the period line the
-          in-flow mt-3 used to give. */}
-      {extra ? <div className="mt-auto pt-3">{extra}</div> : null}
+        </>
+      )}
     </div>
   );
 };

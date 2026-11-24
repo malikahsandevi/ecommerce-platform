@@ -140,6 +140,7 @@ function StatRows({ rows }: { rows: Array<{ label: string; value: string }> }) {
 export default function MediaStats({ items, isLoading = false }: { items: Row[]; isLoading?: boolean }) {
   const { t } = useLanguage();
   const [storage, setStorage] = useState<StorageInfo | null>(null);
+  const [storageFailed, setStorageFailed] = useState(false);
   const [targetBusy, setTargetBusy] = useState(false);
 
   const fetchStorage = useCallback(() => {
@@ -147,15 +148,26 @@ export default function MediaStats({ items, isLoading = false }: { items: Row[];
     mediaService
       .storage()
       .then((data) => {
-        if (!cancelled) setStorage(data);
+        if (!cancelled) {
+          setStorage(data);
+          setStorageFailed(false);
+        }
       })
       .catch(() => {
-        if (!cancelled) setStorage(null);
+        if (!cancelled) setStorageFailed(true);
       });
     return () => {
       cancelled = true;
     };
   }, []);
+
+  // The storage figures are still on their way: the first fetch has
+  // produced neither data nor a failure. While this holds, the
+  // storage cards render their frames and titles only — nothing at
+  // all shows until the data loads (Ahsan's order). A FAILED fetch
+  // is not pending: the cards then keep the honest fallback figures
+  // they have always shown for that state.
+  const storagePending = storage === null && !storageFailed;
 
   // Refetch when the row count changes (upload/delete) as well as on mount.
   const itemCount = items.length;
@@ -181,7 +193,6 @@ export default function MediaStats({ items, isLoading = false }: { items: Row[];
   };
 
   const cards = useMemo<StatCardProps[]>(() => {
-    const placeholder = isLoading ? "…" : undefined;
     const byStatus = (status: string) =>
       items.filter((item) => String(item.status || "published") === status).length;
 
@@ -396,16 +407,20 @@ export default function MediaStats({ items, isLoading = false }: { items: Row[];
     return [
       {
         title: t("Media Library"),
-        value: placeholder ?? items.length.toLocaleString(),
+        value: items.length.toLocaleString(),
         change: "",
         isPositive: true,
         period: "",
+        // While the list is loading the card shows its frame and
+        // title only — no placeholder figures (Ahsan's order).
+        bare: isLoading,
+        compact: true,
         extra: (
           <StatRows
             rows={[
-              { label: t("Published"), value: placeholder ?? String(published) },
-              { label: t("Draft"), value: placeholder ?? String(draft) },
-              { label: t("Archived"), value: placeholder ?? String(archived) },
+              { label: t("Published"), value: String(published) },
+              { label: t("Draft"), value: String(draft) },
+              { label: t("Archived"), value: String(archived) },
             ]}
           />
         ),
@@ -414,7 +429,9 @@ export default function MediaStats({ items, isLoading = false }: { items: Row[];
       },
       {
         title: t("Storage Used"),
-        value: placeholder ?? formatBytes(storage ? totalUsed : undefined),
+        value: formatBytes(storage ? totalUsed : undefined),
+        bare: storagePending,
+        compact: true,
         change: "",
         isPositive: true,
         period: totalQuota != null ? "" : t("Cloudinary usage unavailable"),
@@ -436,7 +453,9 @@ export default function MediaStats({ items, isLoading = false }: { items: Row[];
       },
       {
         title: t("Storage Providers"),
-        value: placeholder ?? providersValue,
+        value: providersValue,
+        bare: storagePending,
+        compact: true,
         change: "",
         isPositive: true,
         period: providersPeriod,
@@ -447,7 +466,9 @@ export default function MediaStats({ items, isLoading = false }: { items: Row[];
       },
       {
         title: t("Space by Provider"),
-        value: placeholder ?? formatBytes(storage ? totalSpace : undefined),
+        value: formatBytes(storage ? totalSpace : undefined),
+        bare: storagePending,
+        compact: true,
         change: "",
         isPositive: true,
         period: "",
@@ -456,7 +477,7 @@ export default function MediaStats({ items, isLoading = false }: { items: Row[];
         theme: "purple",
       },
     ] as StatCardProps[];
-  }, [items, storage, entries, uploadableEntries, targetBusy, handleTargetChange, isLoading, t]);
+  }, [items, storage, entries, uploadableEntries, targetBusy, handleTargetChange, isLoading, storagePending, t]);
 
   return (
     <div className="w-full">
