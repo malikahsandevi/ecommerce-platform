@@ -1,3 +1,4 @@
+import type { AxiosResponse } from "axios";
 import { apiClient } from "./api";
 
 // Mirrors the backend's section allowlist exactly. The old bespoke
@@ -327,4 +328,51 @@ export const settingsService = {
     );
     return data.matrix;
   },
+
+  /** Backup & Recovery — create (Super Admin only, Settings Lock
+   *  per-save password check): the API builds the whole-store backup
+   *  file on the fly and streams it as a download. Resolves with the
+   *  raw response so the panel can read the server's filename from
+   *  Content-Disposition, exactly like the Data Export download. A
+   *  refused check answers 403 JSON, which arrives here as a Blob —
+   *  the panel reads it back to show the API's own message. */
+  async createBackup(securityPassword: string): Promise<AxiosResponse<Blob>> {
+    return apiClient.post<Blob>(
+      "/settings/backup",
+      { securityPassword },
+      { responseType: "blob" },
+    );
+  },
+
+  /** Backup & Recovery — restore (Super Admin only, Settings Lock
+   *  per-save password check): uploads a parsed backup file; the API
+   *  validates it fully before writing anything, replaces the backed-up
+   *  data, and answers with the per-collection restored counts. */
+  async restoreBackup(
+    backup: unknown,
+    securityPassword: string,
+  ): Promise<{ counts: BackupRestoreCounts }> {
+    const { data } = await apiClient.post<{ counts: BackupRestoreCounts }>(
+      "/settings/backup/restore",
+      { backup, securityPassword },
+    );
+    return data;
+  },
 };
+
+/** Per-collection record counts from a backup file (its summary) and
+ *  from a restore (what was actually written). */
+export interface BackupRestoreCounts {
+  settings: number;
+  rolePermissions: number;
+  products: number;
+  categories: number;
+  brands: number;
+  coupons: number;
+  orders: number;
+  users: number;
+  usersRecreated?: number;
+  usersKept?: number;
+  reviews: number;
+  media: number;
+}

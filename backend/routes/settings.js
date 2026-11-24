@@ -3,6 +3,7 @@ const router = express.Router();
 const { Setting } = require('../models');
 const genericController = require('../controllers/genericController')(Setting);
 const { getSettings, getShellBootstrap, updateSettings, verifySettingsPassword, updateSettingsAppearance, executeIntegration, getServicesCatalogue, getSettingById, updateSettingById, saveIntegrationEntry, deleteIntegrationEntry } = require('../controllers/settingController');
+const { createBackup, restoreBackup } = require('../controllers/backupController');
 const { protect } = require('../middleware/auth');
 const { requireStaff } = require('../middleware/admin');
 const { requirePermission } = require('../middleware/permissions');
@@ -28,6 +29,24 @@ router.post('/verify-password', requirePermission('Settings', 'view'), verifySet
 router.route('/')
     .get(requirePermission('Settings', 'view'), requireSettingsUnlock, getSettings)
     .put(requirePermission('Settings', 'edit'), requireSettingsSavePassword, updateSettings);
+
+// ── Backup & Recovery (Ahsan's order) ───────────────────────────────
+// A backup file carries the store's integration credentials, so
+// creating one is a data-OUT operation and restoring one REPLACES the
+// store's data: both are Super-Admin-only AND Settings saves under
+// the Lock — the per-save password check runs server-side before
+// anything is generated or restored (missing/wrong → 403, no file
+// leaks, nothing is written). The Super Admin test mirrors the
+// codebase's other SA-only operations (2FA reset, role management).
+// Declared before '/:id' so "backup" is not read as a settings id.
+const requireSuperAdmin = (req, res, next) => {
+    if (req.user?.role === 'Super Admin') return next();
+    return res.status(403).json({
+        message: 'Only Super Admin can create or restore backups.',
+    });
+};
+router.post('/backup', requirePermission('Settings', 'edit'), requireSuperAdmin, requireSettingsSavePassword, createBackup);
+router.post('/backup/restore', requirePermission('Settings', 'edit'), requireSuperAdmin, requireSettingsSavePassword, restoreBackup);
 
 // Universal Driver execution route (to trigger dynamic integrations).
 // NOT a save and NOT password-gated: it executes the SAVED entry and

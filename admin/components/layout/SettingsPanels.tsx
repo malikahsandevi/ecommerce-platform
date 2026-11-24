@@ -50,6 +50,7 @@ import {
 } from "@/components/ui/SecurityCheckDialog";
 import { LANGUAGE_OPTIONS, applyLanguage, useLanguage } from "@/services/i18n";
 import ThemePalettePicker from "./ThemePalettePicker";
+import BackupPanel from "./BackupPanel";
 
 type ObjectData = Record<string, unknown>;
 
@@ -224,6 +225,31 @@ export function SettingsPanel({
           data={settings.appearance}
           saving={saving}
           onSave={(value) => onSave("appearance", value)}
+        />
+      );
+    case "Backup & Recovery":
+      // Backup & Recovery is Super-Admin-only (Ahsan's order): the
+      // tab stays visible for every role — shown, never removed —
+      // but a non-Super-Admin gets the lock notice instead of the
+      // panel: no backup data, no restore control. The API enforces
+      // the same rule server-side (403 before anything is generated
+      // or restored), on top of the Settings Lock password check.
+      if (user?.role !== "Super Admin") {
+        return (
+          <PermissionNotice
+            section="Backup & Recovery"
+            heading={t("Backup and recovery are managed by Super Admin only")}
+            message="Your role ({role}) can't create or restore backups. Store backups and recovery are managed by a Super Admin only."
+          />
+        );
+      }
+      return (
+        <BackupPanel
+          timeZone={
+            typeof settings.general?.timeZone === "string"
+              ? settings.general.timeZone
+              : undefined
+          }
         />
       );
     default:

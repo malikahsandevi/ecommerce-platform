@@ -6,6 +6,7 @@ import {
   Bell,
   Code2,
   CreditCard,
+  DatabaseBackup,
   Link2,
   Palette,
   Settings,
@@ -48,7 +49,8 @@ type SettingMenu =
   | "Deleted Items"
   | "Security"
   | "API / Integrations"
-  | "Appearance";
+  | "Appearance"
+  | "Backup & Recovery";
 
 const settingMenus: { name: SettingMenu; icon: LucideIcon }[] = [
   { name: "General", icon: Settings },
@@ -62,6 +64,7 @@ const settingMenus: { name: SettingMenu; icon: LucideIcon }[] = [
   // { name: "API Settings", icon: Code2 },
   { name: "API / Integrations", icon: Code2 },
   { name: "Appearance", icon: Palette },
+  { name: "Backup & Recovery", icon: DatabaseBackup },
 ];
 
 export default function SettingsPage() {
