@@ -23,7 +23,7 @@ const {
     Media,
     Setting,
 } = require('../models');
-const { planRestore, applyRestore } = require('../utils/softDelete');
+const { planRestore, applyRestore, NOT_DELETED } = require('../utils/softDelete');
 const { adjustStock, statusReturnsStock, syncCouponUse } = require('./orderController');
 const { syncProductRating } = require('./reviewController');
 const {
@@ -236,9 +236,39 @@ const restoreItem = async (req, res) => {
             return res.status(404).json({ message: 'This item is not in Deleted Items.' });
         }
 
+        // A trashed review may only come back while the customer has
+        // no LIVE review for the same product: a fresh one posted
+        // meanwhile wins, and the restore is refused in plain words
+        // here rather than by the partial unique index's raw error.
+        if (segment === 'reviews') {
+            const clash = await Review.exists({
+                user: doc.user,
+                product: doc.product,
+                _id: { $ne: doc._id },
+                ...NOT_DELETED,
+            });
+            if (clash) {
+                return res.status(400).json({
+                    message: 'This customer already has a live review for this product.',
+                });
+            }
+        }
+
         const restoreValues = await planRestore(def.Model, doc);
         applyRestore(doc, restoreValues);
-        await doc.save();
+        try {
+            await doc.save();
+        } catch (error) {
+            // Race guard: a fresh review created between the check
+            // above and this save hits the partial unique index —
+            // answer in the same plain words, never the raw error.
+            if (segment === 'reviews' && error.code === 11000) {
+                return res.status(400).json({
+                    message: 'This customer already has a live review for this product.',
+                });
+            }
+            throw error;
+        }
 
         // Module side effects the soft delete applied, reversed:
         // a restored order re-reserves the stock its delete returned

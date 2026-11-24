@@ -27,6 +27,7 @@ app.use((req, res, next) => {
 // client echoes back is never persisted.
 const { responseSigner, requestCanonicaliser } = require('./utils/cloudinaryUrl');
 const { refreshCredentials } = require('./utils/credentials');
+const { ensureReviewIndex } = require('./utils/reviewIndex');
 app.use('/api', requestCanonicaliser);
 app.use('/api', responseSigner);
 
@@ -50,6 +51,11 @@ app.use('/api', async (req, res, next) => {
         // TTL-cached and failure-proof (env fallback), so it never
         // blocks a request.
         await refreshCredentials();
+        // One-time review index migration (legacy full unique
+        // (user, product) → partial unique over live reviews) — the
+        // same once-per-process, failure-proof treatment as the
+        // credentials refresh above.
+        await ensureReviewIndex();
         next();
     } catch (error) {
         res.status(500).json({ message: 'Database connection failed' });

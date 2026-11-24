@@ -80,7 +80,17 @@ const reviewSchema = new mongoose.Schema({
 });
 
 // Indexes
-reviewSchema.index({ user: 1, product: 1 }, { unique: true });
+// One LIVE review per (customer, product). The unique index is
+// PARTIAL — it covers only live reviews (`deletedAt: null` matches
+// null and missing alike, the codebase's NOT_DELETED shape) — so a
+// review sitting in Deleted Items no longer blocks the customer from
+// posting a fresh review for the same product. The legacy full
+// unique index is dropped at startup (see utils/reviewIndex.js):
+// MongoDB will not swap an existing index's options on its own.
+reviewSchema.index(
+    { user: 1, product: 1 },
+    { unique: true, partialFilterExpression: { deletedAt: null } },
+);
 reviewSchema.index({ product: 1, status: 1 });
 reviewSchema.index({ rating: -1 });
 
