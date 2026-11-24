@@ -1,4 +1,5 @@
 const { User, Product, Order, ActivityLog, Analytics, Category, Setting } = require('../models');
+const { NOT_DELETED } = require('../utils/softDelete');
 
 // @desc    Get dashboard data
 // @route   GET /api/dashboard
@@ -36,7 +37,7 @@ const getDashboardData = async (req, res) => {
         const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
         const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
 
-        const nonCancelled = { status: { $ne: 'cancelled' } };
+        const nonCancelled = { status: { $ne: 'cancelled' }, ...NOT_DELETED };
         const sumInWindow = (from, to) => [
             {
                 $match: {
@@ -73,9 +74,9 @@ const getDashboardData = async (req, res) => {
             newestCustomers,
             settingsDoc,
         ] = await Promise.all([
-            User.countDocuments(),
-            Product.countDocuments(),
-            Order.countDocuments(),
+            User.countDocuments({ ...NOT_DELETED }),
+            Product.countDocuments({ ...NOT_DELETED }),
+            Order.countDocuments({ ...NOT_DELETED }),
             // Headline revenue matches the charts: a cancelled order is
             // not revenue. (This aggregate used to sum EVERY order, so a
             // cancelled $999 order inflated the stat card while the chart
@@ -84,10 +85,11 @@ const getDashboardData = async (req, res) => {
                 { $match: nonCancelled },
                 { $group: { _id: null, total: { $sum: '$total' } } },
             ]),
-            Order.find().sort({ createdAt: -1 }).limit(5).populate('user', 'firstName lastName email avatar'),
+            Order.find({ ...NOT_DELETED }).sort({ createdAt: -1 }).limit(5).populate('user', 'firstName lastName email avatar'),
             ActivityLog.find().sort({ createdAt: -1 }).limit(10),
-            Category.find().select('name').lean(),
+            Category.find({ ...NOT_DELETED }).select('name').lean(),
             Product.aggregate([
+                { $match: { ...NOT_DELETED } },
                 { $group: { _id: '$category', count: { $sum: 1 } } },
             ]),
             // Per-category SALES: every line of a non-cancelled order
@@ -136,12 +138,13 @@ const getDashboardData = async (req, res) => {
             ]),
             Order.aggregate(sumInWindow(thisWeekStart)),
             Order.aggregate(sumInWindow(lastWeekStart, thisWeekStart)),
-            User.countDocuments({ createdAt: { $gte: thisWeekStart } }),
-            User.countDocuments({ createdAt: { $gte: lastWeekStart, $lt: thisWeekStart } }),
+            User.countDocuments({ createdAt: { $gte: thisWeekStart }, ...NOT_DELETED }),
+            User.countDocuments({ createdAt: { $gte: lastWeekStart, $lt: thisWeekStart }, ...NOT_DELETED }),
             Order.aggregate(sumInWindow(monthStart)),
             Order.aggregate(sumInWindow(lastMonthStart, monthStart)),
-            Order.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
+            Order.aggregate([{ $match: { ...NOT_DELETED } }, { $group: { _id: '$status', count: { $sum: 1 } } }]),
             Product.aggregate([
+                { $match: { ...NOT_DELETED } },
                 {
                     $facet: {
                         total: [{ $count: 'count' }],
@@ -167,7 +170,7 @@ const getDashboardData = async (req, res) => {
                     },
                 },
             ]),
-            User.find()
+            User.find({ ...NOT_DELETED })
                 .sort({ createdAt: -1 })
                 .limit(30)
                 .select('firstName lastName email createdAt avatar')
@@ -351,6 +354,7 @@ const getRevenueRange = async (req, res) => {
                 $match: {
                     createdAt: { $gte: fromDate, $lt: new Date(toDate.getTime() + DAY_MS) },
                     status: { $ne: 'cancelled' },
+                    ...NOT_DELETED,
                 },
             },
             {

@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const { NOT_DELETED } = require('../utils/softDelete');
 const { getJwtSecret } = require('../utils/credentials');
 
 // Verifies the Bearer JWT issued by POST /api/auth/login and loads the user.
@@ -25,7 +26,10 @@ const protect = async (req, res, next) => {
         if (decoded.purpose) {
             return res.status(401).json({ message: 'Not authorized — invalid or expired token.' });
         }
-        const user = await User.findById(decoded.id).select('-password');
+        // A soft-deleted account's session dies with the delete: the
+        // record waits in Settings → Deleted Items, and until it is
+        // restored its tokens resolve to no account at all.
+        const user = await User.findOne({ _id: decoded.id, ...NOT_DELETED }).select('-password');
         if (!user) {
             return res.status(401).json({ message: 'Not authorized — account no longer exists.' });
         }

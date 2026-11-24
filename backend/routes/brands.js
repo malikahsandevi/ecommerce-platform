@@ -4,14 +4,15 @@ const { Brand, Product } = require('../models');
 const genericController = require('../controllers/genericController')(Brand);
 const { protect } = require('../middleware/auth');
 const { requirePermission } = require('../middleware/permissions');
+const { NOT_DELETED } = require('../utils/softDelete');
 
 
 // List brands with the real number of products for each one.
 router.get('/', async (req, res) => {
     try {
         const [brands, counts] = await Promise.all([
-            Brand.find().lean(),
-            Product.aggregate([{ $group: { _id: '$brand', count: { $sum: 1 } } }]),
+            Brand.find({ ...NOT_DELETED }).lean(),
+            Product.aggregate([{ $match: { ...NOT_DELETED } }, { $group: { _id: '$brand', count: { $sum: 1 } } }]),
         ]);
         await Brand.withCodes(brands);
         const byId = new Map(counts.map((entry) => [String(entry._id), entry.count]));

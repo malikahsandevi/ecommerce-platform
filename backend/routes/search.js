@@ -6,6 +6,7 @@ const Product = require('../models/Product');
 const Category = require('../models/Category');
 const Brand = require('../models/Brand');
 const Media = require('../models/Media');
+const { NOT_DELETED } = require('../utils/softDelete');
 
 const router = express.Router();
 
@@ -52,6 +53,7 @@ router.get('/', async (req, res) => {
                     const Model = models[scope.name];
                     const missing = await Model.find({
                         $or: [{ code: { $exists: false } }, { code: null }, { code: '' }],
+                        ...NOT_DELETED,
                     }).select('_id code');
                     if (missing.length) await Model.withCodes(missing);
                 }),
@@ -66,7 +68,7 @@ router.get('/', async (req, res) => {
                 switch (scope.name) {
                     case 'products': {
                         const docs = await Product.find({
-                            $or: [{ name: rx }, { sku: rx }, { code: codeRx }],
+                            $and: [{ $or: [{ name: rx }, { sku: rx }, { code: codeRx }] }, NOT_DELETED],
                         })
                             .select('name sku code image images')
                             .sort({ name: 1 })
@@ -88,7 +90,7 @@ router.get('/', async (req, res) => {
                     }
                     case 'categories': {
                         const docs = await Category.find({
-                            $or: [{ name: rx }, { code: codeRx }],
+                            $and: [{ $or: [{ name: rx }, { code: codeRx }] }, NOT_DELETED],
                         })
                             .select('name code image')
                             .sort({ name: 1 })
@@ -106,7 +108,7 @@ router.get('/', async (req, res) => {
                     }
                     case 'brands': {
                         const docs = await Brand.find({
-                            $or: [{ name: rx }, { code: codeRx }],
+                            $and: [{ $or: [{ name: rx }, { code: codeRx }] }, NOT_DELETED],
                         })
                             .select('name code logo')
                             .sort({ name: 1 })
@@ -124,11 +126,16 @@ router.get('/', async (req, res) => {
                     }
                     case 'media': {
                         const docs = await Media.find({
-                            $or: [
-                                { originalName: rx },
-                                { filename: rx },
-                                { altText: rx },
-                                { code: codeRx },
+                            $and: [
+                                {
+                                    $or: [
+                                        { originalName: rx },
+                                        { filename: rx },
+                                        { altText: rx },
+                                        { code: codeRx },
+                                    ],
+                                },
+                                NOT_DELETED,
                             ],
                         })
                             .select('originalName filename code url mimeType')

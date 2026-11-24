@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const { addCodeSupport } = require("../utils/code");
+const { addSoftDeleteSupport } = require("../utils/softDelete");
 const bcrypt = require("bcryptjs");
 
 const userSchema = new mongoose.Schema(
@@ -197,5 +198,8 @@ userSchema.virtual("fullName").get(function () {
 
 // Short public code (6 chars, A–Z0–9) — see utils/code.js.
 addCodeSupport(userSchema);
+
+// Soft delete (Settings → Deleted Items) — see utils/softDelete.js.
+addSoftDeleteSupport(userSchema);
 
 module.exports = mongoose.model("User", userSchema);

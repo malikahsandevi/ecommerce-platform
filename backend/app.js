@@ -70,6 +70,7 @@ app.use('/api/brands', require('./routes/brands'));
 app.use('/api/coupons', require('./routes/coupons'));
 app.use('/api/reviews', require('./routes/reviews'));
 app.use('/api/settings', require('./routes/settings'));
+app.use('/api/trash', require('./routes/trash'));
 app.use('/api/storefront', require('./routes/storefront'));
 app.use('/api/media', require('./routes/media'));
 app.use('/api/export', require('./routes/export'));

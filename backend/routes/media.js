@@ -25,6 +25,7 @@ const {
     ensureAuthenticatedAsset,
     destroyAsset,
 } = require('../utils/cloudinaryUrl');
+const { NOT_DELETED, applySoftDelete } = require('../utils/softDelete');
 
 
 const UPLOAD_FOLDER = 'ecommerce-media';
@@ -150,6 +151,7 @@ router.get('/storage', protect, requirePermission('Media', 'view'), async (req, 
         // original entry, so stamp them with its slug.
         await Media.updateMany(
             {
+                ...NOT_DELETED,
                 storageType: 'cloud',
                 $or: [
                     { storageEntry: { $exists: false } },
@@ -160,7 +162,7 @@ router.get('/storage', protect, requirePermission('Media', 'view'), async (req, 
             { $set: { storageEntry: defaultSlug } },
         );
 
-        const records = await Media.find().select('size url storageType storageEntry').lean();
+        const records = await Media.find({ ...NOT_DELETED }).select('size url storageType storageEntry').lean();
 
         // Non-cloud records (legacy local files) keep the old URL-based
         // buckets; cloud records group by their entry stamp.
@@ -493,13 +495,13 @@ const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const listMedia = async (req, res) => {
     try {
         if (req.query.search === undefined) {
-            const items = await Media.find();
+            const items = await Media.find({ ...NOT_DELETED });
             await Media.withCodes(items);
             return res.json(items);
         }
 
         const query = String(req.query.search || '').trim();
-        const and = [];
+        const and = [{ ...NOT_DELETED }];
 
         // A query that could be a (partial) public code: make sure legacy
         // records that never got a code have one before matching, or a
@@ -507,6 +509,7 @@ const listMedia = async (req, res) => {
         if (/^[A-Za-z0-9]{1,6}$/.test(query)) {
             const missing = await Media.find({
                 $or: [{ code: { $exists: false } }, { code: null }, { code: '' }],
+                ...NOT_DELETED,
             }).select('_id code');
             if (missing.length) await Media.withCodes(missing);
         }
@@ -570,7 +573,7 @@ const listMedia = async (req, res) => {
 // neither stores a mediaId), so for them the URL match is the only link.
 router.get('/:id/usage', async (req, res) => {
     try {
-        const media = await Media.findById(req.params.id).select('_id url');
+        const media = await Media.findOne({ _id: req.params.id, ...NOT_DELETED }).select('_id url');
         if (!media) return res.status(404).json({ message: 'Not found' });
 
         const or = [{ 'images.mediaId': media._id }];
@@ -579,18 +582,18 @@ router.get('/:id/usage', async (req, res) => {
         }
 
         const [products, brands, categories] = await Promise.all([
-            Product.find({ $or: or })
+            Product.find({ $and: [{ $or: or }, NOT_DELETED] })
                 .select('name image images status code')
                 .sort({ name: 1 })
                 .lean(),
             media.url
-                ? Brand.find({ logo: media.url })
+                ? Brand.find({ logo: media.url, ...NOT_DELETED })
                       .select('name logo code isActive')
                       .sort({ name: 1 })
                       .lean()
                 : [],
             media.url
-                ? Category.find({ image: media.url })
+                ? Category.find({ image: media.url, ...NOT_DELETED })
                       .select('name image code isActive')
                       .sort({ name: 1 })
                       .lean()
@@ -642,7 +645,7 @@ router.get('/:id/usage', async (req, res) => {
 // new URL, and the old Cloudinary asset is destroyed.
 router.put('/:id/file', protect, requirePermission('Media', 'edit'), async (req, res) => {
     try {
-        const media = await Media.findById(req.params.id);
+        const media = await Media.findOne({ _id: req.params.id, ...NOT_DELETED });
         if (!media) return res.status(404).json({ message: 'Not found' });
 
         const { publicId, size, mimeType, format, dimensions, filename, cloudName, entry: entrySlug } = req.body || {};
@@ -1199,27 +1202,11 @@ router.route('/:id')
     .put(protect, requirePermission('Media', 'edit'), genericController.update)
     .delete(protect, requirePermission('Media', 'delete'), async (req, res) => {
         try {
-            const media = await Media.findById(req.params.id);
+            const media = await Media.findOne({ _id: req.params.id, ...NOT_DELETED });
             if (!media) return res.status(404).json({ message: 'Not found' });
 
-            // Best effort: remove the file from Cloudinary too, so deleting
-            // in the panel does not leave orphaned assets behind. The
-            // destroy runs against the entry THIS record lives on.
-            if (media.storageType === 'cloud' && media.path) {
-                try {
-                    const resourceType = media.mimeType?.startsWith('video/')
-                        ? 'video'
-                        : media.mimeType === 'application/pdf' || media.mimeType === 'application/msword'
-                          ? 'raw'
-                          : 'image';
-                    const entry = await entryForMedia(media);
-                    await destroyAsset(media.path, resourceType, credsOf(entry));
-                } catch {
-                    /* the record is still deleted below */
-                }
-            }
-
-            await media.deleteOne();
+            applySoftDelete(Media, media, req.user?._id);
+            await media.save();
             res.json({ message: 'Deleted successfully' });
         } catch (error) {
             res.status(500).json({ message: error.message });

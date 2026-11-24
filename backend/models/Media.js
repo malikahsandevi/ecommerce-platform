@@ -1,6 +1,7 @@
 // models/Media.js
 const mongoose = require('mongoose');
 const { addCodeSupport } = require('../utils/code');
+const { addSoftDeleteSupport } = require('../utils/softDelete');
 
 const mediaSchema = new mongoose.Schema({
   // File Information
@@ -163,5 +164,8 @@ mediaSchema.methods.isVideo = function() {
 
 // Short public code (6 chars, A–Z0–9) — see utils/code.js.
 addCodeSupport(mediaSchema);
+
+// Soft delete (Settings → Deleted Items) — see utils/softDelete.js.
+addSoftDeleteSupport(mediaSchema);
 
 module.exports = mongoose.model('Media', mediaSchema);

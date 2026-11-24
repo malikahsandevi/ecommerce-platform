@@ -127,6 +127,11 @@ const maskIntegrationEntry = (entry) => {
 const maskSettingsDocument = (doc) => {
     if (!doc) return doc;
     const obj = doc.toObject ? doc.toObject() : doc;
+    // Trashed integration entries are served only by the Deleted
+    // Items endpoint, and there only as display metadata — the
+    // settings document never carries them (or their credentials)
+    // out through a settings read.
+    delete obj.deletedIntegrations;
     if (Array.isArray(obj.integrations)) {
         obj.integrations = obj.integrations.map(maskIntegrationEntry);
     }
@@ -753,7 +758,20 @@ const deleteIntegrationEntry = async (req, res) => {
         if (isPaymentEntry(target) && !isSuperAdminCaller(req)) {
             return res.status(403).json({ message: PAYMENT_SA_ONLY_MESSAGE });
         }
+        // Soft delete (Ahsan's order): the entry moves to the
+        // document's deletedIntegrations instead of being dropped. It
+        // stops being effective at once, exactly like a removal —
+        // every runtime reader only ever reads `integrations` — and
+        // waits in Settings → Deleted Items for a restore or a
+        // permanent delete (controllers/trashController).
+        const trashed = target.toObject ? target.toObject() : { ...target };
+        trashed.deletedAt = new Date();
+        trashed.deletedBy = req.user?._id || null;
         settings.set('integrations', current.filter((entry) => entry.serviceSlug !== serviceSlug));
+        settings.set('deletedIntegrations', [
+            ...(settings.get('deletedIntegrations') || []),
+            trashed,
+        ]);
         const saved = await settings.save();
         await refreshCredentials(true);
         const masked = maskSettingsDocumentForCaller(req, saved);

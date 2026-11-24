@@ -1,6 +1,7 @@
 // models/Coupon.js
 const mongoose = require('mongoose');
 const { addCodeSupport } = require('../utils/code');
+const { addSoftDeleteSupport } = require('../utils/softDelete');
 
 const couponSchema = new mongoose.Schema({
   // Basic Information
@@ -95,5 +96,8 @@ couponSchema.index({ isActive: 1 });
 // public ID lives in `publicId` under the same generation/uniqueness
 // rules every other resource's `code` follows.
 addCodeSupport(couponSchema, { field: 'publicId' });
+
+// Soft delete (Settings → Deleted Items) — see utils/softDelete.js.
+addSoftDeleteSupport(couponSchema);
 
 module.exports = mongoose.model('Coupon', couponSchema);

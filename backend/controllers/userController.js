@@ -3,6 +3,7 @@ const Order = require('../models/Order');
 // Registered so Order's coupon populate can resolve its code.
 require('../models/Coupon');
 const { getAllRoleNames } = require('../utils/permissions');
+const { NOT_DELETED, applySoftDelete } = require('../utils/softDelete');
 
 const FAVORITE_CATEGORY_LIMIT = 3;
 const favoriteCategoryError = (res) =>
@@ -15,7 +16,7 @@ const favoriteCategoryError = (res) =>
 // @access  Admin
 const getUsers = async (req, res) => {
     try {
-        const users = await User.find({}).select('-password');
+        const users = await User.find({ ...NOT_DELETED }).select('-password');
         await User.withCodes(users);
         res.json(users);
     } catch (error) {
@@ -28,7 +29,7 @@ const getUsers = async (req, res) => {
 // @access  Admin
 const getUserById = async (req, res) => {
     try {
-        const user = await User.findById(req.params.id).select('-password');
+        const user = await User.findOne({ _id: req.params.id, ...NOT_DELETED }).select('-password');
         if (!user) {
             return res.status(404).json({ message: 'User not found' });
         }
@@ -91,7 +92,7 @@ const createUser = async (req, res) => {
         }
 
         const normalizedEmail = String(email).trim().toLowerCase();
-        const existing = await User.findOne({ email: normalizedEmail });
+        const existing = await User.findOne({ email: normalizedEmail, ...NOT_DELETED });
         if (existing) {
             return res.status(400).json({ message: 'A user with this email already exists.' });
         }
@@ -150,6 +151,7 @@ const otherActiveSuperAdmins = async (excludeId) => {
     return User.countDocuments({
         role: 'Super Admin',
         isActive: { $ne: false },
+        ...NOT_DELETED,
         _id: { $ne: excludeId },
     });
 };
@@ -201,7 +203,7 @@ const updateUser = async (req, res) => {
         // +password: the schema marks the hash select:false, and the
         // password-trio verification below needs it. Responses still
         // never carry it (the model's toJSON transform strips it).
-        const target = await User.findById(req.params.id).select('+password');
+        const target = await User.findOne({ _id: req.params.id, ...NOT_DELETED }).select('+password');
         if (!target) {
             return res.status(404).json({ message: 'User not found' });
         }
@@ -225,6 +227,7 @@ const updateUser = async (req, res) => {
             if (normalizedEmail && normalizedEmail !== String(target.email || '').toLowerCase()) {
                 const clash = await User.findOne({
                     email: normalizedEmail,
+                    ...NOT_DELETED,
                     _id: { $ne: target._id },
                 });
                 if (clash) {
@@ -324,7 +327,7 @@ const updateUser = async (req, res) => {
 // @access  Admin
 const deleteUser = async (req, res) => {
     try {
-        const target = await User.findById(req.params.id);
+        const target = await User.findOne({ _id: req.params.id, ...NOT_DELETED });
         if (!target) {
             return res.status(404).json({ message: 'User not found' });
         }
@@ -347,7 +350,8 @@ const deleteUser = async (req, res) => {
             });
         }
 
-        await target.deleteOne();
+        applySoftDelete(User, target, req.user?._id);
+        await target.save();
         res.json({ message: 'User removed successfully' });
     } catch (error) {
         res.status(500).json({ message: error.message });
@@ -366,7 +370,7 @@ const deleteUser = async (req, res) => {
 //          for longer than until its next login.
 const resetUserTwoFactor = async (req, res) => {
     try {
-        const target = await User.findById(req.params.id).select('+twoFactorSecret');
+        const target = await User.findOne({ _id: req.params.id, ...NOT_DELETED }).select('+twoFactorSecret');
         if (!target) {
             return res.status(404).json({ message: 'User not found' });
         }
@@ -420,7 +424,7 @@ const productBrief = (product) =>
 
 const getUserProfile = async (req, res) => {
     try {
-        const user = await User.findById(req.params.id)
+        const user = await User.findOne({ _id: req.params.id, ...NOT_DELETED })
             .select('-password')
             .populate('favorites', 'name image price')
             .populate('liked', 'name image price')
@@ -431,7 +435,7 @@ const getUserProfile = async (req, res) => {
         }
 
         // Orders carry a required `user` ref — that is the match.
-        const orders = await Order.find({ user: user._id })
+        const orders = await Order.find({ user: user._id, ...NOT_DELETED })
             .sort({ createdAt: -1 })
             .populate('coupon', 'code discountType discountValue')
             .lean();

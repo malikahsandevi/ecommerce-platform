@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const { sendPasswordResetEmail } = require('../utils/emailTemplates');
 const { getEffectivePermissions } = require('../utils/permissions');
+const { NOT_DELETED } = require('../utils/softDelete');
 const { getJwtSecret, getJwtSignSecret } = require('../utils/credentials');
 const { authenticator } = require('otplib');
 const QRCode = require('qrcode');
@@ -135,7 +136,7 @@ const loginAdmin = async (req, res) => {
         const envAdminPass = process.env.ADMIN_PASSWORD || 'admin';
 
         // Check for admin user in DB first
-        let adminUser = await User.findOne({ email }).select('+password');
+        let adminUser = await User.findOne({ email, ...NOT_DELETED }).select('+password');
 
         // Auto-seed admin user from .env if it doesn't exist and credentials match the .env request
         if (!adminUser && email === envAdminEmail && password === envAdminPass) {
@@ -211,7 +212,7 @@ const verifyTwoFactorLogin = async (req, res) => {
             return res.status(401).json({ message: 'This sign-in attempt expired — sign in again.' });
         }
 
-        const user = await User.findById(decoded.id).select('+twoFactorSecret');
+        const user = await User.findOne({ _id: decoded.id, ...NOT_DELETED }).select('+twoFactorSecret');
         if (!user || !user.twoFactorEnabled || !user.twoFactorSecret) {
             return res.status(400).json({ message: 'Two-factor authentication is not enabled for this account.' });
         }
@@ -252,7 +253,7 @@ const enrollSetupTwoFactor = async (req, res) => {
             return res.status(401).json({ message: 'This sign-in attempt expired — sign in again.' });
         }
 
-        const user = await User.findById(decoded.id).select('+twoFactorSecret');
+        const user = await User.findOne({ _id: decoded.id, ...NOT_DELETED }).select('+twoFactorSecret');
         if (!user) {
             return res.status(400).json({ message: 'Two-factor authentication is not available for this account.' });
         }
@@ -299,7 +300,7 @@ const enrollConfirmTwoFactor = async (req, res) => {
             return res.status(401).json({ message: 'This sign-in attempt expired — sign in again.' });
         }
 
-        const user = await User.findById(decoded.id).select('+twoFactorSecret');
+        const user = await User.findOne({ _id: decoded.id, ...NOT_DELETED }).select('+twoFactorSecret');
         if (!user) {
             return res.status(400).json({ message: 'Two-factor authentication is not available for this account.' });
         }
@@ -455,7 +456,7 @@ const forgotPassword = async (req, res) => {
     try {
         const email = String(req.body?.email || '').trim().toLowerCase();
         if (email) {
-            const user = await User.findOne({ email });
+            const user = await User.findOne({ email, ...NOT_DELETED });
             // Panel accounts only — customer accounts never sign in to
             // the admin, so they get no reset email from here either.
             if (user && user.role !== 'Customer' && user.isActive !== false) {
@@ -495,6 +496,7 @@ const resetPassword = async (req, res) => {
         const user = await User.findOne({
             passwordResetTokenHash: hashResetToken(token),
             passwordResetExpires: { $gt: new Date() },
+            ...NOT_DELETED,
         }).select('+passwordResetTokenHash');
         if (!user) {
             return res.status(400).json({

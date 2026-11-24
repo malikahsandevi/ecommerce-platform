@@ -1,6 +1,7 @@
 // models/Brand.js
 const mongoose = require('mongoose');
 const { addCodeSupport } = require('../utils/code');
+const { addSoftDeleteSupport } = require('../utils/softDelete');
 
 const brandSchema = new mongoose.Schema({
   name: { 
@@ -51,5 +52,8 @@ brandSchema.pre('validate', function () {
 
 // Short public code (6 chars, A–Z0–9) — see utils/code.js.
 addCodeSupport(brandSchema);
+
+// Soft delete (Settings → Deleted Items) — see utils/softDelete.js.
+addSoftDeleteSupport(brandSchema);
 
 module.exports = mongoose.model('Brand', brandSchema);

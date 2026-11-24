@@ -4,6 +4,7 @@ const { Category, Product } = require('../models');
 const genericController = require('../controllers/genericController')(Category);
 const { protect } = require('../middleware/auth');
 const { requirePermission } = require('../middleware/permissions');
+const { NOT_DELETED } = require('../utils/softDelete');
 
 
 // List categories with the real number of products in each one, so the
@@ -14,8 +15,8 @@ router.get('/', async (req, res) => {
             // Populate the parent's name so the panel can show which
             // category a subcategory belongs to; the populated object
             // still carries the parent's _id for the edit form.
-            Category.find().populate('parent', 'name').lean(),
-            Product.aggregate([{ $group: { _id: '$category', count: { $sum: 1 } } }]),
+            Category.find({ ...NOT_DELETED }).populate('parent', 'name').lean(),
+            Product.aggregate([{ $match: { ...NOT_DELETED } }, { $group: { _id: '$category', count: { $sum: 1 } } }]),
         ]);
         await Category.withCodes(categories);
         const byId = new Map(counts.map((entry) => [String(entry._id), entry.count]));

@@ -2,6 +2,7 @@ const Review = require('../models/Review');
 const Product = require('../models/Product');
 const User = require('../models/User');
 const { logActivity } = require('../utils/activity');
+const { NOT_DELETED, applySoftDelete } = require('../utils/softDelete');
 
 // Keeps Product.averageRating / reviewCount honest. Until now nothing ever
 // maintained those fields, so every product showed 0 stars / 0 reviews in
@@ -10,7 +11,7 @@ const { logActivity } = require('../utils/activity');
 const syncProductRating = async (productId) => {
     if (!productId) return;
     const [row] = await Review.aggregate([
-        { $match: { product: productId, status: 'approved' } },
+        { $match: { product: productId, status: 'approved', ...NOT_DELETED } },
         { $group: { _id: null, avg: { $avg: '$rating' }, count: { $sum: 1 } } },
     ]);
     await Product.findByIdAndUpdate(productId, {
@@ -28,7 +29,7 @@ const populateReview = (query) => query
 // @access  Public
 const getReviews = async (req, res) => {
     try {
-        const reviews = await populateReview(Review.find());
+        const reviews = await populateReview(Review.find({ ...NOT_DELETED }));
         await Review.withCodes(reviews);
         res.json(reviews);
     } catch (error) {
@@ -41,7 +42,7 @@ const getReviews = async (req, res) => {
 // @access  Public
 const getReviewById = async (req, res) => {
     try {
-        const review = await populateReview(Review.findById(req.params.id));
+        const review = await populateReview(Review.findOne({ _id: req.params.id, ...NOT_DELETED }));
         if (!review) return res.status(404).json({ message: 'Review not found' });
         await Review.withCodes(review);
         res.json(review);
@@ -56,8 +57,8 @@ const getReviewById = async (req, res) => {
 const createReview = async (req, res) => {
     try {
         const [product, user] = await Promise.all([
-            req.body.product ? Product.findById(req.body.product).select('name') : null,
-            req.body.user ? User.findById(req.body.user).select('firstName lastName') : null,
+            req.body.product ? Product.findOne({ _id: req.body.product, ...NOT_DELETED }).select('name') : null,
+            req.body.user ? User.findOne({ _id: req.body.user, ...NOT_DELETED }).select('firstName lastName') : null,
         ]);
         if (!product) return res.status(400).json({ message: 'The selected product no longer exists.' });
         if (!user) return res.status(400).json({ message: 'The selected reviewer no longer exists.' });
@@ -87,14 +88,15 @@ const createReview = async (req, res) => {
 // @access  Admin
 const updateReview = async (req, res) => {
     try {
-        const existing = await Review.findById(req.params.id);
+        const existing = await Review.findOne({ _id: req.params.id, ...NOT_DELETED });
         if (!existing) return res.status(404).json({ message: 'Review not found' });
 
         const previousProductId = existing.product;
-        const updated = await Review.findByIdAndUpdate(req.params.id, req.body, {
-            new: true,
-            runValidators: true,
-        });
+        const updated = await Review.findOneAndUpdate(
+            { _id: req.params.id, ...NOT_DELETED },
+            req.body,
+            { new: true, runValidators: true },
+        );
 
         await syncProductRating(updated.product);
         if (String(previousProductId) !== String(updated.product)) {
@@ -112,15 +114,18 @@ const updateReview = async (req, res) => {
     }
 };
 
-// @desc    Delete a review
+// @desc    Delete a review (soft — Settings → Deleted Items)
 // @route   DELETE /api/reviews/:id
 // @access  Admin
 const deleteReview = async (req, res) => {
     try {
-        const deleted = await Review.findByIdAndDelete(req.params.id);
-        if (!deleted) return res.status(404).json({ message: 'Review not found' });
+        const review = await Review.findOne({ _id: req.params.id, ...NOT_DELETED });
+        if (!review) return res.status(404).json({ message: 'Review not found' });
 
-        await syncProductRating(deleted.product);
+        applySoftDelete(Review, review, req.user?._id);
+        await review.save();
+
+        await syncProductRating(review.product);
 
         res.json({ message: 'Deleted successfully' });
     } catch (error) {

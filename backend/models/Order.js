@@ -1,6 +1,7 @@
 // models/Order.js
 const mongoose = require('mongoose');
 const { addCodeSupport } = require('../utils/code');
+const { addSoftDeleteSupport } = require('../utils/softDelete');
 
 const orderSchema = new mongoose.Schema({
   // Order Information
@@ -136,5 +137,8 @@ orderSchema.index({ createdAt: -1 });
 
 // Short public code (6 chars, A–Z0–9) — see utils/code.js.
 addCodeSupport(orderSchema);
+
+// Soft delete (Settings → Deleted Items) — see utils/softDelete.js.
+addSoftDeleteSupport(orderSchema);
 
 module.exports = mongoose.model('Order', orderSchema);

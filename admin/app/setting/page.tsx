@@ -11,6 +11,7 @@ import {
   Settings,
   ShieldCheck,
   Store,
+  Trash2,
   Truck,
   Users,
 } from "lucide-react";
@@ -44,6 +45,7 @@ type SettingMenu =
   | "Shipping"
   | "Notifications"
   | "Users & Roles"
+  | "Deleted Items"
   | "Security"
   | "API / Integrations"
   | "Appearance";
@@ -55,6 +57,7 @@ const settingMenus: { name: SettingMenu; icon: LucideIcon }[] = [
   { name: "Shipping", icon: Truck },
   { name: "Notifications", icon: Bell },
   { name: "Users & Roles", icon: Users },
+  { name: "Deleted Items", icon: Trash2 },
   { name: "Security", icon: ShieldCheck },
   // { name: "API Settings", icon: Code2 },
   { name: "API / Integrations", icon: Code2 },
@@ -194,7 +197,7 @@ export default function SettingsPage() {
   const deleteUser = async (id: string) => {
     const confirmed = await confirmDialog({
       title: t("Delete this user?"),
-      message: t("The account will be removed permanently. This cannot be undone."),
+      message: t("It will move to Deleted Items in Settings and can be restored."),
       confirmLabel: t("Delete"),
       variant: "danger",
     });

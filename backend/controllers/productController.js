@@ -3,6 +3,7 @@ const Category = require('../models/Category');
 const Brand = require('../models/Brand');
 const mongoose = require('mongoose');
 const { logActivity } = require('../utils/activity');
+const { NOT_DELETED, applySoftDelete } = require('../utils/softDelete');
 
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -16,7 +17,8 @@ const resolveReference = async (Model, value, label, required = false) => {
     if (mongoose.isValidObjectId(reference)) return reference;
 
     const record = await Model.findOne({
-        name: { $regex: `^${escapeRegex(String(reference).trim())}$`, $options: 'i' }
+        name: { $regex: `^${escapeRegex(String(reference).trim())}$`, $options: 'i' },
+        ...NOT_DELETED
     }).select('_id');
 
     if (!record) throw new Error(`${label} "${reference}" not found`);
@@ -131,7 +133,7 @@ const normalizeProductInput = async (data) => {
 // @access  Public/Admin
 const getProducts = async (req, res) => {
     try {
-        const products = await Product.find({}).populate('category brand');
+        const products = await Product.find({ ...NOT_DELETED }).populate('category brand');
         await Product.withCodes(products);
         res.json(products.map(shapeProduct));
     } catch (error) {
@@ -144,7 +146,7 @@ const getProducts = async (req, res) => {
 // @access  Public/Admin
 const getProductById = async (req, res) => {
     try {
-        const product = await Product.findById(req.params.id).populate('category brand');
+        const product = await Product.findOne({ _id: req.params.id, ...NOT_DELETED }).populate('category brand');
         if (!product) {
             return res.status(404).json({ message: 'Product not found' });
         }
@@ -174,10 +176,10 @@ const createProduct = async (req, res) => {
 // @access  Admin
 const updateProduct = async (req, res) => {
     try {
-        const before = await Product.findById(req.params.id).select('price name').lean();
+        const before = await Product.findOne({ _id: req.params.id, ...NOT_DELETED }).select('price name').lean();
 
-        const product = await Product.findByIdAndUpdate(
-            req.params.id,
+        const product = await Product.findOneAndUpdate(
+            { _id: req.params.id, ...NOT_DELETED },
             await normalizeProductInput(req.body),
             { new: true, runValidators: true }
         );
@@ -202,15 +204,17 @@ const updateProduct = async (req, res) => {
     }
 };
 
-// @desc    Delete a product
+// @desc    Delete a product (soft — Settings → Deleted Items)
 // @route   DELETE /api/products/:id
 // @access  Admin
 const deleteProduct = async (req, res) => {
     try {
-        const product = await Product.findByIdAndDelete(req.params.id);
+        const product = await Product.findOne({ _id: req.params.id, ...NOT_DELETED });
         if (!product) {
             return res.status(404).json({ message: 'Product not found' });
         }
+        applySoftDelete(Product, product, req.user?._id);
+        await product.save();
         res.json({ message: 'Product removed successfully' });
     } catch (error) {
         res.status(500).json({ message: error.message });

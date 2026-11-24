@@ -1,6 +1,7 @@
 // models/Category.js
 const mongoose = require('mongoose');
 const { addCodeSupport } = require('../utils/code');
+const { addSoftDeleteSupport } = require('../utils/softDelete');
 
 const categorySchema = new mongoose.Schema({
   name: { 
@@ -61,5 +62,8 @@ categorySchema.pre('validate', function () {
 
 // Short public code (6 chars, A–Z0–9) — see utils/code.js.
 addCodeSupport(categorySchema);
+
+// Soft delete (Settings → Deleted Items) — see utils/softDelete.js.
+addSoftDeleteSupport(categorySchema);
 
 module.exports = mongoose.model('Category', categorySchema);

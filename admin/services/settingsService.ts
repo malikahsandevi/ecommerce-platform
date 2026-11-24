@@ -33,6 +33,19 @@ export interface SettingsUser {
   twoFactorEnabled?: boolean;
 }
 
+/** One row of Settings → Deleted Items: a soft-deleted record
+ *  waiting for a restore or a permanent delete. Display metadata
+ *  only — the API never sends the record's own data here. */
+export interface DeletedItem {
+  module: string;
+  moduleLabel: string;
+  id: string;
+  name: string;
+  code?: string | null;
+  deletedAt: string;
+  deletedBy?: { name?: string | null; email?: string | null } | null;
+}
+
 /** The role → module → action permission matrix (GET /permissions). */
 export type PermissionMatrixData = Record<
   string,
@@ -236,6 +249,47 @@ export const settingsService = {
       },
     );
     return data;
+  },
+
+  /** Settings → Deleted Items: every soft-deleted record across all
+   *  modules (optionally narrowed to one module segment). The read
+   *  sits behind the Settings Lock entry proof like every full
+   *  Settings read — the shell's stored unlock rides along through
+   *  the API client. */
+  async getDeletedItems(module?: string): Promise<DeletedItem[]> {
+    const { data } = await apiClient.get<DeletedItem[]>("/trash", {
+      params: module ? { module } : undefined,
+    });
+    return data;
+  },
+
+  /** Restores one Deleted Items record to its module, exactly as it
+   *  was. A Settings write, so the per-save security password rides
+   *  in the body and is verified server-side for this action only. */
+  async restoreDeletedItem(
+    module: string,
+    id: string,
+    securityPassword?: string,
+  ): Promise<void> {
+    await apiClient.post(`/trash/${module}/${id}/restore`, {
+      ...(securityPassword ? { securityPassword } : {}),
+    });
+  },
+
+  /** Permanently deletes one Deleted Items record — the real
+   *  removal (for media, the Cloudinary file is destroyed too). A
+   *  Settings write: the security password rides in the header, as
+   *  on every other DELETE. */
+  async permanentlyDeleteItem(
+    module: string,
+    id: string,
+    securityPassword?: string,
+  ): Promise<void> {
+    await apiClient.delete(`/trash/${module}/${id}`, {
+      headers: securityPassword
+        ? { "X-Settings-Password": securityPassword }
+        : undefined,
+    });
   },
 
   /** The full permission matrix + editor vocabulary. Any staff member

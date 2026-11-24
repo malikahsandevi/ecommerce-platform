@@ -655,7 +655,7 @@ const PageLayout: React.FC = () => {
           "{item}",
           Route.replace(/s$/, "").toLowerCase(),
         ),
-        message: t("This cannot be undone."),
+        message: t("It will move to Deleted Items in Settings and can be restored."),
         confirmLabel: t("Delete"),
         variant: "danger",
       });

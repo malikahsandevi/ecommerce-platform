@@ -1,5 +1,92 @@
 const mongoose = require("mongoose");
 
+// One integration entry (a configured service). The same shape backs
+// the live `integrations` array and the `deletedIntegrations` trash
+// below, so an entry can move between them without losing a field.
+const integrationEntrySchema = new mongoose.Schema(
+  {
+    usageType: {
+      type: String,
+      enum: [
+        "STORAGE",
+        "PAYMENT",
+        "SMS_NOTIFICATION",
+        "EMAIL",
+        "AUTH",
+        "SHIPPING",
+        "ANALYTICS",
+        "MAPS",
+        "API",
+        "CUSTOM",
+      ],
+      required: true,
+    },
+    // Preset sub-service id from the catalogue (e.g. "stripe",
+    // "twilio", "custom"); "" for legacy generic connectors.
+    subService: { type: String, default: "" },
+    serviceSlug: { type: String, required: true, trim: true }, // Unique identifier (e.g. "my-sms-api")
+    title: { type: String, required: true }, // Name given by Admin
+    baseUrl: { type: String, default: "", trim: true }, // API Base URL (presets: forced server-side to the definition's fixed base)
+    // Preset credential/config values, keyed by the definition's
+    // field keys. Secret values are masked on every API read.
+    fields: { type: Map, of: String, default: {} },
+    // CUSTOM entries: admin-defined key-value pairs; pairs flagged
+    // secret are masked on read and kept when re-saved as the mask.
+    customFields: [
+      {
+        key: { type: String, default: "" },
+        value: { type: String, default: "" },
+        secret: { type: Boolean, default: false },
+        // A pair toggled OFF stays saved on the entry but is NOT
+        // part of its effective config — the gate's entryValues
+        // skips it, so the runner never sees or sends it.
+        isActive: { type: Boolean, default: true },
+      },
+    ],
+    authType: {
+      type: String,
+      enum: ["API_KEY", "BEARER_TOKEN", "BASIC", "CUSTOM_HEADER", "NONE"],
+      default: "NONE",
+    },
+    authCredentials: {
+      apiKey: { type: String, default: "" },
+      headerKey: { type: String, default: "Authorization" }, // Custom Header Name
+      username: { type: String, default: "" },
+      password: { type: String, default: "" },
+    },
+    globalHeaders: { type: Map, of: String, default: {} },
+    endpoints: [
+      {
+        name: { type: String, required: true }, // Action Name e.g. "send_otp"
+        path: { type: String, required: true }, // Endpoint Path e.g. "/v1/send"
+        method: {
+          type: String,
+          enum: ["GET", "POST", "PUT", "DELETE", "PATCH"],
+          default: "POST",
+        },
+        defaultHeaders: { type: Map, of: String, default: {} },
+        responseMapping: {
+          successField: { type: String, default: "" },
+          dataField: { type: String, default: "" }, // e.g. "data.url"
+          errorField: { type: String, default: "" },
+        },
+      },
+    ],
+    webhooks: [
+      {
+        event: { type: String, required: true }, // e.g. order.created
+        url: { type: String, required: true },
+        isActive: { type: Boolean, default: true },
+      },
+    ],
+    isConnected: { type: Boolean, default: true },
+    // Soft-delete stamps (Settings → Deleted Items): set only while
+    // the entry waits in `deletedIntegrations` below.
+    deletedAt: { type: Date, default: null },
+    deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+  },
+);
+
 const settingSchema = new mongoose.Schema(
   {
     // 1. General Settings
@@ -76,85 +163,15 @@ const settingSchema = new mongoose.Schema(
     // `customFields` key-value pairs instead. A service is used only when
     // configured AND its `isConnected` activation toggle is ON — the gate
     // is config/services/index.js.
-    integrations: [
-      {
-        usageType: {
-          type: String,
-          enum: [
-            "STORAGE",
-            "PAYMENT",
-            "SMS_NOTIFICATION",
-            "EMAIL",
-            "AUTH",
-            "SHIPPING",
-            "ANALYTICS",
-            "MAPS",
-            "API",
-            "CUSTOM",
-          ],
-          required: true,
-        },
-        // Preset sub-service id from the catalogue (e.g. "stripe",
-        // "twilio", "custom"); "" for legacy generic connectors.
-        subService: { type: String, default: "" },
-        serviceSlug: { type: String, required: true, trim: true }, // Unique identifier (e.g. "my-sms-api")
-        title: { type: String, required: true }, // Name given by Admin
-        baseUrl: { type: String, default: "", trim: true }, // API Base URL (presets: forced server-side to the definition's fixed base)
-        // Preset credential/config values, keyed by the definition's
-        // field keys. Secret values are masked on every API read.
-        fields: { type: Map, of: String, default: {} },
-        // CUSTOM entries: admin-defined key-value pairs; pairs flagged
-        // secret are masked on read and kept when re-saved as the mask.
-        customFields: [
-          {
-            key: { type: String, default: "" },
-            value: { type: String, default: "" },
-            secret: { type: Boolean, default: false },
-            // A pair toggled OFF stays saved on the entry but is NOT
-            // part of its effective config — the gate's entryValues
-            // skips it, so the runner never sees or sends it.
-            isActive: { type: Boolean, default: true },
-          },
-        ],
-        authType: {
-          type: String,
-          enum: ["API_KEY", "BEARER_TOKEN", "BASIC", "CUSTOM_HEADER", "NONE"],
-          default: "NONE",
-        },
-        authCredentials: {
-          apiKey: { type: String, default: "" },
-          headerKey: { type: String, default: "Authorization" }, // Custom Header Name
-          username: { type: String, default: "" },
-          password: { type: String, default: "" },
-        },
-        globalHeaders: { type: Map, of: String, default: {} },
-        endpoints: [
-          {
-            name: { type: String, required: true }, // Action Name e.g. "send_otp"
-            path: { type: String, required: true }, // Endpoint Path e.g. "/v1/send"
-            method: {
-              type: String,
-              enum: ["GET", "POST", "PUT", "DELETE", "PATCH"],
-              default: "POST",
-            },
-            defaultHeaders: { type: Map, of: String, default: {} },
-            responseMapping: {
-              successField: { type: String, default: "" },
-              dataField: { type: String, default: "" }, // e.g. "data.url"
-              errorField: { type: String, default: "" },
-            },
-          },
-        ],
-        webhooks: [
-          {
-            event: { type: String, required: true }, // e.g. order.created
-            url: { type: String, required: true },
-            isActive: { type: Boolean, default: true },
-          },
-        ],
-        isConnected: { type: Boolean, default: true },
-      },
-    ],
+    integrations: [integrationEntrySchema],
+
+    // 6a. Deleted Items for integration entries: removing an entry
+    // moves it here (soft delete) instead of dropping it — it stops
+    // being effective at once, exactly like a removal, and waits here
+    // for Restore or permanent deletion from Settings → Deleted
+    // Items. The settings reads never serve this array.
+    deletedIntegrations: [integrationEntrySchema],
+
 
     // 6b. Storage management — which configured storage entry receives
     // NEW uploads (the serviceSlug of an integrations entry). Empty =

@@ -25,6 +25,7 @@ const {
     Setting,
 } = require('../models');
 const { adaptRow, applyExportFilters, dayInTimezone } = require('../utils/exportFilter');
+const { NOT_DELETED } = require('../utils/softDelete');
 
 const personName = (user) => {
     if (!user || typeof user !== 'object') return '';
@@ -35,15 +36,15 @@ const personName = (user) => {
 const plain = (docs) => JSON.parse(JSON.stringify(docs));
 
 async function fetchProducts() {
-    const docs = await Product.find({}).populate('category brand');
+    const docs = await Product.find({ ...NOT_DELETED }).populate('category brand');
     await Product.withCodes(docs);
     return plain(docs);
 }
 
 async function fetchCategories() {
     const [rows, counts] = await Promise.all([
-        Category.find().populate('parent', 'name').lean(),
-        Product.aggregate([{ $group: { _id: '$category', count: { $sum: 1 } } }]),
+        Category.find({ ...NOT_DELETED }).populate('parent', 'name').lean(),
+        Product.aggregate([{ $match: { ...NOT_DELETED } }, { $group: { _id: '$category', count: { $sum: 1 } } }]),
     ]);
     await Category.withCodes(rows);
     const byId = new Map(counts.map((e) => [String(e._id), e.count]));
@@ -52,8 +53,8 @@ async function fetchCategories() {
 
 async function fetchBrands() {
     const [rows, counts] = await Promise.all([
-        Brand.find().lean(),
-        Product.aggregate([{ $group: { _id: '$brand', count: { $sum: 1 } } }]),
+        Brand.find({ ...NOT_DELETED }).lean(),
+        Product.aggregate([{ $match: { ...NOT_DELETED } }, { $group: { _id: '$brand', count: { $sum: 1 } } }]),
     ]);
     await Brand.withCodes(rows);
     const byId = new Map(counts.map((e) => [String(e._id), e.count]));
@@ -61,13 +62,13 @@ async function fetchBrands() {
 }
 
 async function fetchCoupons() {
-    const docs = await Coupon.find({});
+    const docs = await Coupon.find({ ...NOT_DELETED });
     await Coupon.withCodes(docs);
     return plain(docs);
 }
 
 async function fetchOrders() {
-    const docs = await Order.find({})
+    const docs = await Order.find({ ...NOT_DELETED })
         .populate('user', 'firstName lastName email avatar')
         .populate('coupon', 'code');
     await Order.withCodes(docs);
@@ -77,7 +78,7 @@ async function fetchOrders() {
 async function fetchUsers() {
     // Credential material is excluded at the query — it can never
     // reach the sheet, whatever columns are defined below.
-    const docs = await User.find({}).select(
+    const docs = await User.find({ ...NOT_DELETED }).select(
         '-password -twoFactorSecret -passwordResetTokenHash -passwordResetExpires',
     );
     await User.withCodes(docs);
@@ -85,7 +86,7 @@ async function fetchUsers() {
 }
 
 async function fetchReviews() {
-    const docs = await Review.find({})
+    const docs = await Review.find({ ...NOT_DELETED })
         .populate('product', 'name')
         .populate('user', 'firstName lastName username email avatar');
     await Review.withCodes(docs);
@@ -93,7 +94,7 @@ async function fetchReviews() {
 }
 
 async function fetchMedia() {
-    const docs = await Media.find({});
+    const docs = await Media.find({ ...NOT_DELETED });
     await Media.withCodes(docs);
     return plain(docs);
 }

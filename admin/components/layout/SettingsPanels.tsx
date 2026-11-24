@@ -25,6 +25,7 @@ import { settingsService } from "@/services/settingsService";
 import { toast } from "@/components/ui/Toast";
 import { useAdminAuth } from "@/services/authContext";
 import type {
+  DeletedItem,
   PermissionMatrixData,
   RolePermissionsData,
   UpdateUserValues,
@@ -193,6 +194,16 @@ export function SettingsPanel({
           onUpdateUser={onUpdateUser}
           onCreateUser={onCreateUser}
           onResetUserTwoFactor={onResetUserTwoFactor}
+        />
+      );
+    case "Deleted Items":
+      return (
+        <DeletedItemsPanel
+          timeZone={
+            typeof settings.general?.timeZone === "string"
+              ? settings.general.timeZone
+              : undefined
+          }
         />
       );
     case "Security":
@@ -2426,7 +2437,7 @@ function ServiceBuilderPanel({
     }
     const confirmed = await confirmDialog({
       title: t("Remove {title}?").replace("{title}", item.title || t("this service")),
-      message: t("Its saved configuration will be deleted. This cannot be undone."),
+      message: t("It will move to Deleted Items in Settings and can be restored."),
       confirmLabel: t("Remove"),
       variant: "danger",
     });
@@ -2948,6 +2959,235 @@ function AppearancePanel({ data, saving, onSave }: SectionPanelProps<ObjectData>
         ))}
       </div>
       <SettingsSaveButton onSave={handleSave} saving={saving} />
+    </SettingsCard>
+  );
+}
+// ── Deleted Items ───────────────────────────────────────────────────
+// The home of every soft delete in the admin (Ahsan's order): records
+// deleted from any module — and removed integration entries — wait
+// here with who deleted them and when (store timezone). Restore
+// sends a record back exactly as it was; Delete Permanently is the
+// real removal. Both actions are Settings writes, so each runs the
+// Settings Lock security check after its confirmation, and the API
+// additionally requires the item's own module Delete permission —
+// the buttons below only mirror that gate for display.
+const DELETED_MODULE_OPTIONS = [
+  { value: "all", label: "All Modules" },
+  { value: "products", label: "Products" },
+  { value: "orders", label: "Orders" },
+  { value: "customers", label: "Customers" },
+  { value: "users", label: "Users" },
+  { value: "categories", label: "Categories" },
+  { value: "brands", label: "Brands" },
+  { value: "coupons", label: "Coupons" },
+  { value: "media", label: "Media" },
+  { value: "reviews", label: "Reviews" },
+  { value: "integrations", label: "Integrations" },
+];
+
+const DELETED_MODULE_PERMISSIONS: Record<string, string> = {
+  products: "Products",
+  orders: "Orders",
+  customers: "Customers",
+  users: "Users",
+  categories: "Categories",
+  brands: "Brands",
+  coupons: "Coupons",
+  media: "Media",
+  reviews: "Reviews",
+  integrations: "Settings",
+};
+
+function DeletedItemsPanel({ timeZone }: { timeZone?: string }) {
+  const { t } = useLanguage();
+  const { hasPermission } = useAdminAuth();
+  const [items, setItems] = useState<DeletedItem[]>([]);
+  const [moduleFilter, setModuleFilter] = useState("all");
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    settingsService
+      .getDeletedItems(moduleFilter === "all" ? undefined : moduleFilter)
+      .then((data) => {
+        if (!cancelled) setItems(data);
+      })
+      .catch((loadError: unknown) => {
+        if (!cancelled) toast.error(extractApiError(loadError));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [moduleFilter]);
+
+  const formatDeletedAt = (value: string) => {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "—";
+    try {
+      return new Intl.DateTimeFormat("en-GB", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        ...(timeZone ? { timeZone } : {}),
+      }).format(date);
+    } catch {
+      return date.toLocaleString();
+    }
+  };
+
+  const canActOn = (item: DeletedItem) =>
+    typeof hasPermission !== "function" ||
+    hasPermission(DELETED_MODULE_PERMISSIONS[item.module] || "", "delete");
+
+  const dropRow = (item: DeletedItem) =>
+    setItems((current) =>
+      current.filter((row) => !(row.module === item.module && row.id === item.id)),
+    );
+
+  const restore = async (item: DeletedItem) => {
+    const confirmed = await confirmDialog({
+      title: t("Restore this item?"),
+      message: t("{name} will return to {module} exactly as it was.")
+        .replace("{name}", item.name)
+        .replace("{module}", t(item.moduleLabel)),
+      confirmLabel: t("Restore"),
+    });
+    if (!confirmed) return;
+    // Settings Lock: restoring is a Settings write — the caller's own
+    // password is verified for this action, like every Settings save.
+    const securityPassword = await securityCheckDialog({
+      message: t("Enter your own account password to restore this item."),
+      confirmLabel: t("Verify & Restore"),
+    });
+    if (!securityPassword) return;
+    setBusyId(item.id);
+    try {
+      await settingsService.restoreDeletedItem(item.module, item.id, securityPassword);
+      dropRow(item);
+      toast.success(t("Item restored."));
+    } catch (restoreError) {
+      toast.error(extractApiError(restoreError));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const permanentlyDelete = async (item: DeletedItem) => {
+    const confirmed = await confirmDialog({
+      title: t("Delete permanently?"),
+      message: t("{name} will be removed forever. This cannot be undone.").replace(
+        "{name}",
+        item.name,
+      ),
+      confirmLabel: t("Delete Permanently"),
+      variant: "danger",
+    });
+    if (!confirmed) return;
+    // Settings Lock: the permanent delete is a Settings write too —
+    // no verified password, nothing is removed (the API answers 403).
+    const securityPassword = await securityCheckDialog({
+      message: t("Enter your own account password to permanently delete this item."),
+      confirmLabel: t("Verify & Delete"),
+    });
+    if (!securityPassword) return;
+    setBusyId(item.id);
+    try {
+      await settingsService.permanentlyDeleteItem(item.module, item.id, securityPassword);
+      dropRow(item);
+      toast.success(t("Item deleted permanently."));
+    } catch (deleteError) {
+      toast.error(extractApiError(deleteError));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  return (
+    <SettingsCard
+      title={t("Deleted Items")}
+      description="Deleted records from every module wait here. Restore one to bring it back exactly as it was, or delete it permanently."
+    >
+      <div className="mb-4 flex justify-end">
+        <div className="w-56 max-w-full">
+          <Select
+            value={moduleFilter}
+            options={DELETED_MODULE_OPTIONS}
+            onChange={setModuleFilter}
+            aria-label={t("Filter by module")}
+            triggerFullWidth
+          />
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center gap-2 py-10 text-[var(--text-muted)]">
+          <LoaderCircle size={18} className="animate-spin" />
+          <span>{t("Loading...")}</span>
+        </div>
+      ) : items.length === 0 ? (
+        <div className="flex flex-col items-center gap-2 py-10 text-center">
+          <Trash2 size={28} className="text-[var(--text-muted)]" />
+          <p className="font-medium text-[var(--text)]">{t("No deleted items")}</p>
+          <p className="max-w-md text-sm text-[var(--text-muted)]">
+            {t("Records deleted from any module will appear here, ready to restore.")}
+          </p>
+        </div>
+      ) : (
+        <div className="divide-y divide-[var(--border)]">
+          {items.map((item) => (
+            <div
+              key={`${item.module}:${item.id}`}
+              className="flex flex-wrap items-center gap-x-4 gap-y-2 py-3"
+            >
+              <div className="min-w-0 flex-1 basis-56">
+                <p className="truncate font-medium text-[var(--text)]">{item.name}</p>
+                <p className="text-xs text-[var(--text-muted)]">
+                  {t(item.moduleLabel)}
+                  {item.code ? ` · #${item.code}` : ""}
+                </p>
+              </div>
+              <div className="text-xs leading-5 text-[var(--text-muted)]">
+                <p>
+                  {t("Deleted by")}{" "}
+                  <span className="text-[var(--text)]">
+                    {item.deletedBy?.name || item.deletedBy?.email || "—"}
+                  </span>
+                </p>
+                <p>{formatDeletedAt(item.deletedAt)}</p>
+              </div>
+              {canActOn(item) ? (
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    icon={RotateCcw}
+                    disabled={busyId === item.id}
+                    onClick={() => void restore(item)}
+                  >
+                    {t("Restore")}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    icon={Trash2}
+                    disabled={busyId === item.id}
+                    onClick={() => void permanentlyDelete(item)}
+                  >
+                    {t("Delete Permanently")}
+                  </Button>
+                </div>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      )}
     </SettingsCard>
   );
 }

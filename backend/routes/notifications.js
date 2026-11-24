@@ -5,6 +5,7 @@ const Product = require('../models/Product');
 const Order = require('../models/Order');
 const Review = require('../models/Review');
 const User = require('../models/User');
+const { NOT_DELETED } = require('../utils/softDelete');
 
 const router = express.Router();
 
@@ -51,29 +52,29 @@ router.get('/', async (req, res) => {
             pendingCount,
             newCustomers,
         ] = await Promise.all([
-            Product.find({ stock: 0 })
+            Product.find({ stock: 0, ...NOT_DELETED })
                 .sort({ updatedAt: -1 })
                 .limit(FEED_LIMIT)
                 .select('name stock updatedAt code')
                 .lean(),
-            Product.find({ stock: { $gte: 1, $lte: LOW_STOCK_MAX } })
+            Product.find({ stock: { $gte: 1, $lte: LOW_STOCK_MAX }, ...NOT_DELETED })
                 .sort({ stock: 1, updatedAt: -1 })
                 .limit(FEED_LIMIT)
                 .select('name stock updatedAt code')
                 .lean(),
-            Order.find({ status: { $nin: ['delivered', 'cancelled'] } })
+            Order.find({ status: { $nin: ['delivered', 'cancelled'] }, ...NOT_DELETED })
                 .sort({ createdAt: -1 })
                 .limit(5)
                 .select('orderNumber status createdAt')
                 .lean(),
-            Review.find({ status: 'pending' })
+            Review.find({ status: 'pending', ...NOT_DELETED })
                 .sort({ createdAt: -1 })
                 .limit(FEED_LIMIT)
                 .populate('product', 'name')
                 .populate('user', 'firstName lastName username email')
                 .lean(),
-            Review.countDocuments({ status: 'pending' }),
-            User.find({ role: 'Customer' })
+            Review.countDocuments({ status: 'pending', ...NOT_DELETED }),
+            User.find({ role: 'Customer', ...NOT_DELETED })
                 .sort({ createdAt: -1 })
                 .limit(5)
                 .select('firstName lastName username email createdAt')

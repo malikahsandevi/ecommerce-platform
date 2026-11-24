@@ -4,6 +4,7 @@ const User = require('../models/User');
 const { logActivity } = require('../utils/activity');
 const { resolveCoupon, recordCouponUse } = require('../utils/coupon');
 const { sendOrderConfirmationEmail, sendOrderStatusEmail } = require('../utils/emailTemplates');
+const { NOT_DELETED, applySoftDelete } = require('../utils/softDelete');
 
 // Human-readable, unique order numbers: ORD-YYMMDD-XXXX where XXXX is a
 // random block. The admin panel used to invent these in the browser from a
@@ -45,7 +46,7 @@ const adjustStock = async (items, direction) => {
 const logLowStockAlerts = async (items) => {
     for (const item of items || []) {
         if (!item.product) continue;
-        const product = await Product.findById(item.product)
+        const product = await Product.findOne({ _id: item.product, ...NOT_DELETED })
             .select('name stock lowStockThreshold')
             .lean();
         if (!product) continue;
@@ -65,7 +66,7 @@ const logLowStockAlerts = async (items) => {
 // @access  Admin
 const getOrders = async (req, res) => {
     try {
-        const orders = await Order.find({}).populate('user', 'firstName lastName email avatar').populate('coupon', 'code');
+        const orders = await Order.find({ ...NOT_DELETED }).populate('user', 'firstName lastName email avatar').populate('coupon', 'code');
         await Order.withCodes(orders);
         res.json(orders);
     } catch (error) {
@@ -78,7 +79,7 @@ const getOrders = async (req, res) => {
 // @access  Admin
 const getOrderById = async (req, res) => {
     try {
-        const order = await Order.findById(req.params.id).populate('user', 'firstName lastName email avatar').populate('coupon', 'code');
+        const order = await Order.findOne({ _id: req.params.id, ...NOT_DELETED }).populate('user', 'firstName lastName email avatar').populate('coupon', 'code');
         if (!order) {
             return res.status(404).json({ message: 'Order not found' });
         }
@@ -103,7 +104,7 @@ const createOrder = async (req, res) => {
         // Every line must point at a real product with enough stock —
         // placing the order takes the units out of inventory.
         for (const item of data.items) {
-            const product = await Product.findById(item.product).select('stock name').lean();
+            const product = await Product.findOne({ _id: item.product, ...NOT_DELETED }).select('stock name').lean();
             if (!product) {
                 return res.status(400).json({ message: 'One of the ordered products no longer exists.' });
             }
@@ -201,7 +202,7 @@ const createOrder = async (req, res) => {
 // @access  Admin
 const updateOrder = async (req, res) => {
     try {
-        const order = await Order.findById(req.params.id);
+        const order = await Order.findOne({ _id: req.params.id, ...NOT_DELETED });
         if (!order) {
             return res.status(404).json({ message: 'Order not found' });
         }
@@ -250,18 +251,25 @@ const updateOrder = async (req, res) => {
     }
 };
 
-// @desc    Delete an order
+// @desc    Delete an order (soft — Settings → Deleted Items)
 // @route   DELETE /api/orders/:id
 // @access  Admin
 const deleteOrder = async (req, res) => {
     try {
-        const order = await Order.findByIdAndDelete(req.params.id);
+        // Only a live order can be deleted: a second delete answers
+        // 404, so the stock below can never be returned twice.
+        const order = await Order.findOne({ _id: req.params.id, ...NOT_DELETED });
         if (!order) {
             return res.status(404).json({ message: 'Order not found' });
         }
 
+        applySoftDelete(Order, order, req.user?._id);
+        await order.save();
+
         // A deleted live order frees its stock again; a cancelled order
-        // already returned it when it was cancelled.
+        // already returned it when it was cancelled. Restoring the
+        // order (Settings → Deleted Items) takes the stock back out —
+        // the exact inverse, run by the trash controller.
         if (order.status !== 'cancelled') {
             await adjustStock(order.items, +1);
         }
@@ -277,5 +285,8 @@ module.exports = {
     getOrderById,
     createOrder,
     updateOrder,
-    deleteOrder
+    deleteOrder,
+    // Shared with the Deleted Items restore, which re-reserves the
+    // stock a soft delete returned.
+    adjustStock
 };

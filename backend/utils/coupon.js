@@ -12,6 +12,7 @@
 // set); fixed takes the flat value. A discount never exceeds the
 // subtotal and never goes negative.
 const Coupon = require('../models/Coupon');
+const { NOT_DELETED } = require('./softDelete');
 
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
@@ -25,7 +26,7 @@ const resolveCoupon = async (rawCode, subtotal) => {
     const code = String(rawCode || '').trim().toUpperCase();
     if (!code) throw new Error('Please enter a coupon code.');
 
-    const coupon = await Coupon.findOne({ code });
+    const coupon = await Coupon.findOne({ code, ...NOT_DELETED });
     if (!coupon) throw new Error(`Coupon code "${code}" was not found.`);
     if (!coupon.isActive) throw new Error('This coupon is not active.');
 
