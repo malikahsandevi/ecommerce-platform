@@ -9,21 +9,42 @@ import {
   FolderTree,
   Award,
   Image as ImageIcon,
+  ShoppingBag,
+  Users,
+  TicketPercent,
   CircleAlert,
 } from "lucide-react";
 import { apiClient } from "@/services/api";
 import { useLanguage } from "@/services/i18n";
+import { formatMoney } from "@/services/currency";
 
 export interface GlobalSearchResult {
-  type: "product" | "category" | "brand" | "media";
+  type: "product" | "category" | "brand" | "media" | "order" | "customer" | "coupon";
   id: string;
   name: string;
   code?: string | null;
   sku?: string | null;
   image?: string;
+  /** Context line shown under the name (a customer's email). */
+  detail?: string | null;
+  /** Orders only: the ordering customer's label for the context line. */
+  customer?: string | null;
+  /** Orders only: the order total for the context line. */
+  total?: number | null;
+  /** Click-through search term the target list page pre-applies to its
+   * search box (the notification hand-off pattern). */
+  search?: string | null;
 }
 
-type ScopeName = "all" | "products" | "categories" | "brands" | "media";
+type ScopeName =
+  | "all"
+  | "products"
+  | "categories"
+  | "brands"
+  | "media"
+  | "orders"
+  | "customers"
+  | "coupons";
 
 const SCOPE_WORDS: Record<string, ScopeName> = {
   product: "products",
@@ -33,6 +54,12 @@ const SCOPE_WORDS: Record<string, ScopeName> = {
   brand: "brands",
   brands: "brands",
   media: "media",
+  order: "orders",
+  orders: "orders",
+  customer: "customers",
+  customers: "customers",
+  coupon: "coupons",
+  coupons: "coupons",
 };
 
 const TYPE_META: Record<
@@ -59,6 +86,21 @@ const TYPE_META: Record<
     Icon: ImageIcon,
     tagClasses: "bg-violet-500/10 text-violet-600",
   },
+  order: {
+    label: "Order",
+    Icon: ShoppingBag,
+    tagClasses: "bg-rose-500/10 text-rose-600",
+  },
+  customer: {
+    label: "Customer",
+    Icon: Users,
+    tagClasses: "bg-teal-500/10 text-teal-600",
+  },
+  coupon: {
+    label: "Coupon",
+    Icon: TicketPercent,
+    tagClasses: "bg-amber-500/10 text-amber-600",
+  },
 };
 
 const SCOPE_LABEL: Record<Exclude<ScopeName, "all">, string> = {
@@ -66,6 +108,9 @@ const SCOPE_LABEL: Record<Exclude<ScopeName, "all">, string> = {
   categories: "Categories",
   brands: "Brands",
   media: "Media",
+  orders: "Orders",
+  customers: "Customers",
+  coupons: "Coupons",
 };
 
 /**
@@ -75,10 +120,10 @@ const SCOPE_LABEL: Record<Exclude<ScopeName, "all">, string> = {
  * Animations setting off, only the first line shows, statically.
  */
 const SEARCH_HINTS = [
-  "Search products, categories, brands, media...",
+  "Search products, orders, customers, coupons, categories, brands, media...",
   "Type a name or code — e.g. Wireless Headphones",
   "Search one place only: headphones//products",
-  "Scopes: //products · //categories · //brands · //media",
+  "Scopes: //products · //orders · //customers · //coupons · //categories · //brands · //media",
 ];
 const HINT_INTERVAL_MS = 2800;
 
@@ -110,9 +155,10 @@ function parseQuery(raw: string): {
 }
 
 /**
- * The TopBar global search: one wide box over all four sources
- * (products, categories, brands, media) with results in a Select-style
- * dropdown panel under the box. Supports the `text//scope` syntax.
+ * The TopBar global search: one wide box over all seven sources
+ * (products, categories, brands, media, orders, customers, coupons)
+ * with results in a Select-style dropdown panel under the box.
+ * Supports the `text//scope` syntax.
  */
 export const GlobalSearch: React.FC = () => {
   const { t } = useLanguage();
@@ -216,9 +262,41 @@ export const GlobalSearch: React.FC = () => {
   }, [results]);
 
   const goToResult = (result: GlobalSearchResult) => {
+    const path =
+      result.type === "product"
+        ? "/products"
+        : result.type === "category"
+          ? "/categories"
+          : result.type === "brand"
+            ? "/brands"
+            : result.type === "order"
+              ? "/orders"
+              : result.type === "customer"
+                ? "/customers"
+                : result.type === "coupon"
+                  ? "/coupons"
+                  : "/media";
     try {
       if (result.type === "media") {
         sessionStorage.setItem("openMediaId", result.id);
+      } else if (
+        result.type === "order" ||
+        result.type === "customer" ||
+        result.type === "coupon"
+      ) {
+        // Notification-style hand-off: the target list page pre-applies
+        // the result's search term to its search box (visibly) and
+        // selects the record once the list has loaded.
+        sessionStorage.setItem(
+          "openRecord",
+          JSON.stringify({
+            path,
+            id: result.id,
+            search: result.search || undefined,
+            ts: Date.now(),
+          }),
+        );
+        window.dispatchEvent(new Event("admin:open-record"));
       } else {
         sessionStorage.setItem(
           "openEntity",
@@ -230,14 +308,6 @@ export const GlobalSearch: React.FC = () => {
     }
     setOpen(false);
     setQuery("");
-    const path =
-      result.type === "product"
-        ? "/products"
-        : result.type === "category"
-          ? "/categories"
-          : result.type === "brand"
-            ? "/brands"
-            : "/media";
     router.push(path);
   };
 
@@ -332,11 +402,20 @@ export const GlobalSearch: React.FC = () => {
               const meta = TYPE_META[result.type];
               const TypeIcon = meta.Icon;
               const metaLine =
-                result.type === "product" && result.sku
-                  ? `SKU ${result.sku}${result.code ? ` · #${result.code}` : ""}`
-                  : result.code
-                    ? `#${result.code}`
-                    : "";
+                result.type === "order"
+                  ? [
+                      result.customer || "",
+                      result.total != null ? formatMoney(result.total, 2) : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")
+                  : result.detail
+                    ? result.detail
+                    : result.type === "product" && result.sku
+                      ? `SKU ${result.sku}${result.code ? ` · #${result.code}` : ""}`
+                      : result.code
+                        ? `#${result.code}`
+                        : "";
               return (
                 <button
                   key={`${result.type}-${result.id}`}
