@@ -11,8 +11,9 @@ import { ConfirmDialogHost } from "@/components/ui/ConfirmDialog";
 import { SecurityCheckDialogHost } from "@/components/ui/SecurityCheckDialog";
 import { ToastHost } from "@/components/ui/Toast";
 import { AuthProvider, useAdminAuth } from "@/services/authContext";
-import { fetchAndApplyAppearance, PaletteSeedContext, reassertDeviceTheme } from "@/services/appearance";
+import { fetchAndApplyAppearance, PaletteSeedContext, SidebarSeedContext, reassertDeviceTheme } from "@/services/appearance";
 import { fetchAndApplyStoreCurrency } from "@/services/currency";
+import { fetchAndApplyStoreTimeZone } from "@/services/storeTime";
 import { LanguageProvider, fetchAndApplyLanguage } from "@/services/i18n";
 
 // Renders the shell and gates the panel behind a session. Kept separate from
@@ -53,6 +54,13 @@ function AdminShellInner({ children }: { children: React.ReactNode }) {
   // in the panel — load and apply it once signed in, like Appearance.
   useEffect(() => {
     if (isAuthenticated) void fetchAndApplyStoreCurrency();
+  }, [isAuthenticated]);
+
+  // The store timezone (Settings → General) is the canonical day for
+  // every date filter in the panel — load and apply it once signed
+  // in, like the currency.
+  useEffect(() => {
+    if (isAuthenticated) void fetchAndApplyStoreTimeZone();
   }, [isAuthenticated]);
 
   // The UI language (Settings → General) — same pattern: load and
@@ -128,20 +136,28 @@ function AdminShellInner({ children }: { children: React.ReactNode }) {
 export default function AdminShell({
   children,
   ssrPaletteId,
+  ssrSidebarCollapsed,
 }: {
   children: React.ReactNode;
   /** The kept palette id the server read from the cookie — seeds
    *  usePalette so JS-coloured elements render in the kept palette
    *  from the very first frame, server and client alike. */
   ssrPaletteId?: string | null;
+  /** The sidebar's collapsed state the server read from the
+   *  admin-sidebar cookie — seeds the Sidebar's initial state so
+   *  the first client render matches the server render (the
+   *  hydration #418 class; see services/appearance.ts). */
+  ssrSidebarCollapsed?: boolean | null;
 }) {
   return (
     <PaletteSeedContext.Provider value={ssrPaletteId ?? null}>
-      <AuthProvider>
-        <LanguageProvider>
-          <AdminShellInner>{children}</AdminShellInner>
-        </LanguageProvider>
-      </AuthProvider>
+      <SidebarSeedContext.Provider value={ssrSidebarCollapsed ?? null}>
+        <AuthProvider>
+          <LanguageProvider>
+            <AdminShellInner>{children}</AdminShellInner>
+          </LanguageProvider>
+        </AuthProvider>
+      </SidebarSeedContext.Provider>
     </PaletteSeedContext.Provider>
   );
 }

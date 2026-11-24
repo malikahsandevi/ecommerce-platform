@@ -75,10 +75,29 @@ const scopeIds = (list: any): string[] =>
     )
     .filter(Boolean);
 
+const COUPON_DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Coupon expiry — the ONE rule, shared with the server resolver
+ * (backend/utils/coupon.js) and resourceRegistry's adaptRow: a
+ * date-only validUntil (stored at exactly UTC midnight — what the
+ * form's date input saves) covers that whole day and expires at its
+ * END; a validUntil carrying a time compares exactly. Without this,
+ * a coupon set to end today showed "expired" from the first minute
+ * of its last day while the server still honoured it.
+ */
+export const couponExpired = (validUntil?: string | null, now = new Date()): boolean => {
+  if (!validUntil) return false;
+  const end = new Date(validUntil).getTime();
+  if (Number.isNaN(end)) return false;
+  const dateOnly = end % COUPON_DAY_MS === 0;
+  return now.getTime() > (dateOnly ? end + COUPON_DAY_MS - 1 : end);
+};
+
 const getCouponStatus = (coupon: Coupon) => {
   if (coupon.status) return coupon.status;
   if (coupon.isActive === false) return "disabled";
-  return coupon.validUntil && new Date(coupon.validUntil) < new Date() ? "expired" : "active";
+  return couponExpired(coupon.validUntil) ? "expired" : "active";
 };
 
 export const couponConfig = {

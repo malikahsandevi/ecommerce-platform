@@ -206,6 +206,26 @@ html[data-sidebar="collapsed"] .admin-sidebar .sb-center {
   height: 0;
 }
 
+/* Theme toggle icon: BOTH icons are always in the DOM and CSS —
+   keyed off the same <html data-theme> attribute that paints the
+   theme — decides which one shows. The toggle used to pick its icon
+   from React state initialised by reading the document on the
+   client, which the server could never match (it rendered the
+   light-theme Moon while the client's first render showed the
+   dark-theme Sun): React threw hydration error #418 on every page
+   load and regenerated the whole tree. With no state involved, the
+   server HTML, the client HTML and the painted icon always agree,
+   and the icon follows the painted theme even before hydration. */
+.theme-icon-sun {
+  display: none;
+}
+html[data-theme="dark"] .theme-icon-sun {
+  display: block;
+}
+html[data-theme="dark"] .theme-icon-moon {
+  display: none;
+}
+
 /* Number inputs: the browser's native spinner arrows are hidden
    everywhere (webkit + Firefox) — the custom StepperButtons
    (components/ui/NumberStepper) are the only steppers shown. */

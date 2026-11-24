@@ -13,10 +13,10 @@ import {
 import Select from "@/components/ui/Select";
 import DateRangePicker, {
   formatRangeDayShort,
-  toIsoDay,
   type DateRange,
 } from "@/components/ui/DateRangePicker";
 import { apiClient } from "@/services/api";
+import { presetRangeInStoreTz, useStoreTimeZone } from "@/services/storeTime";
 import {
   formatMoney,
   formatMoneyCompact,
@@ -45,15 +45,11 @@ interface RevenueAnalyticsProps {
 
 type RangeKey = "7" | "30" | "90" | "custom";
 
-// "Last N Days" = today − (N−1) days through today, inclusive — the
-// same preset computation the list-page FilterBar uses, so every
-// Filter-by-Date control in the admin means the same days.
-const presetRange = (days: number): DateRange => {
-  const to = new Date();
-  const from = new Date();
-  from.setDate(from.getDate() - (days - 1));
-  return { from: toIsoDay(from), to: toIsoDay(to) };
-};
+// "Last N Days" = the store's today − (N−1) days through the store's
+// today, inclusive — the same preset computation the list-page
+// FilterBar uses (services/storeTime), in the STORE's timezone: the
+// server buckets revenue-range by store days, so the window asked
+// for must be store days too, whatever timezone the browser is in.
 
 // Chart accents derive from the Admin Panel Color (Settings →
 // Appearance): the revenue line IS the primary color, the orders line
@@ -114,7 +110,17 @@ export const RevenueAnalytics: React.FC<RevenueAnalyticsProps> = ({
   // The applied preset window, computed on selection exactly like the
   // list-page FilterBar computes its presets. The default view is
   // Last 7 Days.
-  const [presetWindow, setPresetWindow] = useState<DateRange>(() => presetRange(7));
+  const [presetWindow, setPresetWindow] = useState<DateRange>(() => presetRangeInStoreTz(7));
+  // When the store timezone lands (the shell loads it after sign-in),
+  // recompute the active preset window in store days — until then the
+  // window was computed on the browser's day, which is a different
+  // window whenever the browser is not in the store's timezone.
+  const storeTz = useStoreTimeZone();
+  useEffect(() => {
+    if (!storeTz || range === "custom") return;
+    setPresetWindow(presetRangeInStoreTz(Number(range)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storeTz]);
   // Custom range (Ahsan's Filters-by-Date round): the shared
   // DateRangePicker collects From/To; only its Apply commits.
   const [customRange, setCustomRange] = useState<DateRange | null>(null);
@@ -213,7 +219,7 @@ export const RevenueAnalytics: React.FC<RevenueAnalyticsProps> = ({
               return;
             }
             setRange(value as RangeKey);
-            setPresetWindow(presetRange(Number(value)));
+            setPresetWindow(presetRangeInStoreTz(Number(value)));
           }}
           options={[
             { label: t("Last 7 Days"), value: "7" },

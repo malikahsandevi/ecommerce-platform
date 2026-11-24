@@ -61,10 +61,16 @@ export function Pagination({
     return [1, "...", current - 1, current, current + 1, "...", total];
   };
 
-  const startItem = (currentPage - 1) * itemsPerPage + 1;
-  const endItem = totalItems ? Math.min(currentPage * itemsPerPage, totalItems) : currentPage * itemsPerPage;
+  // A KNOWN total of 0 is still a total: the check is `!= null`, not
+  // truthiness — with a falsy check an empty result fell through to
+  // the no-total template and announced "Showing 1 to 0 records",
+  // claiming a first record that does not exist. An empty list reads
+  // honestly as "Showing 0 to 0 of 0 records".
+  const hasTotal = totalItems != null;
+  const startItem = hasTotal && totalItems === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1;
+  const endItem = hasTotal ? Math.min(currentPage * itemsPerPage, totalItems) : currentPage * itemsPerPage;
 
-  const showingText = totalItems
+  const showingText = hasTotal
     ? t("Showing {from} to {to} of {total} records")
         .replace("{from}", String(startItem))
         .replace("{to}", String(endItem))

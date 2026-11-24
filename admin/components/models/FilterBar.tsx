@@ -11,9 +11,13 @@ import Select, {
 import DateRangePicker, {
   DateRange,
   formatRangeDayShort,
-  toIsoDay,
 } from "@/components/ui/DateRangePicker";
 import { useLanguage } from "@/services/i18n";
+import {
+  dayKeyInStoreTz,
+  presetRangeInStoreTz,
+  useStoreTimeZone,
+} from "@/services/storeTime";
 
 export interface FilterConfigItem {
   id: string;
@@ -105,6 +109,13 @@ export const FilterBar = <TSearchData extends SearchableEntityRecord>({
   searchHandoff = null,
 }: FilterBarProps<TSearchData>) => {
   const { t } = useLanguage();
+  // The store timezone drives every day computation below (preset
+  // windows and record days alike): the server resolves the same
+  // days in the store timezone for the dashboard and the export, so
+  // the panel must too — a browser in another timezone otherwise
+  // filters a different set of days than the export of the same
+  // list. Subscribing re-runs the pipeline when the zone lands.
+  const storeTz = useStoreTimeZone();
 
   // Internal State
   const [searchedData, setSearchedData] = useState<TSearchData[]>(sourceData);
@@ -128,14 +139,22 @@ export const FilterBar = <TSearchData extends SearchableEntityRecord>({
   const [dateRange, setDateRange] = useState<DateRange | null>(null);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
 
-  // "Last N Days" = today − (N−1) days through today, inclusive —
-  // the same local ISO days the pipeline compares against.
-  const presetRange = (days: number): DateRange => {
-    const to = new Date();
-    const from = new Date();
-    from.setDate(from.getDate() - (days - 1));
-    return { from: toIsoDay(from), to: toIsoDay(to) };
-  };
+  // "Last N Days" = the store's today − (N−1) days through the
+  // store's today, inclusive — store-timezone days, the same days
+  // the pipeline below compares records against.
+  const presetRange = (days: number): DateRange => presetRangeInStoreTz(days);
+
+  // When the store timezone lands after a preset was already picked,
+  // recompute that preset's window in store days (it was computed on
+  // the browser's day, which can be a day off). Custom ranges are the
+  // picker's own day keys and are left alone.
+  useEffect(() => {
+    if (!storeTz) return;
+    if (datePreset !== "all" && datePreset !== "custom") {
+      setDateRange(presetRangeInStoreTz(Number(datePreset)));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storeTz]);
 
   // Date dropdown change: a preset applies immediately; "All Dates"
   // clears the range; "Custom" never switches by itself — it opens
@@ -213,9 +232,10 @@ export const FilterBar = <TSearchData extends SearchableEntityRecord>({
     });
 
     // Apply the By-Date range: the record's own date must fall
-    // inside [from, to] inclusive. Days compare as local ISO day
-    // strings — the same days the picker selects and the same days
-    // the tables display (toLocaleDateString is local too). A record
+    // inside [from, to] inclusive. Days compare as ISO day strings
+    // in the STORE's timezone — the canonical day the server uses
+    // for the same range in the export and the dashboard — so the
+    // list and its export always contain the same records. A record
     // with no readable date cannot be inside a range, so it drops
     // out while a range is applied.
     if (dateRange) {
@@ -224,14 +244,16 @@ export const FilterBar = <TSearchData extends SearchableEntityRecord>({
         if (raw == null) return false;
         const d = raw instanceof Date ? raw : new Date(String(raw));
         if (Number.isNaN(d.getTime())) return false;
-        const day = toIsoDay(d);
+        const day = dayKeyInStoreTz(d);
         return day >= dateRange.from && day <= dateRange.to;
       });
     }
 
     // Emit Final Filtered Result to Parent
     onDataChange(result);
-  }, [searchedData, filterValues, filtersData, dateRange, dateField, onDataChange]);
+    // storeTz is a dependency so the pipeline re-runs when the store
+    // timezone lands after sign-in (the day keys can shift by one).
+  }, [searchedData, filterValues, filtersData, dateRange, dateField, onDataChange, storeTz]);
 
   // Active Checks
   const isDropdownFilterActive = Object.values(filterValues).some(

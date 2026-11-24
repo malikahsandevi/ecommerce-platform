@@ -361,13 +361,20 @@ export default function MediaStats({ items, isLoading = false }: { items: Row[];
     const legacyBuckets = Object.entries(storage?.providers || {}).filter(
       ([key]) => !entrySlugs.has(key),
     );
+    // Every block shows its ACCOUNT's total — the same groupTotal the
+    // headline sums (counted once per account). Computing the figure
+    // per entry instead let two entries pointing at one account show
+    // two different totals for it whenever their Settings plan fields
+    // differed, contradicting each other and the headline.
+    const groupTotalBySlug = new Map<string, number | null>();
+    for (const group of groups) {
+      const total = groupTotal(group);
+      for (const entry of group) groupTotalBySlug.set(entry.slug, total);
+    }
     const providerBlocks = (
       <div className="flex flex-col gap-2.5">
         {entries.map((entry) => {
-          const settingsTotal = parsePlanLimitBytes(entry.planStorageLimit);
-          const reportedTotal =
-            entry.usage?.creditsLimit != null ? entry.usage.creditsLimit * GB : null;
-          const total = settingsTotal ?? reportedTotal;
+          const total = groupTotalBySlug.get(entry.slug) ?? null;
           return (
             <div
               key={entry.slug}

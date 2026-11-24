@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useContext, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { PanelLeftClose, PanelLeftOpen, Store } from "lucide-react";
 import SidebarItem from "@/components/ui/SidebarItem";
 import { useAdminAuth } from "@/services/authContext";
+import { SidebarSeedContext } from "@/services/appearance";
 import { useLanguage } from "@/services/i18n";
 // Page names/icons/links live in ONE shared config — the DetailPanel
 // empty state looks up the same icons via getPageIcon().
@@ -21,6 +22,18 @@ function syncSidebarAttribute(collapsed: boolean) {
     }
   } catch {
     /* attribute sync is best-effort */
+  }
+}
+
+/** Mirrors the preference into the admin-sidebar cookie — the root
+ *  layout reads it to seed this component's initial state on the
+ *  server render (SidebarSeedContext), so the first client render
+ *  can never disagree with the server (hydration #418). */
+function persistSidebarCookie(collapsed: boolean) {
+  try {
+    document.cookie = `admin-sidebar=${collapsed ? "collapsed" : "expanded"}; path=/; max-age=31536000; SameSite=Lax`;
+  } catch {
+    /* cookie sync is best-effort */
   }
 }
 
@@ -177,21 +190,20 @@ function SidebarBody({
 const Sidebar: React.FC = () => {
   const pathname = usePathname();
   const { user } = useAdminAuth();
-  // Initialise SYNCHRONOUSLY from the attribute the root layout's inline
-  // script set before first paint — the state is correct on the very
-  // first render, so the sidebar never flashes expanded-then-collapsed.
-  // Fallback: if the attribute is somehow missing at mount time (a stray
-  // writer removed it), the stored pref itself still answers correctly,
-  // and the mount effect below re-syncs the attribute from it.
-  const [collapsed, setCollapsed] = useState<boolean>(() => {
-    if (typeof document === "undefined") return false;
-    if (document.documentElement.getAttribute("data-sidebar") === "collapsed") return true;
-    try {
-      return localStorage.getItem("admin-sidebar") === "collapsed";
-    } catch {
-      return false;
-    }
-  });
+  // Initialise from the SERVER's seed (the admin-sidebar cookie, read
+  // by the root layout and handed down through AdminShell) — the one
+  // value the server render and the first client render are
+  // guaranteed to share. This state used to initialise by reading
+  // the document attribute / localStorage on the client: the server
+  // always rendered expanded, so a collapsed device produced
+  // different first-render HTML and React threw hydration error
+  // #418. The pre-paint script still paints the correct width from
+  // the device store before first paint, and the mount effect below
+  // re-syncs the state from localStorage right after hydration, so
+  // a missing/stale cookie costs at most the same correction the
+  // effect has always applied — never a hydration failure.
+  const sidebarSeed = useContext(SidebarSeedContext);
+  const [collapsed, setCollapsed] = useState<boolean>(() => sidebarSeed ?? false);
 
   // Expanded by default on desktop; remember the admin's own choice.
   useEffect(() => {
@@ -201,6 +213,7 @@ const Sidebar: React.FC = () => {
         if (saved !== null) {
           setCollapsed(saved === "collapsed");
           syncSidebarAttribute(saved === "collapsed");
+          persistSidebarCookie(saved === "collapsed");
         } else if (window.innerWidth < 768) {
           // Below md the sidebar is not rendered at all (top bar
           // instead); seed the collapsed attribute so a later move
@@ -227,6 +240,7 @@ const Sidebar: React.FC = () => {
       } catch {
         /* persistence is best-effort */
       }
+      persistSidebarCookie(next);
       syncSidebarAttribute(next);
       return next;
     });

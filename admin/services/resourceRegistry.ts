@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { apiClient } from './api';
 import { toast } from '@/components/ui/Toast';
+import { couponExpired } from '@/config/couponConfig';
 
 export interface ServiceCapabilities {
   canCreate: boolean;
@@ -60,7 +61,7 @@ function adaptRow(endpoint: string, row: any) {
     case 'coupons': {
       let status = 'active';
       if (row.isActive === false) status = 'disabled';
-      else if (row.validUntil && new Date(row.validUntil) < new Date()) status = 'expired';
+      else if (couponExpired(row.validUntil)) status = 'expired';
       return { ...row, status };
     }
     default:

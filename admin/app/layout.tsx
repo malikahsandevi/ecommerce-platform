@@ -89,6 +89,17 @@ export default async function RootLayout({
   const ssrPaletteSeedId =
     ssrPalette?.id ?? paletteByPrimary(ssrLegacyColor)?.id ?? null;
 
+  // The sidebar's collapsed preference, mirrored into a cookie by
+  // every writer of the preference (the Sidebar toggle, Settings →
+  // Appearance), handed to the shell as the Sidebar's hydration
+  // seed — the same pattern as the palette seed above: the server
+  // cannot read localStorage, so without this the Sidebar's first
+  // client render (collapsed, from the device store) disagreed
+  // with the server render (expanded) and React threw #418.
+  const sidebarCookie = cookieStore.get("admin-sidebar")?.value;
+  const ssrSidebarCollapsed =
+    sidebarCookie === "collapsed" ? true : sidebarCookie === "expanded" ? false : null;
+
   return (
     <html
       lang={ssrLang}
@@ -209,7 +220,7 @@ export default async function RootLayout({
         className="min-h-full flex flex-col bg-[var(--background)] text-[var(--text)] transition-colors duration-200"
         suppressHydrationWarning
       >
-        <AdminShell ssrPaletteId={ssrPaletteSeedId}>{children}</AdminShell>
+        <AdminShell ssrPaletteId={ssrPaletteSeedId} ssrSidebarCollapsed={ssrSidebarCollapsed}>{children}</AdminShell>
       </body>
     </html>
   );

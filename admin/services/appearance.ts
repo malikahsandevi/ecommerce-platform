@@ -341,6 +341,18 @@ const defaultPalette = (): PaletteDef => paletteById(DEFAULT_PALETTE_ID) as Pale
  *  render and the first painted frame all carry the kept palette. */
 export const PaletteSeedContext = createContext<string | null>(null);
 
+/** The sidebar's collapsed state as the SERVER read it from the
+ *  admin-sidebar cookie, handed down by the root layout through
+ *  AdminShell — the same seed pattern as the palette above. The
+ *  Sidebar used to initialise its state by reading localStorage /
+ *  the data-sidebar attribute on the client: the server renders
+ *  expanded, so a device with a collapsed preference produced
+ *  different first-render HTML and React threw hydration error
+ *  #418. Seeded from the cookie, both renders agree; the mount
+ *  effect still re-syncs from localStorage (the device truth)
+ *  after hydration. null = no cookie — render expanded. */
+export const SidebarSeedContext = createContext<boolean | null>(null);
+
 /** The panel's CURRENT palette: the PREVIEWED one while a preview
  *  runs, otherwise the kept one (or the default). Resolved through
  *  this one function everywhere — initial state included — because
@@ -422,9 +434,12 @@ export function applyAppearance(appearance: AppearanceSettings | undefined): voi
     }
 
     // Compact sidebar — share the sidebar's own storage key and notify the
-    // mounted sidebar so the change is visible without a reload.
+    // mounted sidebar so the change is visible without a reload. The
+    // cookie mirrors the choice for the server layout's hydration
+    // seed (see SidebarSeedContext).
     if (typeof appearance.compactSidebar === 'boolean') {
       localStorage.setItem('admin-sidebar', appearance.compactSidebar ? 'collapsed' : 'expanded');
+      document.cookie = `admin-sidebar=${appearance.compactSidebar ? 'collapsed' : 'expanded'}; path=/; max-age=31536000; SameSite=Lax`;
       window.dispatchEvent(new Event(SIDEBAR_PREF_EVENT));
     }
 
