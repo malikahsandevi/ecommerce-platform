@@ -177,68 +177,33 @@ html[data-sidebar="collapsed"] .admin-sidebar .sb-center {
   border-radius: 9999px;
 }
 
-/* Scrollbar arrow buttons (Chromium): every scrollable area shows
-   ONE solid-triangle arrow button at each end of its track — the
-   classic scrollbar look — in the primary colour so the glyph reads
-   clearly on the track in both themes (darker primary on hover).
-   The thumb travels between the two buttons. Chromium renders
-   scrollbar buttons in pairs at each end (double-button mode); the
-   redundant inner pair (the down-arrow at the top end, the up-arrow
-   at the bottom end, and their horizontal twins) is hidden so each
-   end carries exactly one arrow. Firefox has no scrollbar-button
-   support and ignores these rules; the sidebar nav above keeps its
-   fully hidden scrollbar.
-   The triangles are background-image SVGs — the ONLY technique
-   Chromium honours on scrollbar buttons: it ignores -webkit-mask
-   and clip-path there (the palette round's mask version painted
-   the whole button box solid — Ahsan: "arrow lagwo wapis, boxes
-   laga diye hain"). The fill colour rides in CSS variables
-   (--sb-arrow-*): the defaults above carry the default palette, and
-   services/palettes.ts (scrollbarArrowVars) recomputes them from
-   the kept palette's primary / primary-dark whenever a palette is
-   applied, so the arrows follow the palette exactly like the thumb
-   with no hard-coded hex in these rules. Geometry is unchanged:
-   12px buttons, 6px glyphs, solid triangles. */
+/* Scrollbar arrow buttons — REMOVED everywhere (Ahsan's order
+   2026-11-24: "sary scrollbars ky arrow hata do ye old view me
+   aty hai"). The classic end arrows (added in b2e70cf at his
+   earlier order) are gone from EVERY scrollbar — the main page
+   bar and every panel / dropdown / modal / table scroller — for
+   the modern arrow-less look: the thumb travels the full track.
+   The bars themselves are unchanged (the 6px width, themed
+   track and primary thumb above are untouched), and Firefox
+   never rendered scrollbar buttons in the first place. The
+   --sb-arrow-* variables are still set by the palette plumbing
+   (services/palettes.ts scrollbarArrowVars) but are now inert —
+   no button exists to paint them. Do not re-add button styling
+   here without his word. */
 ::-webkit-scrollbar-button {
-  display: block;
-  background-color: transparent;
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size: 6px 6px;
-}
-::-webkit-scrollbar-button:vertical:increment:start,
-::-webkit-scrollbar-button:vertical:decrement:end,
-::-webkit-scrollbar-button:horizontal:increment:start,
-::-webkit-scrollbar-button:horizontal:decrement:end {
   display: none;
+  width: 0;
+  height: 0;
 }
-::-webkit-scrollbar-button:vertical:decrement {
-  height: 12px;
-  background-image: var(--sb-arrow-up);
-}
-::-webkit-scrollbar-button:vertical:increment {
-  height: 12px;
-  background-image: var(--sb-arrow-down);
-}
-::-webkit-scrollbar-button:horizontal:decrement {
-  width: 12px;
-  background-image: var(--sb-arrow-left);
-}
+::-webkit-scrollbar-button:single-button,
+::-webkit-scrollbar-button:double-button,
+::-webkit-scrollbar-button:vertical:decrement,
+::-webkit-scrollbar-button:vertical:increment,
+::-webkit-scrollbar-button:horizontal:decrement,
 ::-webkit-scrollbar-button:horizontal:increment {
-  width: 12px;
-  background-image: var(--sb-arrow-right);
-}
-::-webkit-scrollbar-button:vertical:decrement:hover {
-  background-image: var(--sb-arrow-up-hover, var(--sb-arrow-up));
-}
-::-webkit-scrollbar-button:vertical:increment:hover {
-  background-image: var(--sb-arrow-down-hover, var(--sb-arrow-down));
-}
-::-webkit-scrollbar-button:horizontal:decrement:hover {
-  background-image: var(--sb-arrow-left-hover, var(--sb-arrow-left));
-}
-::-webkit-scrollbar-button:horizontal:increment:hover {
-  background-image: var(--sb-arrow-right-hover, var(--sb-arrow-right));
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 /* Number inputs: the browser's native spinner arrows are hidden
