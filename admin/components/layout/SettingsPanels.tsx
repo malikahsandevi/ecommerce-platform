@@ -1152,7 +1152,14 @@ function UsersPanel({
   );
 }
 
-const MATRIX_ACTIONS = ["view", "create", "edit", "delete"] as const;
+const MATRIX_ACTIONS = ["view", "create", "edit", "delete", "export"] as const;
+
+// The Export column is special (Ahsan's rule): the right exists only
+// for Super Admin and Admin — the API refuses every other role before
+// the matrix is even consulted. For those roles the column therefore
+// renders unticked and disabled (visible, never grantable from here);
+// the backend also forces any stored tick for them off.
+const EXPORT_ROLES = ["Super Admin", "Admin"];
 
 /** Circular tick — the same visual language as the media upload panel:
  *  filled orange with a white check, or a hollow ring. */
@@ -1469,10 +1476,14 @@ function RolePermissionsPanel({
               <p className="mb-4 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 text-xs text-[var(--text-soft)]">
                 {t("Only a Super Admin can change role permissions. You're viewing them read-only.")}
               </p>
+            ) : !EXPORT_ROLES.includes(selectedRole) ? (
+              <p className="mb-4 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 text-xs text-[var(--text-soft)]">
+                {t("Data export is available to Super Admin and Admin only, so the Export column is off for this role.")}
+              </p>
             ) : null}
 
             <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
-              <table className="w-full min-w-[520px] text-left text-sm">
+              <table className="w-full min-w-[600px] text-left text-sm">
                 <thead className="bg-[var(--surface)] text-xs text-[var(--text-muted)]">
                   <tr>
                     <th className="px-4 py-3">{t("Module")}</th>
@@ -1493,13 +1504,21 @@ function RolePermissionsPanel({
                         const supported = (
                           data.moduleActions[module] || []
                         ).includes(action);
-                        const on = Boolean(matrix[selectedRole]?.[module]?.[action]);
+                        // Export cells for roles outside EXPORT_ROLES are
+                        // display-only: always shown unticked and never
+                        // toggleable (see the EXPORT_ROLES note above).
+                        const exportLocked =
+                          action === "export" &&
+                          !EXPORT_ROLES.includes(selectedRole);
+                        const on = exportLocked
+                          ? false
+                          : Boolean(matrix[selectedRole]?.[module]?.[action]);
                         return (
                           <td key={action} className="px-4 py-2.5 text-center">
                             {supported ? (
                               <MatrixTick
                                 on={on}
-                                disabled={!editable}
+                                disabled={!editable || exportLocked}
                                 label={t("{role} can {action} {module}").replace("{role}", t(selectedRole)).replace("{action}", t(action)).replace("{module}", t(module))}
                                 onToggle={() => toggleCell(module, action)}
                               />

@@ -3,6 +3,10 @@ const RolePermission = require('../models/RolePermission');
 // The permission system's vocabulary. Modules mirror the admin panel's
 // sections; every module supports the same four actions except Dashboard,
 // which is view-only (there is nothing to create/edit/delete there).
+// A fifth action, `export`, exists ONLY on the modules the Data Export
+// feature covers (the eight list modules) — Dashboard, Settings and
+// Users have no export, so the matrix shows a dash there, exactly like
+// Dashboard's create/edit/delete dashes.
 const MODULES = [
     'Dashboard',
     'Products',
@@ -19,10 +23,31 @@ const MODULES = [
 
 const ACTIONS = ['view', 'create', 'edit', 'delete'];
 
+const EXPORTABLE_MODULES = [
+    'Products',
+    'Orders',
+    'Customers',
+    'Categories',
+    'Brands',
+    'Coupons',
+    'Media',
+    'Reviews',
+];
+
+// The only roles that may hold an effective Export right at all
+// (Ahsan's rule: "super admin or admin hi data export kr sakty hain").
+// The export route ALSO hard-checks this list before the matrix is
+// consulted, so a tick stored for any other role is meaningless.
+const EXPORT_ROLES = ['Super Admin', 'Admin'];
+
 const MODULE_ACTIONS = Object.fromEntries(
     MODULES.map((module) => [
         module,
-        module === 'Dashboard' ? ['view'] : [...ACTIONS],
+        module === 'Dashboard'
+            ? ['view']
+            : EXPORTABLE_MODULES.includes(module)
+              ? [...ACTIONS, 'export']
+              : [...ACTIONS],
     ]),
 );
 
@@ -128,7 +153,15 @@ const sanitizeMatrix = (input, extraRoles = []) => {
 
 /** Defaults with the stored matrix laid over them (stored wins per cell).
  *  Custom roles start from no access at all — a brand-new role can do
- *  nothing until a Super Admin ticks cells for it and saves. */
+ *  nothing until a Super Admin ticks cells for it and saves.
+ *
+ *  Export migration note: matrices stored before the Export column
+ *  existed simply have no `export` cells, so the defaults show through
+ *  per cell — Super Admin and Admin (fullAccess) read export ON for the
+ *  eight exportable modules, every other role reads OFF — with no data
+ *  migration needed. And whatever a stored matrix says, Export is
+ *  forced OFF here for every role outside EXPORT_ROLES: the right is
+ *  never effective for them, even if a tick was somehow stored. */
 const mergeMatrix = (stored, customRoles = []) => {
     const merged = buildDefaults();
     for (const role of customRoles) {
@@ -140,6 +173,12 @@ const mergeMatrix = (stored, customRoles = []) => {
         for (const module of MODULES) {
             if (!clean[role][module]) continue;
             Object.assign(merged[role][module], clean[role][module]);
+        }
+    }
+    for (const role of [...ROLES, ...customRoles]) {
+        if (EXPORT_ROLES.includes(role)) continue;
+        for (const module of EXPORTABLE_MODULES) {
+            if (merged[role]?.[module]) merged[role][module].export = false;
         }
     }
     return merged;
@@ -208,6 +247,8 @@ const roleHasPermission = async (role, module, action) => {
 module.exports = {
     MODULES,
     ACTIONS,
+    EXPORTABLE_MODULES,
+    EXPORT_ROLES,
     MODULE_ACTIONS,
     ROLES,
     DEFAULT_MATRIX,

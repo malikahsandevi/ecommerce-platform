@@ -4,8 +4,10 @@
 // set the panel's FilterBar pipeline shows, NOT just the visible page
 // (see utils/exportFilter.js for the mirrored semantics).
 //
-// Access is role-gated in routes/export.js: only Super Admin and Admin
-// may export (Ahsan's rule) — this controller assumes that gate ran.
+// Access is gated in routes/export.js: only Super Admin and Admin may
+// export at all (Ahsan's rule), and only while their role's permission
+// matrix ticks Export for the module — this controller assumes both
+// gates ran.
 //
 // No secrets ever reach a sheet: the users fetch excludes password /
 // TOTP / reset-token fields at the query, and every module's columns

@@ -2,7 +2,8 @@ const mongoose = require('mongoose');
 
 // The role → permission matrix lives in ONE document (key "matrix") so the
 // Settings → Users & Roles editor reads/writes the whole thing atomically.
-// Shape: { [role]: { [module]: { view, create, edit, delete } } }.
+// Shape: { [role]: { [module]: { view, create, edit, delete, export? } } }
+// (`export` exists only on the eight exportable modules).
 // Only the roles/modules/actions in utils/permissions.js are honoured —
 // anything else stored here is ignored when effective permissions are
 // computed. Super Admin is NOT governed by this document at all: the code
