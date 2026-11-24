@@ -30,6 +30,14 @@ export interface ConfirmDialogOptions {
   /** Single-button notice mode (the alert() replacement). */
   notice?: boolean;
   onConfirm?: () => Promise<void>;
+  /**
+   * Optional detail lines fetched WHILE the dialog is open (the
+   * delete-impact warnings). While it loads, a brief loading line
+   * shows under the message; the resolved text renders under it. A
+   * rejection or an empty result shows nothing extra — the plain
+   * confirm stays exactly as it was and is never blocked by it.
+   */
+  loadDetails?: () => Promise<string | null>;
 }
 
 interface PendingRequest {
@@ -95,6 +103,10 @@ export const ConfirmDialogHost: React.FC = () => {
   const [choiceQueue, setChoiceQueue] = useState<PendingChoice[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [details, setDetails] = useState<{ loading: boolean; text: string }>({
+    loading: false,
+    text: "",
+  });
 
   useEffect(() => {
     enqueueRequest = (request) =>
@@ -109,6 +121,29 @@ export const ConfirmDialogHost: React.FC = () => {
 
   const current = queue[0] ?? null;
   const currentChoice = current ? null : (choiceQueue[0] ?? null);
+
+  // Async detail lines (loadDetails): fetch when a request carrying
+  // a loader becomes the visible one. Any failure resolves to "no
+  // extra lines" — the fallback is the plain confirm, never a trap.
+  useEffect(() => {
+    const loader = current?.options.loadDetails;
+    if (!loader) {
+      setDetails({ loading: false, text: "" });
+      return;
+    }
+    let cancelled = false;
+    setDetails({ loading: true, text: "" });
+    loader()
+      .then((text) => {
+        if (!cancelled) setDetails({ loading: false, text: text || "" });
+      })
+      .catch(() => {
+        if (!cancelled) setDetails({ loading: false, text: "" });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [current]);
 
   const finishChoice = useCallback((value: ChoiceDialogResult) => {
     setChoiceQueue((pending) => {
@@ -286,6 +321,17 @@ export const ConfirmDialogHost: React.FC = () => {
             <p className="mt-1 text-xs leading-relaxed text-[var(--text-soft)]">
               {options.message}
             </p>
+            {options.loadDetails && details.loading && (
+              <p className="mt-2 flex items-center gap-1.5 text-xs text-[var(--text-soft)]">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                {t("Checking where this is used...")}
+              </p>
+            )}
+            {details.text && (
+              <p className="mt-2 whitespace-pre-line text-xs leading-relaxed font-medium text-[var(--text)]">
+                {details.text}
+              </p>
+            )}
           </div>
         </div>
 

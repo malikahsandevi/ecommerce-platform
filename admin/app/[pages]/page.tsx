@@ -652,6 +652,57 @@ const PageLayout: React.FC = () => {
         return;
       }
 
+      // Delete-impact warnings (Ahsan's order): for the modules the
+      // backend serves impact for, the dialog fetches the record's
+      // live links while it is open and warns BEFORE the confirm —
+      // 'remove' links are detached by the delete, 'keep' links are
+      // history that stays. A failed fetch (or no links) falls back
+      // to the plain confirm, exactly as before.
+      const loadDetails = service.deleteImpact
+        ? async (): Promise<string | null> => {
+            try {
+              const impact = await service.deleteImpact!(id);
+              const links = (
+                (impact?.links || []) as Array<{
+                  label: string;
+                  singular: string;
+                  count: number;
+                  action: string;
+                }>
+              ).filter((entry) => entry && entry.count > 0);
+              if (!links.length) return null;
+              const joinList = (items: typeof links) => {
+                const parts = items.map(
+                  (entry) =>
+                    `${entry.count} ${entry.count === 1 ? entry.singular : entry.label}`,
+                );
+                if (parts.length === 1) return parts[0];
+                return `${parts.slice(0, -1).join(", ")} ${t("and")} ${parts[parts.length - 1]}`;
+              };
+              const lines: string[] = [];
+              const removeLinks = links.filter((entry) => entry.action === "remove");
+              const keepLinks = links.filter((entry) => entry.action === "keep");
+              if (removeLinks.length) {
+                lines.push(
+                  t(
+                    "This record is used in {list}. Deleting it will remove it from those places.",
+                  ).replace("{list}", joinList(removeLinks)),
+                );
+              }
+              if (keepLinks.length) {
+                lines.push(
+                  t(
+                    "Used in {list} — those records keep their history and will not be changed.",
+                  ).replace("{list}", joinList(keepLinks)),
+                );
+              }
+              return lines.length ? lines.join("\n") : null;
+            } catch {
+              return null;
+            }
+          }
+        : undefined;
+
       // The panel's own confirmation dialog — never the browser's
       // native confirm() (it showed the hosting domain and clashed
       // with the design).
@@ -663,6 +714,7 @@ const PageLayout: React.FC = () => {
         message: t("It will move to Deleted Items in Settings and can be restored."),
         confirmLabel: t("Delete"),
         variant: "danger",
+        loadDetails,
       });
       if (!confirmed) {
         return;

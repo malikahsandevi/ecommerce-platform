@@ -17,9 +17,24 @@ export interface ResourceService {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   update?: (id: string, data: any) => Promise<any>;
   remove?: (id: string) => Promise<any>;
+  /** Delete-impact: the record's live links for the delete
+   *  confirmation's warning lines (modules whose backend serves
+   *  GET /:id/delete-impact). Absent on the other modules. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  deleteImpact?: (id: string) => Promise<any>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   loadOptions?: () => Promise<any>;
 }
+
+/** Modules whose deletes warn about (and detach) the record's links. */
+const DELETE_IMPACT_ENDPOINTS = new Set([
+  'media',
+  'categories',
+  'brands',
+  'products',
+  'coupons',
+  'users',
+]);
 
 export function getCapabilities(service: ResourceService | null): ServiceCapabilities {
   if (!service) return { canCreate: false, canUpdate: false, canDelete: false };
@@ -362,6 +377,14 @@ export function getResourceService(pathname: string): ResourceService | null {
       const res = await apiClient.delete(`/${apiEndpoint}/${id}`);
       return res.data;
     },
+    ...(DELETE_IMPACT_ENDPOINTS.has(apiEndpoint)
+      ? {
+          deleteImpact: async (id: string) => {
+            const res = await apiClient.get(`/${apiEndpoint}/${id}/delete-impact`);
+            return res.data;
+          },
+        }
+      : {}),
     loadOptions: async () => {
       // Entity dropdown labels carry the record's public code BEFORE
       // its name ("#CODE · Name") so a record can be tracked at a
