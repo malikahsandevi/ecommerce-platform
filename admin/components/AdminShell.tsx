@@ -9,6 +9,7 @@ import BuiltByFooter from "@/components/layout/BuiltByFooter";
 import PaletteDecisionPopup from "@/components/layout/PaletteDecisionPopup";
 import { ConfirmDialogHost } from "@/components/ui/ConfirmDialog";
 import { SecurityCheckDialogHost } from "@/components/ui/SecurityCheckDialog";
+import { TrackingNumberPromptHost } from "@/components/models/TrackingNumberPrompt";
 import { ToastHost } from "@/components/ui/Toast";
 import { AuthProvider, useAdminAuth } from "@/services/authContext";
 import { fetchAndApplyAppearance, PaletteSeedContext, SidebarSeedContext, reassertDeviceTheme } from "@/services/appearance";
@@ -120,6 +121,10 @@ function AdminShellInner({ children }: { children: React.ReactNode }) {
           save inside Settings prompts for the admin's own password
           through this one modal. */}
       <SecurityCheckDialogHost />
+
+      {/* The tracking-number prompt host — shown when an order is
+          marked Shipped without a tracking number yet. */}
+      <TrackingNumberPromptHost />
 
       {/* The palette Keep/Revert decision popup lives HERE, not in the
           Appearance picker: the 30s preview can expire while the admin

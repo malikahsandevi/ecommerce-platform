@@ -2,15 +2,82 @@ import type { AxiosResponse } from "axios";
 import { apiClient } from "./api";
 
 // Mirrors the backend's section allowlist exactly. The old bespoke
-// "paymentMethods" / "shipping" sections are gone — payment gateways
-// and shipping providers are services now, managed as integrations
-// entries from the Payment Methods / Shipping tabs.
+// "paymentMethods" section is gone — payment gateways are services
+// now, managed as integrations entries from the Payment Methods tab.
+// "shipping" is the Shipping CENTRE (methods & rates, delivery
+// options & areas, couriers & automation) — a settings section of
+// its own, distinct from the SHIPPING-category credential entries
+// the same tab's services builder manages.
 export type SettingsSection =
   | "general"
   | "storeInfo"
   | "notifications"
   | "integrations"
-  | "appearance";
+  | "appearance"
+  | "shipping";
+
+/** One courier profile (Settings → Shipping → Couriers). The API
+ *  credential fields arrive masked (stars + last 4) and are saved
+ *  under the same mask-keep rule as every credential: sending the
+ *  mask back keeps the stored secret. */
+export interface CourierProfile {
+  id: string;
+  name: string;
+  trackingUrlTemplate?: string;
+  apiBaseUrl?: string;
+  apiKey?: string;
+  apiUsername?: string;
+  apiPassword?: string;
+  isActive?: boolean;
+  isBuiltIn?: boolean;
+}
+
+/** One shipping method (Settings → Shipping → Methods & Rates). */
+export interface ShippingMethod {
+  id: string;
+  name: string;
+  charge: number;
+  /** Free when the order subtotal reaches this; null = never free. */
+  freeAbove?: number | null;
+  estimatedDays?: string;
+  isActive?: boolean;
+}
+
+/** One delivery option (Settings → Shipping → Delivery). */
+export interface DeliveryOption {
+  id: string;
+  name: string;
+  chargeAdjustment?: number;
+  /** Pickup options never charge shipping. */
+  isPickup?: boolean;
+  isActive?: boolean;
+  isBuiltIn?: boolean;
+}
+
+/** One delivery area/zone (Settings → Shipping → Delivery). */
+export interface DeliveryZone {
+  id: string;
+  name: string;
+  cities: string[];
+  /** This area's own shipping charge; null = the method's charge. */
+  chargeOverride?: number | null;
+  isActive?: boolean;
+}
+
+/** The Shipping centre section of the settings document, as the API
+ *  serves it: the EFFECTIVE lists (built-in couriers / delivery
+ *  options included until the store saves its own). */
+export interface ShippingSettings {
+  methods?: ShippingMethod[];
+  defaultMethodId?: string;
+  deliveryOptions?: DeliveryOption[];
+  deliveryZones?: DeliveryZone[];
+  defaultDeliveryOptionId?: string;
+  couriers?: CourierProfile[];
+  defaultCourierId?: string;
+  autoAssignCourier?: boolean;
+  codPaidOnDelivery?: boolean;
+}
 
 export interface SettingsDocument {
   _id?: string;
@@ -19,6 +86,7 @@ export interface SettingsDocument {
   notifications?: Record<string, unknown>;
   integrations?: Array<Record<string, unknown>>;
   appearance?: Record<string, unknown>;
+  shipping?: ShippingSettings;
 }
 
 export interface SettingsUser {

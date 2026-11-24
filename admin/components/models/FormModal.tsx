@@ -23,6 +23,7 @@ import ProductMediaManager, {
 import CustomerShoppingProfile from "@/components/models/CustomerShoppingProfile";
 import CouponApplyField from "@/components/models/CouponApplyField";
 import OrderItemsField from "@/components/models/OrderItemsField";
+import ShippingQuoteField from "@/components/models/ShippingQuoteField";
 import { mediaService } from "@/services/resourceRegistry";
 import { extractApiError } from "@/services/api";
 import { useLanguage } from "@/services/i18n";
@@ -45,7 +46,8 @@ export type FormFieldType =
   | "media-gallery"
   | "shopping-profile"
   | "order-items"
-  | "coupon";
+  | "coupon"
+  | "shipping-quote";
 
 export interface FormField {
   name: string; // Key in formData (e.g. "title", "sku", "address.city")
@@ -951,6 +953,26 @@ export const FormModal: React.FC<FormModalProps> = ({
                 {t(field.helperText)}
               </span>
             )}
+          </div>
+        );
+      }
+
+      case "shipping-quote": {
+        // Create Order only: the live shipping quote for the chosen
+        // lines + method + delivery option + city. Editing an order
+        // never re-prices its shipping, so the field is create-only.
+        if (formMode === "edit") return null;
+        return (
+          <div key={field.name} className={colClass}>
+            <ShippingQuoteField
+              items={Array.isArray(formData?.items) ? formData.items : []}
+              methodId={formData?.shippingMethodId ? String(formData.shippingMethodId) : ""}
+              deliveryOptionId={formData?.deliveryOptionId ? String(formData.deliveryOptionId) : ""}
+              city={formData?.shippingCity ? String(formData.shippingCity) : ""}
+              couponDiscount={
+                formData?.couponApplied === true ? Number(formData?.couponDiscount) || 0 : 0
+              }
+            />
           </div>
         );
       }

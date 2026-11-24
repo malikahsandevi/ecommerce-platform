@@ -10,5 +10,7 @@ export interface EntityOptions {
   statusOptions?: EntityOption[];
   productOptions?: EntityOption[];
   userOptions?: EntityOption[];
+  shippingMethodOptions?: EntityOption[];
+  deliveryOptionOptions?: EntityOption[];
 }
 

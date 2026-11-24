@@ -15,6 +15,9 @@ import { CreateTable } from "@/components/models/CreateTable";
 import Pagination from "@/components/models/Pagination";
 import { DetailPanel } from "@/components/models/DetailPanel";
 import { CustomerProfileSections } from "@/components/models/CustomerProfileSections";
+import { OrderShipmentSection } from "@/components/models/OrderShipmentSection";
+import { trackingNumberPrompt } from "@/components/models/TrackingNumberPrompt";
+import type { Order } from "@/config/orderConfig";
 import FormModal, { FormField, ItemFormData } from "@/components/models/FormModal";
 import MediaHandlerModal from "@/components/models/MediaHandler";
 import { confirmDialog } from "@/components/ui/ConfirmDialog";
@@ -118,6 +121,14 @@ function withDynamicOptions(
         return options.categoryOptions?.length ? { ...field, options: options.categoryOptions } : field;
       case "applicableUsers":
         return options.userOptions?.length ? { ...field, options: options.userOptions } : field;
+      case "shippingMethodId":
+        return options.shippingMethodOptions?.length
+          ? { ...field, options: options.shippingMethodOptions }
+          : field;
+      case "deliveryOptionId":
+        return options.deliveryOptionOptions?.length
+          ? { ...field, options: options.deliveryOptionOptions }
+          : field;
       default:
         return field;
     }
@@ -239,6 +250,8 @@ const PageLayout: React.FC = () => {
   const isMediaPage = pathname.includes("/media") || Route.toLowerCase() === "media";
   const isCustomersPage =
     pathname.includes("/customers") || Route.toLowerCase() === "customers";
+  const isOrdersPage =
+    pathname.includes("/orders") || Route.toLowerCase() === "orders";
   const isProductsPage =
     pathname.includes("/products") || Route.toLowerCase() === "products";
 
@@ -670,6 +683,23 @@ const PageLayout: React.FC = () => {
       event.preventDefault();
       if (!service) return;
 
+      // Marking an order Shipped without a tracking number asks for
+      // the number first (skippable — the order can ship numberless
+      // and gain the number later in its Shipment section). Cancelling
+      // the prompt aborts the save entirely.
+      let effectiveData = formData;
+      if (
+        isOrdersPage &&
+        formMode === "edit" &&
+        formData?.status === "shipped" &&
+        selectedRawRow?.status !== "shipped" &&
+        !String(formData?.trackingNumber || "").trim()
+      ) {
+        const answer = await trackingNumberPrompt();
+        if (answer === null) return;
+        if (answer) effectiveData = { ...formData, trackingNumber: answer };
+      }
+
       setIsSaving(true);
 
       try {
@@ -679,7 +709,7 @@ const PageLayout: React.FC = () => {
               t("Creating {route} is not supported by the API.").replace("{route}", t(Route)),
             );
           }
-          const created = await service.create(formData);
+          const created = await service.create(effectiveData);
           const generated = (created as { temporaryPassword?: string } | null)?.temporaryPassword;
           toast.success(
             generated
@@ -695,7 +725,7 @@ const PageLayout: React.FC = () => {
               t("Updating {route} is not supported by the API.").replace("{route}", t(Route)),
             );
           }
-          await service.update(String(id), formData);
+          await service.update(String(id), effectiveData);
           // Toast rule (Ahsan's order): only the main point — no
           // result details are ever appended to a toast.
           toast.success(t("{route} updated successfully.").replace("{route}", t(Route)));
@@ -709,7 +739,7 @@ const PageLayout: React.FC = () => {
         setIsSaving(false);
       }
     },
-    [service, formMode, formData, selectedRawRow, Route, reload],
+    [service, formMode, formData, selectedRawRow, Route, reload, isOrdersPage],
   );
 
   const handleDeleteItem = useCallback(
@@ -1284,6 +1314,14 @@ const PageLayout: React.FC = () => {
             isCustomersPage && selectedRawRow ? (
               <CustomerProfileSections
                 customerId={String(selectedRawRow._id || selectedRawRow.id)}
+              />
+            ) : isOrdersPage && selectedRawRow ? (
+              <OrderShipmentSection
+                order={selectedRawRow as unknown as Order}
+                onOrderUpdated={(updated) => {
+                  setSelectedRawRow(updated as unknown as Row);
+                  reload();
+                }}
               />
             ) : undefined
           }

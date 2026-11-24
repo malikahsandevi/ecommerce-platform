@@ -46,7 +46,26 @@ export interface Order {
   paymentStatus?: string;
   status?: string;
   shippingCarrier?: string;
+  /** The courier profile (Settings → Shipping) this order rides with. */
+  courierId?: string;
   trackingNumber?: string;
+  shippedAt?: string;
+  deliveredAt?: string;
+  /** The shipment block the API computes (courier + tracking link). */
+  shipment?: {
+    courierId?: string;
+    courierName?: string;
+    trackingNumber?: string;
+    shippedAt?: string | null;
+    deliveredAt?: string | null;
+    trackingUrl?: string;
+  };
+  /** The shipping choices priced into this order (server snapshots). */
+  shippingMethodId?: string;
+  shippingMethodName?: string;
+  deliveryOptionId?: string;
+  deliveryOptionName?: string;
+  deliveryZoneName?: string;
   createdAt?: string;
 }
 
@@ -200,6 +219,15 @@ export const orderConfig = {
       "Payment Status": (order.paymentStatus || "—").toUpperCase(),
       Carrier: order.shippingCarrier || "—",
       "Tracking Number": order.trackingNumber || "—",
+      ...(order.shippingMethodName ? { "Shipping Method": order.shippingMethodName } : {}),
+      ...(order.deliveryOptionName ? { "Delivery Option": order.deliveryOptionName } : {}),
+      ...(order.deliveryZoneName ? { "Delivery Zone": order.deliveryZoneName } : {}),
+      ...(order.shippedAt
+        ? { "Shipped At": new Date(order.shippedAt).toLocaleString() }
+        : {}),
+      ...(order.deliveredAt
+        ? { "Delivered At": new Date(order.deliveredAt).toLocaleString() }
+        : {}),
       "Shipping Address": addressText(order.shippingAddress),
       "Order Date": order.createdAt ? new Date(order.createdAt).toLocaleDateString() : "—",
     },
@@ -218,6 +246,8 @@ export const orderConfig = {
         couponCode: "",
         shippingCarrier: "",
         trackingNumber: "",
+        shippingMethodId: "",
+        deliveryOptionId: "",
         shippingStreet: "",
         shippingCity: "",
         shippingState: "",
@@ -241,6 +271,8 @@ export const orderConfig = {
       paymentStatus: order.paymentStatus || "pending",
       shippingCarrier: order.shippingCarrier || "",
       trackingNumber: order.trackingNumber || "",
+      shippingMethodId: order.shippingMethodId || "",
+      deliveryOptionId: order.deliveryOptionId || "",
       shippingStreet: order.shippingAddress?.street || "",
       shippingCity: order.shippingAddress?.city || "",
       shippingState: order.shippingAddress?.state || "",
@@ -359,6 +391,31 @@ export const orderConfig = {
       type: "text",
       colSpan: 1,
       placeholder: "e.g. TRK-98765432",
+      section: "Fulfilment",
+    },
+    {
+      name: "shippingMethodId",
+      label: "Shipping Method",
+      type: "select",
+      colSpan: 1,
+      placeholder: "Select a shipping method",
+      section: "Fulfilment",
+    },
+    {
+      name: "deliveryOptionId",
+      label: "Delivery Option",
+      type: "select",
+      colSpan: 1,
+      placeholder: "Select a delivery option",
+      section: "Fulfilment",
+    },
+    {
+      // The live shipping quote for the lines + choices above
+      // (create mode only; the server recomputes at placement).
+      name: "shippingQuote",
+      label: "Shipping",
+      type: "shipping-quote",
+      colSpan: 4,
       section: "Fulfilment",
     },
 

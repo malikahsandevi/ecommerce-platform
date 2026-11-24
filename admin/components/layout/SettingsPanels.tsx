@@ -62,6 +62,7 @@ import {
 import { LANGUAGE_OPTIONS, applyLanguage, useLanguage } from "@/services/i18n";
 import ThemePalettePicker from "./ThemePalettePicker";
 import BackupPanel from "./BackupPanel";
+import ShippingCentrePanel from "./ShippingCentrePanel";
 
 type ObjectData = Record<string, unknown>;
 
@@ -182,13 +183,24 @@ export function SettingsPanel({
       );
     case "Shipping":
       return (
-        <ServiceBuilderPanel
-          data={settings.integrations}
-          categoryIds={["SHIPPING"]}
-          title="Shipping"
-          description="Shipping and tracking providers for the store. Pick a provider and its own credential fields appear — every provider is saved and tested on its own card, and runs only when it is configured AND its Active toggle is on."
-          onSync={onIntegrationsSync}
-        />
+        <div className="space-y-6">
+          {/* The Shipping CENTRE: methods & rates, delivery options
+              & areas, couriers & automation — one section, one save. */}
+          <ShippingCentrePanel
+            data={settings.shipping}
+            saving={saving}
+            onSave={(value) => onSave("shipping", value)}
+          />
+          {/* Courier/delivery PROVIDER credentials (EasyPost, DHL…)
+              stay services below the centre. */}
+          <ServiceBuilderPanel
+            data={settings.integrations}
+            categoryIds={["SHIPPING"]}
+            title="Shipping"
+            description="Shipping and tracking providers for the store. Pick a provider and its own credential fields appear — every provider is saved and tested on its own card, and runs only when it is configured AND its Active toggle is on."
+            onSync={onIntegrationsSync}
+          />
+        </div>
       );
     case "Notifications":
       return (

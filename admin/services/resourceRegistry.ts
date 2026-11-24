@@ -305,6 +305,12 @@ async function buildOrderPayload(data: any) { // eslint-disable-line @typescript
     status: data.status || 'pending',
     shippingCarrier: data.shippingCarrier || undefined,
     trackingNumber: data.trackingNumber || undefined,
+    // The shipping choices — the server prices the order through
+    // the shared shipping calculator from these two ids (the
+    // shippingCost: 0 above is the fresh-store fallback the server
+    // keeps when no methods are configured).
+    shippingMethodId: data.shippingMethodId || undefined,
+    deliveryOptionId: data.deliveryOptionId || undefined,
   };
 }
 
@@ -312,7 +318,7 @@ async function buildOrderPayload(data: any) { // eslint-disable-line @typescript
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function transformOrderUpdate(data: any) {
   const payload: Record<string, unknown> = {};
-  for (const key of ['status', 'paymentStatus', 'paymentMethod', 'shippingCarrier', 'trackingNumber']) {
+  for (const key of ['status', 'paymentStatus', 'paymentMethod', 'shippingCarrier', 'courierId', 'trackingNumber']) {
     if (data[key] !== undefined && data[key] !== '') payload[key] = data[key];
   }
   if (data.shippingStreet) {
@@ -472,12 +478,30 @@ export function getResourceService(pathname: string): ResourceService | null {
         };
       }
       if (apiEndpoint === 'reviews' || apiEndpoint === 'orders') {
-        const [productsResponse, usersResponse] = await Promise.all([
+        const [productsResponse, usersResponse, shippingResponse] = await Promise.all([
           apiClient.get('/products'),
           apiClient.get('/users'),
+          // The order form's shipping pickers read the Shipping
+          // centre through the orders API. Fail-soft: a store with
+          // no shipping configured simply gets empty pickers.
+          apiEndpoint === 'orders'
+            ? apiClient.get('/orders/shipping-options').catch(() => ({ data: null }))
+            : Promise.resolve({ data: null }),
         ]);
 
         return {
+          shippingMethodOptions: (shippingResponse.data?.methods || []).map(
+            (method: { id: string; name: string }) => ({
+              label: method.name,
+              value: method.id,
+            }),
+          ),
+          deliveryOptionOptions: (shippingResponse.data?.deliveryOptions || []).map(
+            (option: { id: string; name: string }) => ({
+              label: option.name,
+              value: option.id,
+            }),
+          ),
           productOptions: (productsResponse.data || []).map(
             (product: { _id: string; code?: string; name: string }) => ({
               label: entityLabel(product, product.name),
