@@ -8,7 +8,7 @@ import { confirmDialog } from "@/components/ui/ConfirmDialog";
 import { securityCheckDialog } from "@/components/ui/SecurityCheckDialog";
 import { settingsService } from "@/services/settingsService";
 import type { BackupRestoreCounts } from "@/services/settingsService";
-import { extractApiError } from "@/services/api";
+import { extractApiError, sanitizeApiMessage } from "@/services/api";
 import { toast } from "@/components/ui/Toast";
 import { useLanguage } from "@/services/i18n";
 
@@ -55,7 +55,7 @@ async function blobErrorMessage(error: unknown): Promise<string> {
   if (typeof Blob !== "undefined" && data instanceof Blob) {
     try {
       const parsed = JSON.parse(await data.text());
-      if (parsed?.message) message = parsed.message;
+      if (parsed?.message) message = sanitizeApiMessage(parsed.message);
     } catch {
       /* keep the generic message */
     }

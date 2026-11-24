@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { AlertCircle, CheckCircle2, Info, X } from "lucide-react";
+import { sanitizeApiMessage } from "@/services/api";
 
 /**
  * The panel's toast system — the ONLY transient-message UI. It replaces
@@ -35,7 +36,11 @@ let pushToast: ((item: Omit<ToastItem, "id">) => void) | null = null;
 
 function emit(kind: ToastKind, message: string): void {
   if (!message) return;
-  pushToast?.({ kind, message });
+  // Every toast passes the main-point guard (services/api): a
+  // technical-shaped string — a raw validation dump, a driver error,
+  // a stack trace — is replaced by its short human equivalent here,
+  // at the one choke point no call site can bypass.
+  pushToast?.({ kind, message: sanitizeApiMessage(message) });
 }
 
 export const toast = {

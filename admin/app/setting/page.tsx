@@ -32,7 +32,7 @@ import {
   isUnauthorizedError,
 } from "@/services/settingsLock";
 import { settingsService } from "@/services/settingsService";
-import { extractApiError } from "@/services/api";
+import { extractApiError, sanitizeApiMessage } from "@/services/api";
 import type { SettingsDocument, SettingsSection, SettingsUser, UpdateUserValues } from "@/services/settingsService";
 import { useAdminAuth } from "@/services/authContext";
 import { applyAppearance, type AppearanceSettings } from "@/services/appearance";
@@ -122,7 +122,7 @@ export default function SettingsPage() {
         } else if (!isUnauthorizedError(loadError)) {
           // A 401 belongs to the auth layer (session-expired notice +
           // login popup) — no second toast from here.
-          toast.error(loadError instanceof Error ? loadError.message : t("Unable to load settings."));
+          toast.error(loadError instanceof Error ? extractApiError(loadError) : t("Unable to load settings."));
         }
       })
       .finally(() => {
@@ -179,7 +179,7 @@ export default function SettingsPage() {
           !isSettingsLockedError(loadError) &&
           !isUnauthorizedError(loadError)
         ) {
-          toast.error(loadError instanceof Error ? loadError.message : t("Unable to load users."));
+          toast.error(loadError instanceof Error ? extractApiError(loadError) : t("Unable to load users."));
         }
       });
 
@@ -241,7 +241,7 @@ export default function SettingsPage() {
       await settingsService.deleteUser(id, securityPassword);
       setUsers((currentUsers) => currentUsers.filter((user) => user._id !== id));
     } catch (deleteError) {
-      toast.error(deleteError instanceof Error ? deleteError.message : t("Unable to delete user."));
+      toast.error(deleteError instanceof Error ? extractApiError(deleteError) : t("Unable to delete user."));
     }
   };
 
@@ -301,7 +301,11 @@ export default function SettingsPage() {
       const apiMessage = (createError as { response?: { data?: { message?: string } } })?.response
         ?.data?.message;
       throw new Error(
-        apiMessage || (createError instanceof Error ? createError.message : t("Unable to create user.")),
+        apiMessage
+          ? sanitizeApiMessage(apiMessage)
+          : createError instanceof Error
+            ? sanitizeApiMessage(createError.message)
+            : t("Unable to create user."),
       );
     }
   };
@@ -328,7 +332,11 @@ export default function SettingsPage() {
       const apiMessage = (updateError as { response?: { data?: { message?: string } } })?.response
         ?.data?.message;
       throw new Error(
-        apiMessage || (updateError instanceof Error ? updateError.message : t("Unable to update user.")),
+        apiMessage
+          ? sanitizeApiMessage(apiMessage)
+          : updateError instanceof Error
+            ? sanitizeApiMessage(updateError.message)
+            : t("Unable to update user."),
       );
     }
   };

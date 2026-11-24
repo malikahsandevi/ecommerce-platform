@@ -1,6 +1,6 @@
 "use client";
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { apiClient } from './api';
+import { apiClient, sanitizeApiMessage } from './api';
 import { readDeviceLanguage, translate } from './i18n';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -23,12 +23,14 @@ export interface AdminUser {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function describeAuthError(error: any): string {
   if (error?.response?.data?.message) {
-    return error.response.data.message;
+    return sanitizeApiMessage(error.response.data.message);
   }
   if (error?.code === 'ECONNABORTED' || !error?.response) {
     return 'Could not reach the server. It may be waking up — please try again.';
   }
-  return error?.message || 'Authentication failed. Please try again.';
+  return error?.message
+    ? sanitizeApiMessage(error.message)
+    : 'Authentication failed. Please try again.';
 }
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {

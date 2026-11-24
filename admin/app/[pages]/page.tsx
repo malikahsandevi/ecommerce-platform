@@ -25,7 +25,7 @@ import { toast } from "@/components/ui/Toast";
 
 import { getRouteConfigByPath } from "@/config";
 import { getPageIcon } from "@/config/navItems";
-import { apiClient, extractApiError, PaginationMeta } from "@/services/api";
+import { apiClient, extractApiError, sanitizeApiMessage, PaginationMeta } from "@/services/api";
 import { useAdminAuth } from "@/services/authContext";
 import { useStoreCurrency } from "@/services/currency";
 import { useLanguage } from "@/services/i18n";
@@ -620,7 +620,7 @@ const PageLayout: React.FC = () => {
       if (typeof Blob !== "undefined" && data instanceof Blob) {
         try {
           const parsed = JSON.parse(await data.text());
-          if (parsed?.message) message = parsed.message;
+          if (parsed?.message) message = sanitizeApiMessage(parsed.message);
         } catch {
           /* keep the generic message */
         }

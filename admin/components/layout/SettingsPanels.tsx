@@ -15,7 +15,7 @@ import { PersonAvatar } from "@/components/ui/PersonAvatar";
 import Select from "@/components/ui/Select";
 import { useBackdropClose } from "@/hooks/useBackdropClose";
 import MediaPickerModal from "@/components/models/MediaPickerModal";
-import { apiClient, extractApiError } from "@/services/api";
+import { apiClient, extractApiError, sanitizeApiMessage } from "@/services/api";
 import {
   CURRENCY_OPTIONS,
   applyStoreCurrency,
@@ -706,7 +706,7 @@ function UsersPanel({
       // stays open, unsaved. Real failures rethrow with the API's
       // message (e.g. duplicate email).
       if (!isSecurityCheckCancelled(createError)) {
-        setFormError(createError instanceof Error ? createError.message : t("Unable to create the user."));
+        setFormError(createError instanceof Error ? sanitizeApiMessage(createError.message) : t("Unable to create the user."));
       }
     } finally {
       setCreating(false);
@@ -750,7 +750,9 @@ function UsersPanel({
       // A cancelled security check saves nothing and says nothing.
       if (isSecurityCheckCancelled(updateError)) return;
       toast.error(
-        updateError instanceof Error ? updateError.message : t("Unable to update user."),
+        updateError instanceof Error
+          ? sanitizeApiMessage(updateError.message)
+          : t("Unable to update user."),
       );
     });
   };
@@ -856,7 +858,7 @@ function UsersPanel({
       // with no error shown.
       if (!isSecurityCheckCancelled(updateError)) {
         setEditError(
-          updateError instanceof Error ? updateError.message : t("Unable to update user."),
+          updateError instanceof Error ? sanitizeApiMessage(updateError.message) : t("Unable to update user."),
         );
       }
     } finally {

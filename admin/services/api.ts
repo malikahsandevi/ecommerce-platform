@@ -111,16 +111,50 @@ apiClient.interceptors.response.use(
   }
 );
 
+// The toast rule's client-side safety net (Ahsan: "toast me details
+// na do, sirf main point do"). The backend already translates its
+// errors into short human sentences (utils/apiError there); this
+// guard exists so a technical-shaped message can NEVER reach a
+// toast even if one slips through — a stale deployment, a proxy's
+// own error page, a library's raw wording. Validation-shaped text
+// becomes the exact short sentence for missing fields; any other
+// technical shape becomes the generic main point. Clean human
+// sentences pass through byte-identical.
+const VALIDATION_SHAPED = /Path\s+`|validation failed/i;
+const TECHNICAL_SHAPED = [
+  /Cast to\s/i, // "Cast to ObjectId failed for value …"
+  /E11000/, // raw duplicate-key driver text
+  /duplicate key error/i,
+  /Mongo(Server|Network|Parse|WriteConcern|Topology)?Error/,
+  /BSON(Type)?Error/,
+  /Request failed with status code/i, // axios's own wording
+  /\n\s*at\s+[\w$.<>]+\s*\(/, // a stack-trace frame
+  /^\s*\{"/, // a JSON dump standing in for a message
+];
+
+export function sanitizeApiMessage(message: unknown): string {
+  if (typeof message !== 'string' || !message.trim()) {
+    return 'Something went wrong. Please try again.';
+  }
+  if (VALIDATION_SHAPED.test(message)) {
+    return 'Please fill all required fields.';
+  }
+  if (TECHNICAL_SHAPED.some((pattern) => pattern.test(message))) {
+    return 'Something went wrong. Please try again.';
+  }
+  return message;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function extractApiError(error: any): string {
   if (error?.code === 'ECONNABORTED') {
     return 'The server took too long to respond. It may be waking up — please try again.';
   }
   if (error.response && error.response.data && error.response.data.message) {
-    return error.response.data.message;
+    return sanitizeApiMessage(error.response.data.message);
   }
   if (!error.response && error.message) {
     return 'Could not reach the server. Check your connection and try again.';
   }
-  return error.message || 'An unexpected error occurred';
+  return sanitizeApiMessage(error.message);
 }
