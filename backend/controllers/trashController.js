@@ -94,6 +94,7 @@ const MODULES = {
         label: 'Customers',
         Model: User,
         match: { role: 'Customer' },
+        person: true,
         name: (doc) => personName(doc) || originalOf(doc, 'email') || doc.email,
         code: (doc) => doc.code,
     },
@@ -101,6 +102,7 @@ const MODULES = {
         label: 'Users',
         Model: User,
         match: { role: { $ne: 'Customer' } },
+        person: true,
         name: (doc) => personName(doc) || originalOf(doc, 'email') || doc.email,
         code: (doc) => doc.code,
     },
@@ -127,11 +129,16 @@ const shapeItem = (segment, def, doc, deleters) => ({
     id: String(doc._id),
     name: def.name(doc) || '—',
     code: def.code(doc) || null,
+    // Person records (customers / staff) carry their own avatar, so
+    // the row can show the person's disc beside their name; every
+    // other module's rows carry no avatar field at all.
+    ...(def.person ? { avatar: doc.avatar || null } : {}),
     deletedAt: doc.deletedAt,
     deletedBy: doc.deletedBy
         ? {
               name: personName(deleters.get(String(doc.deletedBy))) || null,
               email: deleters.get(String(doc.deletedBy))?.email || null,
+              avatar: deleters.get(String(doc.deletedBy))?.avatar || null,
           }
         : null,
 });
@@ -149,7 +156,7 @@ const loadDeleters = async (docs) => {
     ];
     if (!ids.length) return new Map();
     const users = await User.find({ _id: { $in: ids } })
-        .select('firstName lastName username email')
+        .select('firstName lastName username email avatar')
         .lean();
     return new Map(users.map((user) => [String(user._id), user]));
 };
@@ -220,6 +227,7 @@ const listDeletedIntegrations = async (req) => {
             ? {
                   name: personName(deleters.get(String(entry.deletedBy))) || null,
                   email: deleters.get(String(entry.deletedBy))?.email || null,
+                  avatar: deleters.get(String(entry.deletedBy))?.avatar || null,
               }
             : null,
     }));

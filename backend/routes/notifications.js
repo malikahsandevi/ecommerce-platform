@@ -74,13 +74,13 @@ router.get('/', async (req, res) => {
                 .sort({ createdAt: -1 })
                 .limit(FEED_LIMIT)
                 .populate('product', 'name')
-                .populate('user', 'firstName lastName username email')
+                .populate('user', 'firstName lastName username email avatar')
                 .lean(),
             Review.countDocuments({ status: 'pending', ...NOT_DELETED }),
             User.find({ role: 'Customer', ...NOT_DELETED })
                 .sort({ createdAt: -1 })
                 .limit(5)
-                .select('firstName lastName username email createdAt')
+                .select('firstName lastName username email createdAt avatar')
                 .lean(),
         ]);
 
@@ -174,6 +174,10 @@ router.get('/', async (req, res) => {
                 path: '/reviews',
                 recordId: String(r._id),
                 search: r.code || r.product?.name || null,
+                // The person this item is about, so the row can carry
+                // their own disc (photo or initials) beside the title.
+                personName: displayName(r.user),
+                avatar: r.user?.avatar || null,
             });
         }
         for (const u of newCustomers) {
@@ -185,6 +189,8 @@ router.get('/', async (req, res) => {
                 path: '/customers',
                 recordId: String(u._id),
                 search: u.email || displayName(u),
+                personName: displayName(u),
+                avatar: u.avatar || null,
             });
         }
         inbox.sort((a, b) => new Date(b.time) - new Date(a.time));

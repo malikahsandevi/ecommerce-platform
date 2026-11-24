@@ -229,6 +229,49 @@ const getDashboardData = async (req, res) => {
 
         const totalRevenue = revenueAggregate[0]?.total || 0;
 
+        // Activity entries about a customer (an order placed, a status
+        // change, a review — their log metadata carries the customer
+        // id) resolve that customer once, in one batch, so the feed
+        // can show the person's own disc beside the entry instead of a
+        // generic event icon. Entries without a customer (price
+        // updates, stock alerts) get person: null and keep their icon.
+        const activityCustomerIds = [
+            ...new Set(
+                activityLogs
+                    .map((log) => log.metadata?.customerId)
+                    .filter(Boolean)
+                    .map((id) => String(id))
+            ),
+        ];
+        const activityCustomers = activityCustomerIds.length
+            ? await User.find({ _id: { $in: activityCustomerIds } })
+                  .select('firstName lastName username email avatar')
+                  .lean()
+            : [];
+        const activityCustomerById = new Map(
+            activityCustomers.map((user) => [String(user._id), user])
+        );
+        const activityFeed = activityLogs.map((log) => {
+            const entry = log.toObject();
+            const customer = log.metadata?.customerId
+                ? activityCustomerById.get(String(log.metadata.customerId))
+                : undefined;
+            entry.person = customer
+                ? {
+                      name:
+                          [customer.firstName, customer.lastName]
+                              .filter(Boolean)
+                              .join(' ')
+                              .trim() ||
+                          customer.username ||
+                          customer.email ||
+                          'A customer',
+                      avatar: customer.avatar || null,
+                  }
+                : null;
+            return entry;
+        });
+
         // Fill every one of the last 6 months — months without orders are
         // honest zeros, never interpolated or seeded values. Month keys
         // are store-timezone months, matching the aggregation's buckets.
@@ -356,7 +399,7 @@ const getDashboardData = async (req, res) => {
                 totalProducts
             },
             recentOrders,
-            activityLogs,
+            activityLogs: activityFeed,
             analytics,
             topCategories,
             totalSales,
