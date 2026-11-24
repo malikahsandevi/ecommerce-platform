@@ -37,7 +37,12 @@ const resolveCoupon = async (rawCode, subtotal) => {
     if (coupon.validUntil && now > new Date(coupon.validUntil)) {
         throw new Error('This coupon has expired.');
     }
-    if (coupon.usageLimit != null && (coupon.usedCount || 0) >= coupon.usageLimit) {
+    // A stored usageLimit of 0 means UNLIMITED — that is the panel's
+    // own contract (the coupon form's helper reads "Leave at 0 for
+    // unlimited use", and the form maps 0 to null on save; rows that
+    // still carry a literal 0 — older data, direct API writes — must
+    // behave the same way, not read as "limit already reached").
+    if (coupon.usageLimit != null && coupon.usageLimit > 0 && (coupon.usedCount || 0) >= coupon.usageLimit) {
         throw new Error('This coupon has reached its usage limit.');
     }
 

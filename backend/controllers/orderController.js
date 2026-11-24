@@ -101,19 +101,59 @@ const createOrder = async (req, res) => {
             return res.status(400).json({ message: 'An order needs at least one item.' });
         }
 
+        // The order must belong to a real, live customer record — an
+        // order pointing at a missing or trashed user is an orphan the
+        // moment it is written (both callers — the admin form and the
+        // storefront's find-or-create — always pass a real one).
+        const customer = data.user
+            ? await User.findOne({ _id: data.user, ...NOT_DELETED }).select('_id').lean()
+            : null;
+        if (!customer) {
+            return res.status(400).json({ message: 'The selected customer was not found.' });
+        }
+
         // Every line must point at a real product with enough stock —
-        // placing the order takes the units out of inventory.
+        // placing the order takes the units out of inventory. Quantities
+        // are aggregated per product first: two lines of 6 against a
+        // stock of 10 must not pass one by one and drive the stock
+        // negative. Prices are re-read from the product documents and
+        // the subtotal is recomputed here — the amounts recorded (and
+        // the coupon discount below) never trust a caller-supplied
+        // price or subtotal.
+        const quantityByProduct = new Map();
         for (const item of data.items) {
-            const product = await Product.findOne({ _id: item.product, ...NOT_DELETED }).select('stock name').lean();
+            const key = String(item.product || '');
+            quantityByProduct.set(key, (quantityByProduct.get(key) || 0) + (Number(item.quantity) || 0));
+        }
+        const pricedItems = [];
+        let computedSubtotal = 0;
+        for (const item of data.items) {
+            const product = await Product.findOne({ _id: item.product, ...NOT_DELETED })
+                .select('stock name sku price image')
+                .lean();
             if (!product) {
                 return res.status(400).json({ message: 'One of the ordered products no longer exists.' });
             }
-            if ((product.stock ?? 0) < (item.quantity || 0)) {
+            const wanted = quantityByProduct.get(String(item.product)) || 0;
+            if ((product.stock ?? 0) < wanted) {
                 return res.status(400).json({
-                    message: `Not enough stock for "${product.name}" — ${product.stock ?? 0} left, ${item.quantity} requested.`,
+                    message: `Not enough stock for "${product.name}" — ${product.stock ?? 0} left, ${wanted} requested.`,
                 });
             }
+            const quantity = Number(item.quantity) || 0;
+            const price = Number(product.price) || 0;
+            computedSubtotal += price * quantity;
+            pricedItems.push({
+                ...item,
+                name: item.name || product.name,
+                sku: item.sku || product.sku,
+                price,
+                quantity,
+                image: item.image || product.image || '',
+            });
         }
+        data.items = pricedItems;
+        data.subtotal = Math.round(computedSubtotal * 100) / 100;
 
         // Coupon (optional): a caller may pass `couponCode` — the admin's
         // Create Order form does. The shared resolver (utils/coupon.js)
@@ -126,20 +166,31 @@ const createOrder = async (req, res) => {
         delete data.couponCode;
         let appliedCoupon = null;
         if (couponCode) {
-            const subtotal = Number(data.subtotal) || 0;
-            const resolved = await resolveCoupon(couponCode, subtotal);
+            const resolved = await resolveCoupon(couponCode, data.subtotal);
             appliedCoupon = resolved.coupon;
             data.coupon = appliedCoupon._id;
             data.discount = resolved.discount;
-            data.total =
-                Math.round(
-                    (subtotal -
-                        resolved.discount +
-                        (Number(data.tax) || 0) +
-                        (Number(data.shippingCost) || 0)) *
-                        100
-                ) / 100;
         }
+        // A discount exists only as a resolved coupon's discount: with
+        // no coupon code there is no discount and no coupon reference,
+        // whatever the caller sent.
+        if (!appliedCoupon) {
+            data.discount = 0;
+            data.coupon = undefined;
+        }
+        // The total is always derived here from the recomputed subtotal
+        // (never taken from the caller): subtotal − discount + tax +
+        // shipping. Tax and shipping stay caller-set — no server-side
+        // rule computes them — but they can no longer smuggle a wrong
+        // subtotal or discount into the recorded total.
+        data.total =
+            Math.round(
+                (data.subtotal -
+                    (Number(data.discount) || 0) +
+                    (Number(data.tax) || 0) +
+                    (Number(data.shippingCost) || 0)) *
+                    100
+            ) / 100;
 
         // Generate the order number here unless the caller supplied one.
         let order = null;
@@ -210,7 +261,28 @@ const updateOrder = async (req, res) => {
         const previousStatus = order.status;
         const nextStatus = req.body.status || previousStatus;
 
-        Object.assign(order, req.body);
+        // Only the fields an order update may legitimately change are
+        // applied — the lifecycle/payment/shipping surface the admin's
+        // edit form sends. Anything else in the body (items, totals,
+        // subtotal, discount, coupon, customer, order number) is
+        // ignored: those are fixed at creation and guarded by the
+        // stock/coupon invariants, so a stray or hostile field can no
+        // longer rewrite an order's money or contents after the fact.
+        const UPDATABLE_FIELDS = [
+            'status',
+            'paymentStatus',
+            'paymentMethod',
+            'paymentId',
+            'transactionId',
+            'shippingCarrier',
+            'trackingNumber',
+            'notes',
+            'shippingAddress',
+            'billingAddress',
+        ];
+        for (const field of UPDATABLE_FIELDS) {
+            if (req.body[field] !== undefined) order[field] = req.body[field];
+        }
 
         // Fulfilment timestamps follow the status, so the record shows
         // when the parcel actually left / arrived.
@@ -220,9 +292,16 @@ const updateOrder = async (req, res) => {
         const updated = await order.save();
 
         if (nextStatus !== previousStatus) {
-            // Cancelling returns the reserved units to inventory.
+            // Stock follows the cancelled state symmetrically: entering
+            // cancelled returns the reserved units, LEAVING cancelled
+            // (un-cancel) takes them back out — the exact inverse,
+            // mirroring how a trash restore re-reserves. Without the
+            // second half the units of a revived order stayed sellable
+            // and could be sold twice.
             if (nextStatus === 'cancelled') {
                 await adjustStock(order.items, +1);
+            } else if (previousStatus === 'cancelled') {
+                await adjustStock(order.items, -1);
             }
             await logActivity(
                 'STATUS_CHANGE',

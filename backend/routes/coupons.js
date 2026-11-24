@@ -29,12 +29,18 @@ router.post('/validate', protect, async (req, res) => {
     }
 });
 
+// The reads are staff-only: a coupon's redeem code IS the discount,
+// so unlike the catalog reads (products/categories/brands, which the
+// storefront browses publicly) the coupon list and detail must never
+// answer an unauthenticated caller — every live code was listable by
+// anyone. The storefront never reads these endpoints (guest checkout
+// applies no coupons); redemption goes through createOrder's resolver.
 router.route('/')
-    .get(genericController.getAll)
+    .get(protect, requirePermission('Coupons', 'view'), genericController.getAll)
     .post(protect, requirePermission('Coupons', 'create'), genericController.create);
 
 router.route('/:id')
-    .get(genericController.getById)
+    .get(protect, requirePermission('Coupons', 'view'), genericController.getById)
     .put(protect, requirePermission('Coupons', 'edit'), genericController.update)
     .delete(protect, requirePermission('Coupons', 'delete'), genericController.remove);
 

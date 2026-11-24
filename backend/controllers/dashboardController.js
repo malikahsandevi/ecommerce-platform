@@ -74,7 +74,7 @@ const getDashboardData = async (req, res) => {
             newestCustomers,
             settingsDoc,
         ] = await Promise.all([
-            User.countDocuments({ ...NOT_DELETED }),
+            User.countDocuments({ role: 'Customer', ...NOT_DELETED }),
             Product.countDocuments({ ...NOT_DELETED }),
             Order.countDocuments({ ...NOT_DELETED }),
             // Headline revenue matches the charts: a cancelled order is
@@ -138,8 +138,8 @@ const getDashboardData = async (req, res) => {
             ]),
             Order.aggregate(sumInWindow(thisWeekStart)),
             Order.aggregate(sumInWindow(lastWeekStart, thisWeekStart)),
-            User.countDocuments({ createdAt: { $gte: thisWeekStart }, ...NOT_DELETED }),
-            User.countDocuments({ createdAt: { $gte: lastWeekStart, $lt: thisWeekStart }, ...NOT_DELETED }),
+            User.countDocuments({ role: 'Customer', createdAt: { $gte: thisWeekStart }, ...NOT_DELETED }),
+            User.countDocuments({ role: 'Customer', createdAt: { $gte: lastWeekStart, $lt: thisWeekStart }, ...NOT_DELETED }),
             Order.aggregate(sumInWindow(monthStart)),
             Order.aggregate(sumInWindow(lastMonthStart, monthStart)),
             Order.aggregate([{ $match: { ...NOT_DELETED } }, { $group: { _id: '$status', count: { $sum: 1 } } }]),
@@ -170,7 +170,7 @@ const getDashboardData = async (req, res) => {
                     },
                 },
             ]),
-            User.find({ ...NOT_DELETED })
+            User.find({ role: 'Customer', ...NOT_DELETED })
                 .sort({ createdAt: -1 })
                 .limit(30)
                 .select('firstName lastName email createdAt avatar')
