@@ -88,7 +88,15 @@ function withDynamicOptions(
         return field;
       case "brand":
         if (options.brandOptions?.length) {
-          return { ...field, options: options.brandOptions };
+          // Brand is optional (the schema does not require it): a
+          // "None" choice rides at the top — the same empty-value
+          // convention as parentCategory — so a brand picked by
+          // mistake can be taken back off, and a fresh form starts
+          // on None (the form value for it is "").
+          return {
+            ...field,
+            options: [{ label: t("None"), value: "" }, ...options.brandOptions],
+          };
         }
         if (
           optionsLoaded &&

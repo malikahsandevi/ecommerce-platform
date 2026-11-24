@@ -143,7 +143,11 @@ function transformProductPayload(data: any) {
   delete payload.discount;
   delete payload.featured;
   delete payload.shortDescription;
-  if (!payload.brand) delete payload.brand;
+  // Brand is optional: the form's "None" choice arrives as "". Send an
+  // explicit null (not a missing key) so an edit that picks None
+  // actually clears a brand set earlier — a missing key would leave
+  // the stored brand untouched.
+  payload.brand = payload.brand ? payload.brand : null;
 
   // Optional numeric fields left blank in the form arrive as "" — drop them
   // so Mongoose does not cast them into values its validators reject.
