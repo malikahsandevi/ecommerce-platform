@@ -13,6 +13,7 @@ import {
 import Select from "@/components/ui/Select";
 import DateRangePicker, {
   formatRangeDayShort,
+  toIsoDay,
   type DateRange,
 } from "@/components/ui/DateRangePicker";
 import { apiClient } from "@/services/api";
@@ -42,7 +43,17 @@ interface RevenueAnalyticsProps {
   monthlyData?: RevenuePoint[];
 }
 
-type RangeKey = "8days" | "6months" | "custom";
+type RangeKey = "7" | "30" | "90" | "custom";
+
+// "Last N Days" = today − (N−1) days through today, inclusive — the
+// same preset computation the list-page FilterBar uses, so every
+// Filter-by-Date control in the admin means the same days.
+const presetRange = (days: number): DateRange => {
+  const to = new Date();
+  const from = new Date();
+  from.setDate(from.getDate() - (days - 1));
+  return { from: toIsoDay(from), to: toIsoDay(to) };
+};
 
 // Chart accents derive from the Admin Panel Color (Settings →
 // Appearance): the revenue line IS the primary color, the orders line
@@ -83,11 +94,13 @@ function ChartTooltip({
 
 /**
  * Revenue Analytics in the EzMart reference style: Revenue (solid orange)
- * and Orders (dashed light orange) lines over a range the admin picks —
- * "Last 8 Days" (daily), "Last 6 Months" (monthly) or "Custom" (the
- * shared DateRangePicker's From/To span, fetched daily + zero-filled
- * from /dashboard/revenue-range). All series come from the real Order
- * collection; cancelled orders are excluded.
+ * and Orders (dashed light orange) lines over a range the admin picks.
+ * The range control uses the admin's ONE standard Filter-by-Date format
+ * (Ahsan's order — the same presets as every list page): "Last 7 Days",
+ * "Last 30 Days", "Last 90 Days" or "Custom" (the shared
+ * DateRangePicker's From/To span). Every window is fetched daily +
+ * zero-filled from /dashboard/revenue-range. All series come from the
+ * real Order collection; cancelled orders are excluded.
  */
 export const RevenueAnalytics: React.FC<RevenueAnalyticsProps> = ({
   dailyData,
@@ -97,25 +110,36 @@ export const RevenueAnalytics: React.FC<RevenueAnalyticsProps> = ({
   useStoreCurrency();
   const REVENUE_COLOR = useAdminColor();
   const ORDERS_COLOR = tint(REVENUE_COLOR, 0.52);
-  const [range, setRange] = useState<RangeKey>("8days");
+  const [range, setRange] = useState<RangeKey>("7");
+  // The applied preset window, computed on selection exactly like the
+  // list-page FilterBar computes its presets. The default view is
+  // Last 7 Days.
+  const [presetWindow, setPresetWindow] = useState<DateRange>(() => presetRange(7));
   // Custom range (Ahsan's Filters-by-Date round): the shared
-  // DateRangePicker collects From/To; Apply fetches the zero-filled
-  // daily series for exactly that span from the dashboard API.
+  // DateRangePicker collects From/To; only its Apply commits.
   const [customRange, setCustomRange] = useState<DateRange | null>(null);
-  const [customData, setCustomData] = useState<DailyPoint[] | null>(null);
+  // The daily series for the effective window, fetched zero-filled
+  // from /dashboard/revenue-range — the one data path for presets and
+  // Custom alike. Null until the first fetch for a window lands; the
+  // previous window's series stays on screen meanwhile (no blank
+  // flash while a new window loads).
+  const [rangeData, setRangeData] = useState<DailyPoint[] | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
 
+  const effectiveRange: DateRange | null =
+    range === "custom" ? customRange : presetWindow;
+
   useEffect(() => {
-    if (range !== "custom" || !customRange) return;
+    if (!effectiveRange) return;
     let cancelled = false;
     (async () => {
       try {
         const res = await apiClient.get("/dashboard/revenue-range", {
-          params: { from: customRange.from, to: customRange.to },
+          params: { from: effectiveRange.from, to: effectiveRange.to },
         });
         if (cancelled) return;
         const series = Array.isArray(res.data?.series) ? res.data.series : [];
-        setCustomData(
+        setRangeData(
           series.map((point: { day: string; revenue: number; orders: number }) => ({
             day: String(point.day || ""),
             revenue: Number(point.revenue || 0),
@@ -123,13 +147,16 @@ export const RevenueAnalytics: React.FC<RevenueAnalyticsProps> = ({
           }))
         );
       } catch {
-        if (!cancelled) setCustomData([]);
+        if (!cancelled) setRangeData([]);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [range, customRange]);
+    // effectiveRange is a fresh object identity per render for the
+    // custom case; depend on its day strings, not the object.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectiveRange?.from, effectiveRange?.to]);
 
   if (dailyData === undefined || monthlyData === undefined) {
     return (
@@ -146,24 +173,17 @@ export const RevenueAnalytics: React.FC<RevenueAnalyticsProps> = ({
     );
   }
 
-  const data: ChartPoint[] =
-    range === "8days"
-      ? dailyData.map((point) => ({
-          label: point.day,
-          revenue: point.revenue,
-          orders: point.orders,
-        }))
-      : range === "6months"
-        ? monthlyData.map((point) => ({
-            label: point.month,
-            revenue: point.revenue,
-            orders: point.orders,
-          }))
-        : (customData ?? []).map((point) => ({
-            label: point.day,
-            revenue: point.revenue,
-            orders: point.orders,
-          }));
+  // Before the first fetch for the default window lands, seed from
+  // the dashboard payload's daily series: it is the last 8 zero-filled
+  // days ending today, so its last 7 entries ARE Last 7 Days. The
+  // fetch above replaces the seed with the endpoint's own series.
+  const seriesPoints: DailyPoint[] =
+    rangeData ?? (range === "7" ? dailyData.slice(-7) : []);
+  const data: ChartPoint[] = seriesPoints.map((point) => ({
+    label: point.day,
+    revenue: point.revenue,
+    orders: point.orders,
+  }));
 
   const { t } = useLanguage();
   return (
@@ -185,16 +205,20 @@ export const RevenueAnalytics: React.FC<RevenueAnalyticsProps> = ({
           onChange={(value) => {
             // "Custom" never switches the range by itself — it opens
             // the shared DateRangePicker; only its Apply commits (a
-            // Cancel leaves the active period untouched).
+            // Cancel leaves the active period untouched). A preset
+            // applies its window at once, computed like the list-page
+            // FilterBar's presets.
             if (value === "custom") {
               setPickerOpen(true);
               return;
             }
             setRange(value as RangeKey);
+            setPresetWindow(presetRange(Number(value)));
           }}
           options={[
-            { label: t("Last 8 Days"), value: "8days" },
-            { label: t("Last 6 Months"), value: "6months" },
+            { label: t("Last 7 Days"), value: "7" },
+            { label: t("Last 30 Days"), value: "30" },
+            { label: t("Last 90 Days"), value: "90" },
             { label: t("Custom"), value: "custom" },
           ]}
           triggerLabel={
