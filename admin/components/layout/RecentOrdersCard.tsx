@@ -2,6 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowRight, ShoppingBag } from "lucide-react";
 import { StatusPill } from "@/components/models/CreateTable";
 import { PersonAvatar } from "@/components/ui/PersonAvatar";
@@ -36,8 +37,34 @@ interface RecentOrdersProps {
 
 export const RecentOrdersCard: React.FC<RecentOrdersProps> = ({ orders }) => {
   const { t } = useLanguage();
+  const router = useRouter();
   // Totals follow the store currency setting.
   useStoreCurrency();
+
+  // Row click-through (Ahsan's order): land on the Orders page with
+  // THIS order's detail open. Uses the same "openRecord"
+  // sessionStorage hand-off as the notification / search
+  // click-throughs — the order number is pre-applied to the list's
+  // search box (visibly, so the order is in the results even when it
+  // is not on the first page) and the record is selected once the
+  // list has loaded. `ts` makes every click a fresh hand-off.
+  const openOrder = (order: DashboardOrder) => {
+    try {
+      sessionStorage.setItem(
+        "openRecord",
+        JSON.stringify({
+          path: "/orders",
+          id: order.id,
+          search: order.orderId,
+          ts: Date.now(),
+        }),
+      );
+    } catch {
+      /* storage blocked — navigation still happens */
+    }
+    window.dispatchEvent(new Event("admin:open-record"));
+    router.push("/orders");
+  };
   if (!orders) {
     return (
       <div className="bg-(--background) p-5 rounded-2xl shadow-sm border border-(--border) h-full w-full animate-pulse">
@@ -103,7 +130,11 @@ export const RecentOrdersCard: React.FC<RecentOrdersProps> = ({ orders }) => {
             </thead>
             <tbody className="divide-y divide-(--border)">
               {orders.map((order) => (
-                <tr key={order.id} className="hover:bg-(--primary-soft)/60 transition-colors">
+                <tr
+                  key={order.id}
+                  onClick={() => openOrder(order)}
+                  className="hover:bg-(--primary-soft)/60 transition-colors cursor-pointer"
+                >
                   <td className="py-2.5 pr-3 font-mono text-[11px] text-(--text-muted) whitespace-nowrap">
                     {order.orderId}
                   </td>

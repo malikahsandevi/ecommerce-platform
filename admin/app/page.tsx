@@ -301,6 +301,7 @@ export default function Page() {
         const revenue = Number(category.revenue || 0);
         const productCount = Number(category.products || 0);
         return {
+          id: category.id ? String(category.id) : undefined,
           name: category.name,
           value: salesTotal > 0 ? revenue : productCount,
           formattedValue: fmtWholeMoney(revenue),

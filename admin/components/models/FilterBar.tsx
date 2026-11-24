@@ -91,6 +91,15 @@ export interface FilterBarProps<TSearchData extends SearchableEntityRecord> {
    * so it is visible and drives the same filtering.
    */
   searchHandoff?: { term: string; nonce: number } | null;
+
+  /**
+   * One-shot dropdown-filter hand-off (dashboard Top Categories
+   * click-through): when the nonce changes, the named filter is set
+   * to the given value as if the user had picked it in the dropdown,
+   * so the selection is visible in the bar and drives the same
+   * filtering — and Clear / the dropdown itself can undo it.
+   */
+  filterHandoff?: { filterId: string; value: string; nonce: number } | null;
 }
 
 export const FilterBar = <TSearchData extends SearchableEntityRecord>({
@@ -107,6 +116,7 @@ export const FilterBar = <TSearchData extends SearchableEntityRecord>({
   clearSignal = 0,
   onClearActiveChange,
   searchHandoff = null,
+  filterHandoff = null,
 }: FilterBarProps<TSearchData>) => {
   const { t } = useLanguage();
   // The store timezone drives every day computation below (preset
@@ -190,6 +200,20 @@ export const FilterBar = <TSearchData extends SearchableEntityRecord>({
       dateRange,
     });
   }, [searchQuery, filterValues, dateRange, onCriteriaChange]);
+
+  // Apply a filter hand-off once per nonce (a repeat click on the
+  // same dashboard category carries a fresh timestamp, so it
+  // re-applies even if the value is unchanged).
+  const appliedFilterHandoffRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!filterHandoff) return;
+    if (appliedFilterHandoffRef.current === filterHandoff.nonce) return;
+    appliedFilterHandoffRef.current = filterHandoff.nonce;
+    setFilterValues((prev) => ({
+      ...prev,
+      [filterHandoff.filterId]: filterHandoff.value,
+    }));
+  }, [filterHandoff]);
 
   // Handle single dropdown change
   const handleFilterChange = (filterId: string, selectedValue: string) => {

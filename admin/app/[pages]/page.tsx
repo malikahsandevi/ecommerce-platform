@@ -166,6 +166,35 @@ const MEDIA_TYPE_META = [
   { value: "other", label: "Other Files" },
 ] as const;
 
+/**
+ * A product's own category id (the list API populates the ref, so it
+ * is normally an object; a bare id string is handled too). Category
+ * filtering is DIRECT membership — the product's own category only,
+ * never its parent's — the same membership the dashboard's Top
+ * Categories product counts use, so the card's figure and the
+ * filtered list always agree.
+ */
+function productCategoryId(item: Row): string {
+  const category = item.category as
+    | { _id?: unknown; id?: unknown }
+    | string
+    | null
+    | undefined;
+  if (category && typeof category === "object") {
+    return String(category._id || category.id || "");
+  }
+  return category ? String(category) : "";
+}
+
+/** A product's own category display name, when the ref is populated. */
+function productCategoryName(item: Row): string {
+  const category = item.category as { name?: unknown } | null | undefined;
+  if (category && typeof category === "object") {
+    return String(category.name || "");
+  }
+  return "";
+}
+
 /** URL segment → permission module (role matrix). */
 const MODULE_BY_SEGMENT: Record<string, string> = {
   products: "Products",
@@ -210,6 +239,8 @@ const PageLayout: React.FC = () => {
   const isMediaPage = pathname.includes("/media") || Route.toLowerCase() === "media";
   const isCustomersPage =
     pathname.includes("/customers") || Route.toLowerCase() === "customers";
+  const isProductsPage =
+    pathname.includes("/products") || Route.toLowerCase() === "products";
 
   // --- data state ---------------------------------------------------------
   const [items, setItems] = useState<Row[]>([]);
@@ -233,6 +264,15 @@ const PageLayout: React.FC = () => {
     nonce: number;
     path: string;
   } | null>(null);
+  // Dashboard Top Categories click-through: the category a click
+  // asked this page to pre-select in the FilterBar's Category
+  // dropdown (same nonce discipline as the search hand-off).
+  const [filterHandoff, setFilterHandoff] = useState<{
+    filterId: string;
+    value: string;
+    nonce: number;
+    path: string;
+  } | null>(null);
   const appliedHandoffRef = useRef<number | null>(null);
 
   // A hand-off belongs to its target page only: once the admin moves
@@ -242,7 +282,10 @@ const PageLayout: React.FC = () => {
     if (searchHandoff && searchHandoff.path !== pathname) {
       setSearchHandoff(null);
     }
-  }, [pathname, searchHandoff]);
+    if (filterHandoff && filterHandoff.path !== pathname) {
+      setFilterHandoff(null);
+    }
+  }, [pathname, searchHandoff, filterHandoff]);
   // Clear button (Ahsan's order: "har page me clear btn uper ly jao"):
   // the button lives up here in the header action row; the FilterBar
   // below owns the search/filter state, so the two ends meet through
@@ -360,8 +403,34 @@ const PageLayout: React.FC = () => {
   // The page's dropdown filters come from its route config. Media also
   // gets a file-type filter whose options are derived from the loaded
   // records — only types actually present in the library are offered.
+  // Products likewise get a Category filter derived from the loaded
+  // records (only categories actually present are offered) — it is
+  // also the landing spot for the dashboard Top Categories
+  // click-through hand-off.
   const filtersData = useMemo<FilterConfigItem[]>(() => {
     const base = (currentConfig.filters || []) as unknown as FilterConfigItem[];
+    if (isProductsPage) {
+      const nameById = new Map<string, string>();
+      items.forEach((item) => {
+        const id = productCategoryId(item);
+        if (id && !nameById.has(id)) {
+          nameById.set(id, productCategoryName(item) || id);
+        }
+      });
+      if (nameById.size === 0) return base;
+      const categoryOptions = [...nameById.entries()]
+        .map(([value, label]) => ({ label, value }))
+        .sort((a, b) => a.label.localeCompare(b.label));
+      return [
+        ...base,
+        {
+          id: "category",
+          placeholder: t("All Categories"),
+          options: [{ label: t("All Categories"), value: "all" }, ...categoryOptions],
+          matchValue: (item: Row) => productCategoryId(item),
+        },
+      ];
+    }
     if (!isMediaPage) return base;
     const present = new Set(items.map(mediaTypeBucket));
     const typeOptions = MEDIA_TYPE_META.filter((meta) => present.has(meta.value)).map(
@@ -377,7 +446,7 @@ const PageLayout: React.FC = () => {
         matchValue: (item: Row) => mediaTypeBucket(item),
       },
     ];
-  }, [currentConfig, isMediaPage, items]);
+  }, [currentConfig, isMediaPage, isProductsPage, items]);
 
   const totalPages = Math.max(1, Math.ceil(displayItems.length / itemsPerPage));
 
@@ -940,12 +1009,15 @@ const PageLayout: React.FC = () => {
     setIsModalOpen(true);
   }, [pathname, canCreate, isMediaPage, buildInitialFormValues]);
 
-  // Notification click-through (TopBar bell / messages): the target
-  // record is handed over via sessionStorage ("openRecord"). On arrival
-  // the page (1) pre-applies the click's search term to the FilterBar
-  // search box — visibly, so the clicked record is in the results, not
-  // hidden behind whatever the list happened to show — and (2) SELECTS
-  // the record (its details panel opens) once the list has loaded.
+  // Click-through hand-off (TopBar bell / messages, global search,
+  // dashboard cards): the target record is handed over via
+  // sessionStorage ("openRecord"). On arrival the page (1) pre-applies
+  // the click's search term to the FilterBar search box — visibly, so
+  // the clicked record is in the results, not hidden behind whatever
+  // the list happened to show — or, for a filter hand-off, pre-selects
+  // the named dropdown filter (dashboard Top Categories → Products),
+  // and (2) SELECTS the record (its details panel opens) once the list
+  // has loaded.
   // Re-checked whenever the items change and whenever the handoff
   // event fires (same-page clicks don't remount the page).
   useEffect(() => {
@@ -961,6 +1033,7 @@ const PageLayout: React.FC = () => {
         path?: string;
         id?: string;
         search?: string;
+        filter?: { id?: string; value?: string };
         ts?: number;
       } | null = null;
       try {
@@ -983,8 +1056,25 @@ const PageLayout: React.FC = () => {
           path: parsed.path,
         });
       }
+      // Apply the dropdown-filter hand-off the same way (dashboard
+      // Top Categories → the Products Category filter).
+      if (
+        parsed.filter &&
+        parsed.filter.id &&
+        parsed.filter.value &&
+        parsed.ts &&
+        appliedHandoffRef.current !== parsed.ts
+      ) {
+        appliedHandoffRef.current = parsed.ts;
+        setFilterHandoff({
+          filterId: parsed.filter.id,
+          value: parsed.filter.value,
+          nonce: parsed.ts,
+          path: parsed.path,
+        });
+      }
       if (!parsed.id) {
-        // Search-only hand-off: nothing to select, consume it now.
+        // Search/filter-only hand-off: nothing to select, consume it now.
         try {
           sessionStorage.removeItem("openRecord");
         } catch {
@@ -1124,6 +1214,7 @@ const PageLayout: React.FC = () => {
                 onDataChange={setDisplayItems}
                 onCriteriaChange={setExportCriteria}
                 searchHandoff={searchHandoff}
+                filterHandoff={filterHandoff}
                 clearSignal={clearSignal}
                 onClearActiveChange={setClearActive}
               />

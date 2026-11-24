@@ -1,11 +1,15 @@
 import React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 import { FolderTree } from "lucide-react";
 import { formatMoney, useStoreCurrency } from "@/services/currency";
 import { useLanguage } from "@/services/i18n";
 
 export interface CategoryItem {
+  // The category's id — clicking the name hands it to the Products
+  // page, which pre-selects it in its Category filter.
+  id?: string;
   name: string;
   // Donut segment size: the category's revenue share, or — while the
   // store has no sales yet — its product-count share.
@@ -26,6 +30,32 @@ interface TopCategoriesProps {
 
 export const TopCategories: React.FC<TopCategoriesProps> = ({ categoriesData, totalSales, loading = false }) => {
   const { t } = useLanguage();
+  const router = useRouter();
+
+  // Category click-through (Ahsan's order): land on the Products page
+  // with this category pre-selected in its Category filter, so only
+  // this category's products show. Uses the same "openRecord"
+  // sessionStorage hand-off as the notification / search
+  // click-throughs, carrying a filter instead of a search term; the
+  // `ts` makes every click a fresh hand-off.
+  const openCategoryProducts = (item: CategoryItem) => {
+    if (item.id) {
+      try {
+        sessionStorage.setItem(
+          "openRecord",
+          JSON.stringify({
+            path: "/products",
+            filter: { id: "category", value: item.id },
+            ts: Date.now(),
+          }),
+        );
+      } catch {
+        /* storage blocked — navigation still happens */
+      }
+      window.dispatchEvent(new Event("admin:open-record"));
+    }
+    router.push("/products");
+  };
   // Subscribe so the centre figure re-renders in the active currency.
   useStoreCurrency();
   if (loading) {
@@ -131,15 +161,20 @@ export const TopCategories: React.FC<TopCategoriesProps> = ({ categoriesData, to
           <div className="flex-1 flex flex-col justify-between gap-1 pt-1">
             {items.map((item, index) => (
               <div key={index} className="flex items-center justify-between text-xs">
-                <div className="flex items-center gap-2.5 min-w-0">
+                <button
+                  type="button"
+                  onClick={() => openCategoryProducts(item)}
+                  className="flex items-center gap-2.5 min-w-0 cursor-pointer text-left group"
+                  title={item.name}
+                >
                   <span
                     className="w-2.5 h-2.5 rounded-sm shrink-0"
                     style={{ backgroundColor: item.color }}
                   />
-                  <span className="font-medium text-(--text-muted) truncate">
+                  <span className="font-medium text-(--text-muted) truncate group-hover:text-(--primary) transition-colors">
                     {item.name}
                   </span>
-                </div>
+                </button>
                 <span className="shrink-0 ml-2 text-right">
                   <span className="block font-semibold text-(--text)">
                     {item.formattedValue}
