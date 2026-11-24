@@ -141,11 +141,13 @@ export const reviewConfig = {
     id: review._id || String(review.id),
     code: review.code,
     title: review.title || `${review.rating} Star Review`,
-    // The reviewer's photo as the panel's round avatar when the
-    // account has one uploaded (no photo → header stays as it was).
-    ...(userAvatar(review)
-      ? { image: userAvatar(review), imageVariant: "avatar" as const }
-      : {}),
+    // The reviewer as the panel's round avatar: their photo when the
+    // account has one uploaded, the reviewer's initials otherwise —
+    // the header always carries the disc.
+    imageVariant: "avatar" as const,
+    avatarName:
+      referenceLabel(review.user) || review.customerName || "Unknown customer",
+    ...(userAvatar(review) ? { image: userAvatar(review) } : {}),
     status: review.status,
     shortDescription: `By ${referenceLabel(review.user) || review.customerName || "Unknown customer"}`,
     attributes: {

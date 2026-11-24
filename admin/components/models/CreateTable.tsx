@@ -130,22 +130,39 @@ function CellThumb({ src, alt }: { src: string; alt: string }) {
   );
 }
 
+/** A person's initials — the same rule the TopBar avatar uses (first
+ *  word + last word; a single word gives its first two letters). */
+function personInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "N";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
 /**
- * Round user photo for the name-bearing text columns (Orders'
- * Customer, Reviews' Customer): rendered only when the row carries a
- * real uploaded avatar (`userImage`); a photo that fails to load
- * removes just itself and leaves the name exactly as it was.
+ * Round person disc for the name-bearing text columns (Orders'
+ * Customer, Reviews' Customer): the row's uploaded photo (`userImage`)
+ * when the person has one that loads; otherwise — no photo, or a photo
+ * that fails to load — an initials disc of the EXACT same size in the
+ * house placeholder style (the TopBar / New Customers pattern). Every
+ * row therefore carries exactly one disc and the name never shifts.
  */
-function UserCellPhoto({ src, alt }: { src: string; alt: string }) {
-  const [failed, setFailed] = useState(false);
-  if (failed) return null;
+function UserCellAvatar({ src, name }: { src: string | null; name: string }) {
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  if (src && failedSrc !== src) {
+    return (
+      <img
+        src={src}
+        alt={name}
+        className="w-8 h-8 rounded-full object-cover shrink-0 border border-[var(--border)]"
+        onError={() => setFailedSrc(src)}
+      />
+    );
+  }
   return (
-    <img
-      src={src}
-      alt={alt}
-      className="w-8 h-8 rounded-full object-cover shrink-0 border border-[var(--border)]"
-      onError={() => setFailed(true)}
-    />
+    <span className="w-8 h-8 rounded-full bg-[var(--primary-soft)] text-[var(--primary-dark)] flex items-center justify-center text-[10px] font-bold shrink-0">
+      {personInitials(name)}
+    </span>
   );
 }
 
@@ -577,12 +594,14 @@ export function CreateTable<T extends Record<string, any>>({
                         ? `${displayText.slice(0, charCap).trimEnd()}…`
                         : displayText;
                     // User-name columns (Orders' Customer, Reviews'
-                    // Customer): the person's uploaded photo rides
-                    // beside the name when the row carries one
-                    // (`userImage`) — the name alone otherwise, exactly
-                    // as before.
+                    // Customer): a round disc always rides beside the
+                    // name — the person's uploaded photo (`userImage`)
+                    // when the row carries one that loads, an initials
+                    // disc of the same size otherwise.
+                    const isUserNameColumn =
+                      colKeyStr === "customer" || colKeyStr === "customername";
                     const userPhotoSrc =
-                      (colKeyStr === "customer" || colKeyStr === "customername") &&
+                      isUserNameColumn &&
                       typeof item.userImage === "string" &&
                       (item.userImage.startsWith("http") ||
                         item.userImage.startsWith("/") ||
@@ -599,9 +618,9 @@ export function CreateTable<T extends Record<string, any>>({
                             : undefined
                         }
                       >
-                        {userPhotoSrc ? (
+                        {isUserNameColumn ? (
                           <span className="flex items-center gap-2 min-w-0">
-                            <UserCellPhoto key={userPhotoSrc} src={userPhotoSrc} alt={displayText} />
+                            <UserCellAvatar src={userPhotoSrc} name={displayText} />
                             <span className="truncate">{previewText}</span>
                           </span>
                         ) : (

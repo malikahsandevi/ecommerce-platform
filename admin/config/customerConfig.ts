@@ -125,8 +125,9 @@ export const customerConfig = {
           : undefined,
       // A customer's image is an avatar: the details panel shows it as a
       // small round thumbnail beside the name, not the big product-style
-      // banner block.
+      // banner block. No photo → the tile shows the customer's initials.
       imageVariant: "avatar" as const,
+      avatarName: fullName(customer),
       shortDescription: customer.email,
       attributes: {
         Username: customer.username || "—",

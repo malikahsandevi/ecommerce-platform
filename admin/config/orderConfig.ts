@@ -176,11 +176,12 @@ export const orderConfig = {
     id: order._id,
     code: order.code,
     title: `Order ${order.orderNumber || ""}`.trim(),
-    // The buyer's photo as the panel's round avatar when the account
-    // has one uploaded (no photo → the header stays exactly as it was).
-    ...(customerAvatar(order)
-      ? { image: customerAvatar(order), imageVariant: "avatar" as const }
-      : {}),
+    // The buyer as the panel's round avatar: their photo when the
+    // account has one uploaded, the buyer's initials otherwise — the
+    // header always carries the disc.
+    imageVariant: "avatar" as const,
+    avatarName: customerName(order),
+    ...(customerAvatar(order) ? { image: customerAvatar(order) } : {}),
     status: order.status,
     shortDescription: `Customer: ${customerName(order)}${customerEmail(order) ? ` (${customerEmail(order)})` : ""}`,
     attributes: {

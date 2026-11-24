@@ -37,6 +37,10 @@ export interface DetailPanelData {
    *  "avatar" shows a small round thumbnail beside the title instead
    *  (people records — customers/users). */
   imageVariant?: "banner" | "avatar";
+  /** For "avatar" records whose person differs from the title (an
+   *  order's buyer, a review's reviewer): the person's name, whose
+   *  initials fill the round tile when there is no photo. */
+  avatarName?: string;
   gallery?: string[];
   price?: number;
   salePrice?: number;
@@ -50,6 +54,15 @@ export interface DetailPanelData {
   attributes?: Record<string, string | number | boolean | null | undefined>;
   /** Attribute label → full text for a small copy button rendered after that attribute's (truncated) value. */
   copyableAttributes?: Record<string, string>;
+}
+
+/** A person's initials — the same rule the TopBar avatar uses (first
+ *  word + last word; a single word gives its first two letters). */
+function personInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "N";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
 /** Small copy-to-clipboard button shown after a truncated attribute value. */
@@ -253,7 +266,9 @@ export function DetailPanel<T extends DetailPanelData>({
                         />
                       ) : (
                         <span className="w-10 h-10 shrink-0 rounded-full bg-[var(--primary-soft)] text-[var(--primary)] flex items-center justify-center text-sm font-bold">
-                          {(selectedItem.title.trim().charAt(0) || "N").toUpperCase()}
+                          {selectedItem.avatarName
+                            ? personInitials(selectedItem.avatarName)
+                            : (selectedItem.title.trim().charAt(0) || "N").toUpperCase()}
                         </span>
                       ))}
                     <div className="min-w-0">
