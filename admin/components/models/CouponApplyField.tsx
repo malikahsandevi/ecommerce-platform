@@ -9,17 +9,19 @@ import { useLanguage } from "@/services/i18n";
 
 /**
  * The Create Order form's Coupon field. The admin types a redeem code
- * and presses Apply: the code is validated against the CURRENT item
- * subtotal by POST /api/coupons/validate — the same resolver the
- * server runs again inside createOrder, so the discount previewed
- * here is the discount the saved order carries, and a code that fails
- * any rule (unknown, inactive, expired, usage limit, minimum order)
- * shows the server's reason and applies nothing.
+ * and presses Apply: the code is validated against the CURRENT order
+ * context (items + customer) by POST /api/coupons/validate — the same
+ * resolver the server runs again inside createOrder, so the discount
+ * previewed here is the discount the saved order carries, and a code
+ * that fails any rule (unknown, inactive, expired, usage limit,
+ * per-customer limit, customer/product/category scoping, minimum
+ * order) shows the server's reason and applies nothing.
  *
  * Applied state lives in formData (couponCode + couponApplied +
  * couponDiscount) so the order payload builder can pick the code up;
- * changing the product, the quantity or the code itself re-validates
- * or clears the application — a stale discount never survives.
+ * changing the product, the quantity, the customer or the code itself
+ * re-validates or clears the application — a stale discount never
+ * survives.
  */
 interface CouponApplyFieldProps {
   value: string;
@@ -27,6 +29,7 @@ interface CouponApplyFieldProps {
   discount?: number;
   productId: string;
   quantity: number;
+  userId: string;
   onFieldChange: (fieldName: string, value: unknown) => void;
 }
 
@@ -41,6 +44,7 @@ export default function CouponApplyField({
   discount,
   productId,
   quantity,
+  userId,
   onFieldChange,
 }: CouponApplyFieldProps) {
   const { t } = useLanguage();
@@ -76,18 +80,28 @@ export default function CouponApplyField({
     validatedSignature.current = "";
   };
 
+  // The resolver's full context — the discount depends on the items
+  // AND the customer (per-customer limits, customer/product/category
+  // scoping), so any of them changing re-runs the same validation the
+  // server runs again at order time.
+  const contextSignature = `${subtotal}|${userId}|${productId}|${quantity}`;
+
   const validate = async (code: string, amount: number, silent: boolean) => {
     if (!silent) setBusy(true);
     try {
       const { data } = await apiClient.post("/coupons/validate", {
         code,
         subtotal: amount,
+        user: userId || undefined,
+        items: productId
+          ? [{ product: productId, quantity: Math.max(1, Number(quantity) || 1) }]
+          : undefined,
       });
       onFieldChange("couponCode", data.code);
       onFieldChange("couponApplied", true);
       onFieldChange("couponDiscount", data.discount);
       setAppliedCode(data.code);
-      validatedSignature.current = `${data.code}|${amount}`;
+      validatedSignature.current = `${data.code}|${contextSignature}`;
       setError("");
       return true;
     } catch (err) {
@@ -99,17 +113,18 @@ export default function CouponApplyField({
     }
   };
 
-  // Items changed under an applied coupon → re-validate against the
-  // new subtotal (the discount follows, or the application drops with
-  // the server's reason — e.g. the minimum order is no longer met).
+  // Items or customer changed under an applied coupon → re-validate
+  // against the new context (the discount follows, or the application
+  // drops with the server's reason — e.g. the minimum order is no
+  // longer met, or this customer has reached the per-customer limit).
   useEffect(() => {
     if (!applied || !appliedCode) return;
-    const signature = `${appliedCode}|${subtotal}`;
+    const signature = `${appliedCode}|${contextSignature}`;
     if (validatedSignature.current === signature) return;
     validatedSignature.current = signature;
     void validate(appliedCode, subtotal, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [subtotal, applied, appliedCode]);
+  }, [contextSignature, applied, appliedCode]);
 
   const handleApply = async () => {
     const code = (value || "").trim().toUpperCase();

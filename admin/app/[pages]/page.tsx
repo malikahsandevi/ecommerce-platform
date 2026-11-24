@@ -109,6 +109,12 @@ function withDynamicOptions(
         return options.productOptions?.length ? { ...field, options: options.productOptions } : field;
       case "user":
         return options.userOptions?.length ? { ...field, options: options.userOptions } : field;
+      case "applicableProducts":
+        return options.productOptions?.length ? { ...field, options: options.productOptions } : field;
+      case "applicableCategories":
+        return options.categoryOptions?.length ? { ...field, options: options.categoryOptions } : field;
+      case "applicableUsers":
+        return options.userOptions?.length ? { ...field, options: options.userOptions } : field;
       default:
         return field;
     }

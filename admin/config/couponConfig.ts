@@ -14,7 +14,16 @@ export interface Coupon {
   discountValue?: number | string;
   minPurchaseAmount?: number;
   maxDiscountAmount?: number;
-  usageLimit?: number;
+  /** null = no limit (shown "--"); 0 = the coupon can never be used. */
+  usageLimit?: number | null;
+  /** Same semantics as usageLimit, counted per customer. */
+  perCustomerLimit?: number | null;
+  /** Scoping: populated records from the API, or plain ids. Empty = no restriction. */
+  applicableProducts?: Array<string | { _id: string; name?: string }>;
+  applicableCategories?: Array<string | { _id: string; name?: string }>;
+  applicableUsers?: Array<
+    string | { _id: string; name?: string; firstName?: string; lastName?: string; email?: string }
+  >;
   usedCount: number;
   startDate: string;
   endDate: string;
@@ -34,6 +43,37 @@ const getDiscountValue = (coupon: Coupon): number => {
   const numericValue = typeof value === "number" ? value : Number(value);
   return Number.isFinite(numericValue) ? numericValue : 0;
 };
+
+/** Display name of one scoping entry — populated record or bare id. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const scopeEntryName = (entry: any): string => {
+  if (!entry) return "";
+  if (typeof entry === "string") return entry;
+  return (
+    entry.name ||
+    [entry.firstName, entry.lastName].filter(Boolean).join(" ") ||
+    entry.email ||
+    String(entry._id || "")
+  );
+};
+
+/** "Name, Name" for a scoping list, or the all-of-them label when empty. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const scopeListLabel = (list: any, allLabel: string): string => {
+  const entries = Array.isArray(list) ? list : [];
+  if (!entries.length) return allLabel;
+  return entries.map(scopeEntryName).filter(Boolean).join(", ");
+};
+
+/** Ids of a scoping list, whether it arrives populated or as bare ids. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const scopeIds = (list: any): string[] =>
+  (Array.isArray(list) ? list : [])
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .map((entry: any) =>
+      typeof entry === "string" ? entry : String(entry?._id || "")
+    )
+    .filter(Boolean);
 
 const getCouponStatus = (coupon: Coupon) => {
   if (coupon.status) return coupon.status;
@@ -99,7 +139,7 @@ export const couponConfig = {
     value: getDiscountType(coupon) === "percentage"
       ? `${getDiscountValue(coupon)}%`
       : formatMoney(getDiscountValue(coupon), 2),
-    usage: `${coupon.usedCount} / ${coupon.usageLimit || "∞"}`,
+    usage: `${coupon.usedCount} / ${coupon.usageLimit ?? "--"}`,
     status: getCouponStatus(coupon),
   }),
 
@@ -116,7 +156,13 @@ export const couponConfig = {
       "Discount Value": getDiscountType(coupon) === "percentage" ? `${getDiscountValue(coupon)}%` : formatMoney(getDiscountValue(coupon), 2),
       "Min Purchase": coupon.minPurchaseAmount ? formatMoney(coupon.minPurchaseAmount, 2) : "None",
       "Max Discount": coupon.maxDiscountAmount ? formatMoney(coupon.maxDiscountAmount, 2) : "N/A",
-      "Usage Limit": coupon.usageLimit ? `${coupon.usedCount} / ${coupon.usageLimit}` : `${coupon.usedCount} (No Limit)`,
+      "Usage Limit": `${coupon.usedCount} / ${coupon.usageLimit ?? "--"}`,
+      // No hyphen: the DetailPanel inserts a space before capitals in
+      // attribute keys, which would split "Per-Customer" apart.
+      "Per Customer Limit": coupon.perCustomerLimit ?? "--",
+      "Applies To Products": scopeListLabel(coupon.applicableProducts, "All products"),
+      "Applies To Categories": scopeListLabel(coupon.applicableCategories, "All categories"),
+      "Applies To Customers": scopeListLabel(coupon.applicableUsers, "All customers"),
       "Start Date": (coupon.validFrom || coupon.startDate) ? new Date(coupon.validFrom || coupon.startDate).toLocaleDateString() : "N/A",
       "End Date": (coupon.validUntil || coupon.endDate) ? new Date(coupon.validUntil || coupon.endDate).toLocaleDateString() : "N/A",
     },
@@ -132,7 +178,13 @@ export const couponConfig = {
         discountValue: 10,
         minPurchaseAmount: 0,
         maxDiscountAmount: 0,
-        usageLimit: 100,
+        // Blank = no limit (stored null, shown "--"); 0 would make
+        // the coupon unusable, so a new coupon starts unlimited.
+        usageLimit: "",
+        perCustomerLimit: "",
+        applicableProducts: [],
+        applicableCategories: [],
+        applicableUsers: [],
         validFrom: new Date().toISOString().split("T")[0],
         validUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
         isActive: true,
@@ -148,7 +200,12 @@ export const couponConfig = {
       discountValue: coupon.discountValue ?? coupon.value ?? 0,
       minPurchaseAmount: coupon.minPurchaseAmount || 0,
       maxDiscountAmount: coupon.maxDiscountAmount || 0,
-      usageLimit: coupon.usageLimit || 0,
+      // null (no limit) edits as blank; a stored 0 stays 0 (dead).
+      usageLimit: coupon.usageLimit ?? "",
+      perCustomerLimit: coupon.perCustomerLimit ?? "",
+      applicableProducts: scopeIds(coupon.applicableProducts),
+      applicableCategories: scopeIds(coupon.applicableCategories),
+      applicableUsers: scopeIds(coupon.applicableUsers),
       validFrom: coupon.validFrom || coupon.startDate || "",
       validUntil: coupon.validUntil || coupon.endDate || "",
       isActive: coupon.isActive ?? coupon.status !== "disabled",
@@ -260,8 +317,46 @@ export const couponConfig = {
       type: "number",
       min: 0,
       colSpan: 1,
-      helperText: "Leave at 0 for unlimited use.",
+      helperText: "Leave blank for unlimited use.",
       section: "Discount Rules & Limits",
+    },
+    {
+      name: "perCustomerLimit",
+      label: "Per-Customer Limit",
+      type: "number",
+      min: 0,
+      colSpan: 1,
+      helperText: "Leave blank for no per-customer limit.",
+      section: "Discount Rules & Limits",
+    },
+
+    // Section 3: Applicability (scoping) — empty means no restriction
+    {
+      name: "applicableProducts",
+      label: "Applicable Products",
+      type: "multi-select",
+      colSpan: 4,
+      placeholder: "Add a product",
+      helperText: "Leave empty to apply to all products.",
+      section: "Applies To",
+    },
+    {
+      name: "applicableCategories",
+      label: "Applicable Categories",
+      type: "multi-select",
+      colSpan: 4,
+      placeholder: "Add a category",
+      helperText: "Leave empty to apply to all categories.",
+      section: "Applies To",
+    },
+    {
+      name: "applicableUsers",
+      label: "Applicable Users",
+      type: "multi-select",
+      colSpan: 4,
+      placeholder: "Add a customer",
+      helperText: "Leave empty to apply to all customers.",
+      section: "Applies To",
     },
 
     // Section 3: Dates & Description

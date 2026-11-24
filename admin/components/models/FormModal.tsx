@@ -34,6 +34,7 @@ export type FormFieldType =
   | "number"
   | "textarea"
   | "select"
+  | "multi-select"
   | "checkbox"
   | "switch"
   | "date"
@@ -162,6 +163,8 @@ export const FormModal: React.FC<FormModalProps> = ({
   const router = useRouter();
   const { t } = useLanguage();
   const [tagInputs, setTagInputs] = useState<Record<string, string>>({});
+  // Pending (not yet added) pick of each multi-select field.
+  const [multiPick, setMultiPick] = useState<Record<string, string>>({});
   const [imageUpload, setImageUpload] = useState<{ field: string; busy: boolean; error: string }>({
     field: "",
     busy: false,
@@ -314,6 +317,26 @@ export const FormModal: React.FC<FormModalProps> = ({
     handleFieldChange(
       fieldName,
       currentTags.filter((t) => t !== tagToRemove)
+    );
+  };
+
+  // Multi-select helpers: the field's value is an array of option ids;
+  // the house Select stages one pick, Add commits it as a chip.
+  const handleAddMultiPick = (fieldName: string) => {
+    const pick = multiPick[fieldName];
+    if (!pick) return;
+    const current: string[] = (getNestedValue(formData, fieldName) || []).map(String);
+    if (!current.includes(pick)) {
+      handleFieldChange(fieldName, [...current, pick]);
+    }
+    setMultiPick((prev) => ({ ...prev, [fieldName]: "" }));
+  };
+
+  const handleRemoveMultiPick = (fieldName: string, idToRemove: string) => {
+    const current: string[] = (getNestedValue(formData, fieldName) || []).map(String);
+    handleFieldChange(
+      fieldName,
+      current.filter((id) => id !== idToRemove)
     );
   };
 
@@ -513,6 +536,80 @@ export const FormModal: React.FC<FormModalProps> = ({
             )}
           </div>
         );
+
+      case "multi-select": {
+        const selectedIds: string[] = (
+          Array.isArray(rawValue) ? rawValue : []
+        ).map(String);
+        const allOptions = field.options || [];
+        const labelFor = (id: string) =>
+          allOptions.find((o) => String(o.value) === id)?.label || id;
+        const availableOptions = allOptions.filter(
+          (o) => !selectedIds.includes(String(o.value))
+        );
+        const pendingPick = multiPick[field.name] || "";
+        return (
+          <div key={field.name} className={colClass}>
+            <label className="font-bold text-[var(--text)] block mb-1 text-xs">
+              {t(field.label)} {field.required && <span className="text-red-500">*</span>}
+            </label>
+            {selectedIds.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {selectedIds.map((id) => (
+                  <span
+                    key={id}
+                    className="px-2.5 py-1 bg-[var(--primary)] border border-transparent text-[var(--primary-text)] rounded-lg text-[10px] font-bold flex items-center gap-1"
+                  >
+                    {t(labelFor(id))}
+                    <X
+                      className="w-3 h-3 cursor-pointer hover:text-red-200"
+                      onClick={() => handleRemoveMultiPick(field.name, id)}
+                    />
+                  </span>
+                ))}
+              </div>
+            )}
+            <div className="flex items-center gap-2">
+              <div className="flex-1 min-w-0">
+                <Select
+                  value={pendingPick}
+                  options={availableOptions.map((option) => ({
+                    ...option,
+                    label: t(option.label),
+                  }))}
+                  onChange={(val) =>
+                    setMultiPick((prev) => ({ ...prev, [field.name]: val }))
+                  }
+                  placeholder={
+                    field.placeholder
+                      ? t(field.placeholder)
+                      : t("Select {label}").replace("{label}", t(field.label))
+                  }
+                  fullWidth
+                  variant="outline"
+                  size="md"
+                  disabled={field.disabled}
+                  emptyText={t("No options available yet.")}
+                />
+              </div>
+              <Button
+                variant="secondary"
+                size="md"
+                type="button"
+                disabled={!pendingPick || field.disabled}
+                onClick={() => handleAddMultiPick(field.name)}
+              >
+                {t("Add")}
+              </Button>
+            </div>
+            {field.helperText && (
+              <span className="text-[10px] text-[var(--text-muted)] mt-0.5 block">
+                {t(field.helperText)}
+              </span>
+            )}
+          </div>
+        );
+      }
 
       case "switch":
       case "checkbox":
@@ -785,6 +882,7 @@ export const FormModal: React.FC<FormModalProps> = ({
               discount={formData?.couponDiscount}
               productId={formData?.product ? String(formData.product) : ""}
               quantity={Number(formData?.quantity) || 1}
+              userId={formData?.user ? String(formData.user) : ""}
               onFieldChange={handleFieldChange}
             />
             {field.helperText && (

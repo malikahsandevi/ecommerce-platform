@@ -202,10 +202,24 @@ function transformBrandPayload(data: any) {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function transformCouponPayload(data: any) {
   const payload = { ...data };
-  delete payload.perUserLimit;
-  if (payload.usageLimit === '' || payload.usageLimit === 0) payload.usageLimit = null;
+  // Limit semantics (2026-11-24): blank means NO limit (stored null,
+  // shown "--"); a typed 0 is sent as 0 — the coupon is then dead and
+  // can never be redeemed. Never translate 0 into null here.
+  if (payload.usageLimit === '' || payload.usageLimit === undefined) {
+    payload.usageLimit = null;
+  }
+  if (payload.perCustomerLimit === '' || payload.perCustomerLimit === undefined) {
+    payload.perCustomerLimit = null;
+  }
   if (payload.maxDiscountAmount === '' || payload.maxDiscountAmount === 0) {
     delete payload.maxDiscountAmount;
+  }
+  // Scoping pickers hold plain id arrays — send them as-is (an empty
+  // array means no restriction); drop anything that is not an array.
+  for (const key of ['applicableProducts', 'applicableCategories', 'applicableUsers']) {
+    if (payload[key] !== undefined && !Array.isArray(payload[key])) {
+      delete payload[key];
+    }
   }
   return payload;
 }
@@ -367,6 +381,56 @@ export function getResourceService(pathname: string): ResourceService | null {
             .map((brand: { _id: string; code?: string; name: string }) => ({
               label: entityLabel(brand, brand.name),
               value: brand._id,
+            })),
+        };
+      }
+      if (apiEndpoint === 'coupons') {
+        // The coupon form's scoping pickers: products and categories
+        // the coupon may be limited to, and the CUSTOMERS it may be
+        // limited to (staff accounts never redeem coupons, so the
+        // user picker lists customers only).
+        const [productsResponse, categoriesResponse, usersResponse] =
+          await Promise.all([
+            apiClient.get('/products'),
+            apiClient.get('/categories'),
+            apiClient.get('/users'),
+          ]);
+
+        const userLabel = (user: {
+          _id: string;
+          code?: string;
+          firstName?: string;
+          lastName?: string;
+          username?: string;
+          name?: string;
+          email: string;
+        }) =>
+          entityLabel(
+            user,
+            [user.firstName, user.lastName].filter(Boolean).join(' ') ||
+              user.name ||
+              user.username ||
+              user.email,
+          );
+
+        return {
+          productOptions: (productsResponse.data || []).map(
+            (product: { _id: string; code?: string; name: string }) => ({
+              label: entityLabel(product, product.name),
+              value: product._id,
+            }),
+          ),
+          categoryOptions: (categoriesResponse.data || []).map(
+            (category: { _id: string; code?: string; name: string }) => ({
+              label: entityLabel(category, category.name),
+              value: category._id,
+            }),
+          ),
+          userOptions: (usersResponse.data || [])
+            .filter((user: { role?: string }) => user.role === 'Customer')
+            .map((user: Parameters<typeof userLabel>[0]) => ({
+              label: userLabel(user),
+              value: user._id,
             })),
         };
       }
