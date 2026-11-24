@@ -617,14 +617,10 @@ const PageLayout: React.FC = () => {
               t("Updating {route} is not supported by the API.").replace("{route}", t(Route)),
             );
           }
-          const result = await service.update(String(id), formData);
-          toast.success(
-            Array.isArray(result)
-              ? t("{route} updated: {details}.")
-                  .replace("{route}", t(Route))
-                  .replace("{details}", result.join(", "))
-              : t("{route} updated successfully.").replace("{route}", t(Route)),
-          );
+          await service.update(String(id), formData);
+          // Toast rule (Ahsan's order): only the main point — no
+          // result details are ever appended to a toast.
+          toast.success(t("{route} updated successfully.").replace("{route}", t(Route)));
         }
 
         setIsModalOpen(false);

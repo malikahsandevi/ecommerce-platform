@@ -2473,30 +2473,32 @@ function ServiceBuilderPanel({
         : await settingsService.executeIntegration(item.serviceSlug, endpointName, {}, {}, {
             entry: entryToApi(item) as unknown as Record<string, unknown>,
           });
-      const summary = JSON.stringify(result.data ?? result).slice(0, 220);
-      toast.success(t("{title}: connection works — {summary}").replace("{title}", item.title).replace("{summary}", summary));
+      // Toast rule (Ahsan's order): a toast carries ONLY the main
+      // point — provider name + status. The runner's raw result
+      // object never reaches the toast string; it is used here only
+      // for the plan-fill below.
+      toast.success(t("{title}: connection works").replace("{title}", item.title));
       if (result.planDetails && def) {
-        const filledLabels: string[] = [];
+        let filledAny = false;
         const nextFields = { ...item.fields };
         for (const field of def.fields) {
           if (!field.plan) continue;
           const value = result.planDetails[field.key];
           if (value && !(nextFields[field.key] ?? "").trim()) {
             nextFields[field.key] = value;
-            filledLabels.push(field.label);
+            filledAny = true;
           }
         }
-        if (filledLabels.length > 0) {
+        if (filledAny) {
           updateEntry(index, { fields: nextFields });
-          toast.success(
-            t("{title}: plan details filled in — {fields}")
-              .replace("{title}", item.title)
-              .replace("{fields}", filledLabels.join(", ")),
-          );
+          toast.success(t("{title}: plan details filled in").replace("{title}", item.title));
         }
       }
-    } catch (testError) {
-      toast.error(extractApiError(testError).slice(0, 300));
+    } catch {
+      // Status-only rule (Ahsan's order): a failed test shows ONE
+      // simple line — never the provider's reason, the runner's
+      // detail, or a raw error body.
+      toast.error(t("{title}: connection failed").replace("{title}", item.title || t("This service")));
     } finally {
       setBusy((current) => {
         const next = { ...current };
