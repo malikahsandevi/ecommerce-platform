@@ -4,6 +4,7 @@ const { requireStaff } = require('../middleware/admin');
 const { requireSettingsSavePassword } = require('../middleware/settingsLock');
 const RolePermission = require('../models/RolePermission');
 const User = require('../models/User');
+const { sendError } = require('../utils/apiError');
 const {
     MODULES,
     MODULE_ACTIONS,
@@ -42,7 +43,7 @@ router.get('/me', async (req, res) => {
             permissions: await getEffectivePermissions(req.user.role),
         });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 });
 
@@ -64,7 +65,7 @@ router.get('/', async (req, res) => {
             canEdit: req.user.role === 'Super Admin',
         });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 });
 
@@ -116,7 +117,7 @@ router.post('/roles', requireSettingsSavePassword, async (req, res) => {
             customRoles: allCustomRoles,
         });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 });
 
@@ -168,7 +169,7 @@ router.delete('/roles/:name', requireSettingsSavePassword, async (req, res) => {
             customRoles: remainingCustomRoles,
         });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 });
 
@@ -202,7 +203,7 @@ router.put('/', requireSettingsSavePassword, async (req, res) => {
         invalidatePermissionCache();
         res.json({ matrix: await getMatrix() });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 });
 

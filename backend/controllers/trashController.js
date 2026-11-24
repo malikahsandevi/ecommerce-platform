@@ -36,6 +36,7 @@ const {
 } = require('../utils/credentials');
 const { parseCloudinaryUrl, destroyAsset } = require('../utils/cloudinaryUrl');
 const { getDefinition } = require('../config/services');
+const { sendError } = require('../utils/apiError');
 
 const PAYMENT_SA_ONLY_MESSAGE = 'Only Super Admin can manage payment methods.';
 
@@ -196,7 +197,7 @@ const listDeletedItems = async (req, res) => {
         items.sort((a, b) => new Date(b.deletedAt) - new Date(a.deletedAt));
         res.json(items);
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 };
 
@@ -365,7 +366,7 @@ const restoreItem = async (req, res) => {
 
         res.json({ message: 'Item restored.' });
     } catch (error) {
-        res.status(400).json({ message: error.message });
+        sendError(res, error, 400);
     }
 };
 
@@ -413,7 +414,7 @@ const restoreIntegration = async (req, res) => {
         await refreshCredentials(true);
         res.json({ message: 'Item restored.' });
     } catch (error) {
-        res.status(400).json({ message: error.message });
+        sendError(res, error, 400);
     }
 };
 
@@ -466,7 +467,7 @@ const permanentlyDeleteItem = async (req, res) => {
         await doc.deleteOne();
         res.json({ message: 'Item deleted permanently.' });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 };
 
@@ -489,7 +490,7 @@ const permanentlyDeleteIntegration = async (req, res) => {
         await settings.save();
         res.json({ message: 'Item deleted permanently.' });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 };
 

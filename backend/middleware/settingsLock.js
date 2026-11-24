@@ -1,4 +1,5 @@
 const { User } = require('../models');
+const { sendError } = require('../utils/apiError');
 const {
     isValidSettingsUnlock,
     passwordMatchesCaller,
@@ -43,7 +44,7 @@ const requireSettingsUnlock = async (req, res, next) => {
         if (await isValidSettingsUnlock(token, req.user?._id)) return next();
         return lockedResponse(res);
     } catch (error) {
-        return res.status(500).json({ message: error.message });
+        return sendError(res, error, 500);
     }
 };
 
@@ -75,7 +76,7 @@ const requireSettingsSavePassword = async (req, res, next) => {
         if (await verifySavePassword(req, res)) return next();
         return saveCheckFailedResponse(res);
     } catch (error) {
-        return res.status(500).json({ message: error.message });
+        return sendError(res, error, 500);
     }
 };
 
@@ -100,7 +101,7 @@ const requireSavePasswordForUserCreate = async (req, res, next) => {
         if (await verifySavePassword(req, res)) return next();
         return saveCheckFailedResponse(res);
     } catch (error) {
-        return res.status(500).json({ message: error.message });
+        return sendError(res, error, 500);
     }
 };
 
@@ -125,7 +126,7 @@ const requireSavePasswordForUserUpdate = async (req, res, next) => {
         if (await verifySavePassword(req, res)) return next();
         return saveCheckFailedResponse(res);
     } catch (error) {
-        return res.status(500).json({ message: error.message });
+        return sendError(res, error, 500);
     }
 };
 
@@ -139,7 +140,7 @@ const requireSavePasswordForUserDelete = async (req, res, next) => {
         if (await verifySavePassword(req, res)) return next();
         return saveCheckFailedResponse(res);
     } catch (error) {
-        return res.status(500).json({ message: error.message });
+        return sendError(res, error, 500);
     }
 };
 

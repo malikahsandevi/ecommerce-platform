@@ -4,6 +4,7 @@ const { exportModule } = require('../controllers/exportController');
 const { protect } = require('../middleware/auth');
 const { requireStaff } = require('../middleware/admin');
 const { EXPORT_ROLES, roleHasPermission } = require('../utils/permissions');
+const { sendError } = require('../utils/apiError');
 
 // Data Export role gate (Ahsan's rule): ONLY Super Admin and Admin may
 // export data — no other role, built-in or custom, even with full view
@@ -49,7 +50,7 @@ const requireExportPermission = async (req, res, next) => {
         }
         return next();
     } catch (error) {
-        return res.status(500).json({ message: error.message });
+        return sendError(res, error, 500);
     }
 };
 

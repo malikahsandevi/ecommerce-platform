@@ -26,6 +26,7 @@ const {
 } = require('../models');
 const { adaptRow, applyExportFilters, dayInTimezone } = require('../utils/exportFilter');
 const { NOT_DELETED } = require('../utils/softDelete');
+const { sendError } = require('../utils/apiError');
 
 const personName = (user) => {
     if (!user || typeof user !== 'object') return '';
@@ -372,7 +373,7 @@ const exportModule = async (req, res) => {
         res.setHeader('X-Export-Count', String(filtered.length));
         return res.send(Buffer.from(buffer));
     } catch (error) {
-        return res.status(500).json({ message: error.message });
+        return sendError(res, error, 500);
     }
 };
 

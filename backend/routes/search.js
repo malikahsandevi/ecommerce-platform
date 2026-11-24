@@ -10,6 +10,7 @@ const Order = require('../models/Order');
 const User = require('../models/User');
 const Coupon = require('../models/Coupon');
 const { NOT_DELETED } = require('../utils/softDelete');
+const { sendError } = require('../utils/apiError');
 
 const router = express.Router();
 
@@ -269,7 +270,7 @@ router.get('/', async (req, res) => {
 
         res.json(byScope.flat());
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 });
 

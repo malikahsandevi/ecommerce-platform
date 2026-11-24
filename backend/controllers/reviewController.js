@@ -3,6 +3,7 @@ const Product = require('../models/Product');
 const User = require('../models/User');
 const { logActivity } = require('../utils/activity');
 const { NOT_DELETED, applySoftDelete } = require('../utils/softDelete');
+const { sendError } = require('../utils/apiError');
 
 // Keeps Product.averageRating / reviewCount honest. Until now nothing ever
 // maintained those fields, so every product showed 0 stars / 0 reviews in
@@ -50,7 +51,7 @@ const getReviews = async (req, res) => {
         await Review.withCodes(reviews);
         res.json(reviews);
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 };
 
@@ -64,7 +65,7 @@ const getReviewById = async (req, res) => {
         await Review.withCodes(review);
         res.json(review);
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 };
 
@@ -96,7 +97,7 @@ const createReview = async (req, res) => {
                 message: 'This customer has already reviewed this product — edit the existing review instead.',
             });
         }
-        res.status(400).json({ message: error.message });
+        sendError(res, error, 400);
     }
 };
 
@@ -127,7 +128,7 @@ const updateReview = async (req, res) => {
                 message: 'This customer has already reviewed this product — edit the existing review instead.',
             });
         }
-        res.status(400).json({ message: error.message });
+        sendError(res, error, 400);
     }
 };
 
@@ -146,7 +147,7 @@ const deleteReview = async (req, res) => {
 
         res.json({ message: 'Deleted successfully' });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 };
 

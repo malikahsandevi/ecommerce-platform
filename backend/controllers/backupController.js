@@ -14,6 +14,7 @@ const {
 } = require('../models');
 const { refreshCredentials } = require('../utils/credentials');
 const { invalidatePermissionCache } = require('../utils/permissions');
+const { sendError } = require('../utils/apiError');
 
 // ── Backup & Recovery (Ahsan's order) ───────────────────────────────
 // A backup is ONE downloadable JSON file: every Settings document
@@ -157,7 +158,7 @@ const createBackup = async (req, res) => {
         res.setHeader('Cache-Control', 'no-store');
         return res.send(JSON.stringify(payload));
     } catch (error) {
-        return res.status(500).json({ message: error.message });
+        return sendError(res, error, 500);
     }
 };
 
@@ -404,7 +405,7 @@ const restoreBackup = async (req, res) => {
             restoredAt: new Date().toISOString(),
         });
     } catch (error) {
-        return res.status(500).json({ message: error.message });
+        return sendError(res, error, 500);
     }
 };
 

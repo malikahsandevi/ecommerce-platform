@@ -11,6 +11,7 @@
 // accounts get none — deleting them behaves exactly as before.
 const { NOT_DELETED } = require('../utils/softDelete');
 const { computeDeleteImpact } = require('../utils/deleteImpact');
+const { sendError } = require('../utils/apiError');
 
 const makeDeleteImpactHandler = (Model, moduleKey) => async (req, res) => {
     try {
@@ -22,7 +23,7 @@ const makeDeleteImpactHandler = (Model, moduleKey) => async (req, res) => {
         const links = await computeDeleteImpact(moduleKey, doc);
         res.json({ links });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 };
 

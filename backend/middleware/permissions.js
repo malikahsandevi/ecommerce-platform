@@ -1,4 +1,5 @@
 const { roleHasPermission } = require('../utils/permissions');
+const { sendError } = require('../utils/apiError');
 
 // Real enforcement for the role permission matrix. Sits behind `protect`
 // (which sets req.user). A role without the permission gets a 403 with a
@@ -17,7 +18,7 @@ const requirePermission = (module, action) => async (req, res, next) => {
         }
         next();
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 };
 
@@ -37,7 +38,7 @@ const requireAnyPermission = (pairs) => async (req, res, next) => {
             message: `Your role (${req.user.role}) doesn't have permission for this. Ask a Super Admin to change it in Settings → Users & Roles.`,
         });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 };
 

@@ -7,6 +7,7 @@ const { NOT_DELETED } = require('../utils/softDelete');
 const { getJwtSecret, getJwtSignSecret } = require('../utils/credentials');
 const { authenticator } = require('otplib');
 const QRCode = require('qrcode');
+const { sendError } = require('../utils/apiError');
 
 // Accept codes from the neighbouring 30-second steps as well, to absorb
 // clock drift between the server and the admin's phone.
@@ -218,7 +219,7 @@ const loginAdmin = async (req, res) => {
         res.status(401).json({ message: 'Invalid email or password' });
     } catch (error) {
         if (error.code === 'JWT_SIGNING_DISABLED') {
-            return res.status(403).json({ message: error.message });
+            return sendError(res, error, 403);
         }
         if (error.code === 11000) {
             // A seed colliding with an existing unique value (e.g.
@@ -228,7 +229,7 @@ const loginAdmin = async (req, res) => {
                 message: 'An account already exists with one of the seeded values — sign in with that account instead.',
             });
         }
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 };
 
@@ -266,9 +267,9 @@ const verifyTwoFactorLogin = async (req, res) => {
         res.json(await sessionPayload(user));
     } catch (error) {
         if (error.code === 'JWT_SIGNING_DISABLED') {
-            return res.status(403).json({ message: error.message });
+            return sendError(res, error, 403);
         }
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 };
 
@@ -314,7 +315,7 @@ const enrollSetupTwoFactor = async (req, res) => {
 
         res.json({ secret, otpauthUrl, qrCode, enabled: false });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 };
 
@@ -363,9 +364,9 @@ const enrollConfirmTwoFactor = async (req, res) => {
         res.json(await sessionPayload(user));
     } catch (error) {
         if (error.code === 'JWT_SIGNING_DISABLED') {
-            return res.status(403).json({ message: error.message });
+            return sendError(res, error, 403);
         }
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 };
 
@@ -400,7 +401,7 @@ const setupTwoFactor = async (req, res) => {
 
         res.json({ secret, otpauthUrl, qrCode, enabled: false });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 };
 
@@ -434,7 +435,7 @@ const enableTwoFactor = async (req, res) => {
         await user.save();
         res.json({ enabled: true });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 };
 
@@ -467,7 +468,7 @@ const disableTwoFactor = async (req, res) => {
         await user.save();
         res.json({ enabled: false });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 };
 
@@ -554,7 +555,7 @@ const resetPassword = async (req, res) => {
 
         res.json({ message: 'Your password has been reset. You can now sign in with your new password.' });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 };
 

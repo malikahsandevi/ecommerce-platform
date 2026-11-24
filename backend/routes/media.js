@@ -29,6 +29,7 @@ const {
     destroyAsset,
 } = require('../utils/cloudinaryUrl');
 const { NOT_DELETED, applySoftDelete } = require('../utils/softDelete');
+const { sendError, translateErrorMessage } = require('../utils/apiError');
 
 
 const UPLOAD_FOLDER = 'ecommerce-media';
@@ -253,7 +254,7 @@ router.get('/storage', protect, requirePermission('Media', 'view'), async (req, 
             cloudinary: entryViews.find((view) => view.slug === defaultSlug)?.usage ?? null,
         });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 });
 
@@ -282,7 +283,7 @@ router.put('/storage/target', protect, requirePermission('Media', 'edit'), async
         await setUploadTarget(slug);
         res.json({ uploadTarget: slug });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 });
 
@@ -368,7 +369,7 @@ router.post('/upload', protect, requirePermission('Media', 'create'), express.js
         if (resolved.warning) payload.storageWarning = resolved.warning;
         res.status(201).json(payload);
     } catch (error) {
-        res.status(400).json({ message: error.message });
+        sendError(res, error, 400);
     }
 });
 
@@ -532,7 +533,7 @@ router.post('/register', protect, requireStaff, requirePermission('Media', 'crea
 
         res.status(201).json(media);
     } catch (error) {
-        res.status(400).json({ message: error.message });
+        sendError(res, error, 400);
     }
 });
 
@@ -614,7 +615,7 @@ const listMedia = async (req, res) => {
         await Media.withCodes(items);
         res.json(items);
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 };
 
@@ -690,7 +691,7 @@ router.get('/:id/usage', async (req, res) => {
             })),
         });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 });
 
@@ -830,7 +831,7 @@ router.put('/:id/file', protect, requirePermission('Media', 'edit'), async (req,
         await Media.withCodes([media]);
         res.json(media);
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 });
 
@@ -925,7 +926,7 @@ router.post('/protect-migration', protect, requirePermission('Media', 'edit'), a
                 failures.push({
                     publicId: parts.publicId,
                     resourceType: parts.resourceType,
-                    error: error.message || String(error),
+                    error: translateErrorMessage(error),
                 });
             }
         }
@@ -1000,7 +1001,7 @@ router.post('/protect-migration', protect, requirePermission('Media', 'edit'), a
             totalAssets: assets.size,
         });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 });
 
@@ -1167,7 +1168,7 @@ router.post('/folder-migration', protect, requirePermission('Media', 'edit'), as
                 failures.push({
                     mediaId: item.mediaId,
                     fromPath: item.fromPath,
-                    error: error.message || String(error),
+                    error: translateErrorMessage(error),
                 });
             }
         }
@@ -1250,7 +1251,7 @@ router.post('/folder-migration', protect, requirePermission('Media', 'edit'), as
             totalPlanned: plan.length,
         });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 });
 
@@ -1272,7 +1273,7 @@ router.route('/:id')
             await media.save();
             res.json({ message: 'Deleted successfully' });
         } catch (error) {
-            res.status(500).json({ message: error.message });
+            sendError(res, error, 500);
         }
     });
 

@@ -16,6 +16,7 @@ const {
     computeShippingCharge,
 } = require('../utils/shipping');
 const { getTrackingStatus } = require('../utils/courierSync');
+const { sendError } = require('../utils/apiError');
 
 /**
  * Thrown inside a TRANSACTIONAL placement when the order-number
@@ -166,7 +167,7 @@ const getOrders = async (req, res) => {
         await Order.withCodes(orders);
         res.json(await presentOrders(orders));
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 };
 
@@ -182,7 +183,7 @@ const getOrderById = async (req, res) => {
         await Order.withCodes(order);
         res.json(await presentOrder(order));
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 };
 
@@ -596,7 +597,7 @@ const createOrder = async (req, res) => {
 
         res.status(201).json(order);
     } catch (error) {
-        res.status(400).json({ message: error.message });
+        sendError(res, error, 400);
     }
 };
 
@@ -801,7 +802,7 @@ const updateOrder = async (req, res) => {
 
         res.json(await presentOrder(updated));
     } catch (error) {
-        res.status(400).json({ message: error.message });
+        sendError(res, error, 400);
     }
 };
 
@@ -854,7 +855,7 @@ const deleteOrder = async (req, res) => {
 
         res.json({ message: 'Order removed successfully' });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 };
 
@@ -894,7 +895,7 @@ const getShippingOptions = async (req, res) => {
             },
         });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 };
 
@@ -936,7 +937,7 @@ const shippingQuote = async (req, res) => {
             total: Math.round((subtotal + (quote.configured ? quote.charge : 0)) * 100) / 100,
         });
     } catch (error) {
-        res.status(400).json({ message: error.message });
+        sendError(res, error, 400);
     }
 };
 
@@ -1093,7 +1094,7 @@ const syncOrderTracking = async (req, res) => {
         const outcome = await syncOneOrder(order, config);
         res.json({ ...outcome, order: await presentOrder(order) });
     } catch (error) {
-        res.status(400).json({ message: error.message });
+        sendError(res, error, 400);
     }
 };
 
@@ -1132,7 +1133,7 @@ const syncAllOrderTracking = async (req, res) => {
             results,
         });
     } catch (error) {
-        res.status(400).json({ message: error.message });
+        sendError(res, error, 400);
     }
 };
 

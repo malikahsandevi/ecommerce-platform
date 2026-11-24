@@ -1,5 +1,6 @@
 const { User, Product, Order, ActivityLog, Analytics, Category, Setting } = require('../models');
 const { NOT_DELETED } = require('../utils/softDelete');
+const { sendError } = require('../utils/apiError');
 const {
     dayInTimezone,
     addDaysToDayKey,
@@ -414,7 +415,7 @@ const getDashboardData = async (req, res) => {
         });
 
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 };
 
@@ -488,7 +489,7 @@ const getRevenueRange = async (req, res) => {
         }
         res.json({ from, to, series });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 };
 

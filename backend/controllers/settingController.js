@@ -18,6 +18,7 @@ const {
     passwordMatchesCaller,
 } = require('../utils/settingsLock');
 const mongoose = require('mongoose');
+const { sendError, translateError } = require('../utils/apiError');
 
 // NOTE: the old bespoke 'paymentMethods' section is deliberately NOT
 // writable here any more — Ahsan replaced that tab with the services
@@ -246,7 +247,7 @@ const getSettings = async (req, res) => {
         const settings = await Setting.findOne().sort({ createdAt: 1 });
         res.json(settings ? maskSettingsDocumentForCaller(req, settings) : {});
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 };
 
@@ -269,9 +270,9 @@ const verifySettingsPassword = async (req, res) => {
         res.json({ unlockToken, expiresIn: SETTINGS_UNLOCK_TTL_SECONDS });
     } catch (error) {
         if (error.code === 'JWT_SIGNING_DISABLED') {
-            return res.status(403).json({ message: error.message });
+            return sendError(res, error, 403);
         }
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 };
 
@@ -297,7 +298,7 @@ const updateSettingsAppearance = async (req, res) => {
         const savedSettings = await settings.save();
         res.json(maskSettingsDocumentForCaller(req, savedSettings));
     } catch (error) {
-        res.status(400).json({ message: error.message });
+        sendError(res, error, 400);
     }
 };
 
@@ -329,7 +330,7 @@ const getShellBootstrap = async (req, res) => {
             },
         });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 };
 
@@ -832,7 +833,7 @@ const updateSettings = async (req, res) => {
         if (req.body.integrations) await refreshCredentials(true);
         res.json(maskSettingsDocumentForCaller(req, savedSettings));
     } catch (error) {
-        res.status(400).json({ message: error.message });
+        sendError(res, error, 400);
     }
 };
 
@@ -979,9 +980,13 @@ const executeIntegration = async (req, res) => {
             ...(Object.keys(planDetails).length > 0 ? { planDetails } : {}),
         });
     } catch (error) {
-        res.status(error.status || 400).json({
+        // RunnerError carries its own status + deliberate sentence and
+        // passes through byte-identical; anything unexpected becomes
+        // the translator's short main-point message (utils/apiError).
+        const translated = translateError(error, { status: error.status || 400 });
+        res.status(translated.status).json({
             success: false,
-            message: error.message
+            message: translated.message
         });
     }
 };
@@ -999,7 +1004,7 @@ const getSettingById = async (req, res) => {
         if (!doc) return res.status(404).json({ message: 'Setting not found' });
         res.json(maskSettingsDocumentForCaller(req, doc));
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 };
 
@@ -1024,7 +1029,7 @@ const updateSettingById = async (req, res) => {
         if (req.body?.integrations) await refreshCredentials(true);
         res.json(maskSettingsDocumentForCaller(req, saved));
     } catch (error) {
-        res.status(400).json({ message: error.message });
+        sendError(res, error, 400);
     }
 };
 
@@ -1105,7 +1110,7 @@ const saveIntegrationEntry = async (req, res) => {
         const integration = (masked.integrations || []).find((entry) => entry.serviceSlug === serviceSlug) || null;
         res.json({ integration, integrations: masked.integrations || [] });
     } catch (error) {
-        res.status(400).json({ message: error.message });
+        sendError(res, error, 400);
     }
 };
 
@@ -1145,7 +1150,7 @@ const deleteIntegrationEntry = async (req, res) => {
         const masked = maskSettingsDocumentForCaller(req, saved);
         res.json({ integrations: masked.integrations || [] });
     } catch (error) {
-        res.status(400).json({ message: error.message });
+        sendError(res, error, 400);
     }
 };
 

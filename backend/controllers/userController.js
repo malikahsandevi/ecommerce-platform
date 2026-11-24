@@ -4,6 +4,7 @@ const Order = require('../models/Order');
 require('../models/Coupon');
 const { getAllRoleNames } = require('../utils/permissions');
 const { NOT_DELETED, applySoftDelete } = require('../utils/softDelete');
+const { sendError } = require('../utils/apiError');
 
 const FAVORITE_CATEGORY_LIMIT = 3;
 const favoriteCategoryError = (res) =>
@@ -20,7 +21,7 @@ const getUsers = async (req, res) => {
         await User.withCodes(users);
         res.json(users);
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 };
 
@@ -36,7 +37,7 @@ const getUserById = async (req, res) => {
         await User.withCodes(user);
         res.json(user);
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 };
 
@@ -141,7 +142,7 @@ const createUser = async (req, res) => {
         if (error?.code === 11000) {
             return res.status(400).json({ message: 'A user with this email already exists.' });
         }
-        res.status(400).json({ message: error.message });
+        sendError(res, error, 400);
     }
 };
 
@@ -333,7 +334,7 @@ const updateUser = async (req, res) => {
         if (error?.code === 11000) {
             return res.status(400).json({ message: 'A user with this email already exists.' });
         }
-        res.status(400).json({ message: error.message });
+        sendError(res, error, 400);
     }
 };
 
@@ -369,7 +370,7 @@ const deleteUser = async (req, res) => {
         await target.save();
         res.json({ message: 'User removed successfully' });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 };
 
@@ -413,7 +414,7 @@ const resetUserTwoFactor = async (req, res) => {
         await User.withCodes(user);
         res.json(user);
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 };
 
@@ -562,7 +563,7 @@ const getUserProfile = async (req, res) => {
             usedCoupons: [...couponUsage.values()],
         });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 };
 

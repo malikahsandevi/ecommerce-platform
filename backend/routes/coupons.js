@@ -7,6 +7,7 @@ const { protect } = require('../middleware/auth');
 const { requirePermission } = require('../middleware/permissions');
 const { resolveCoupon } = require('../utils/coupon');
 const { NOT_DELETED } = require('../utils/softDelete');
+const { sendError } = require('../utils/apiError');
 
 
 // Live check for the admin Create Order form's Coupon field: validates
@@ -60,7 +61,7 @@ router.post('/validate', protect, async (req, res) => {
             discount,
         });
     } catch (error) {
-        res.status(400).json({ message: error.message });
+        sendError(res, error, 400);
     }
 });
 
@@ -84,7 +85,7 @@ const getAllCoupons = async (req, res) => {
         if (typeof Coupon.withCodes === 'function') await Coupon.withCodes(items);
         res.json(items);
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 };
 
@@ -97,7 +98,7 @@ const getCouponById = async (req, res) => {
         if (typeof Coupon.withCodes === 'function') await Coupon.withCodes(item);
         res.json(item);
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 };
 

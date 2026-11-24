@@ -4,12 +4,14 @@ const Brand = require('../models/Brand');
 const mongoose = require('mongoose');
 const { logActivity } = require('../utils/activity');
 const { NOT_DELETED, applySoftDelete } = require('../utils/softDelete');
-const { duplicateKeyMessage } = require('../utils/duplicateKey');
 const { detachForDelete } = require('../utils/deleteImpact');
+const { sendError } = require('../utils/apiError');
 
-// A duplicate slug/SKU answers with a clean sentence, never the raw
-// MongoDB E11000 driver text.
-const errorMessage = (error) => duplicateKeyMessage(error, 'product') || error.message;
+// Every catch answers through sendError (utils/apiError): a
+// duplicate slug/SKU gets its clean sentence, a Mongoose validation
+// failure becomes a short main-point message, and deliberate
+// hand-thrown sentences pass through byte-identical — raw system
+// text never leaves the API (Ahsan's toast rule).
 
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -154,7 +156,7 @@ const getProducts = async (req, res) => {
         await Product.withCodes(products);
         res.json(products.map(shapeProduct));
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 };
 
@@ -170,7 +172,7 @@ const getProductById = async (req, res) => {
         await Product.withCodes(product);
         res.json(shapeProduct(product));
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 };
 
@@ -184,7 +186,7 @@ const createProduct = async (req, res) => {
         const createdProduct = await product.save();
         res.status(201).json(shapeProduct(createdProduct));
     } catch (error) {
-        res.status(400).json({ message: errorMessage(error) });
+        sendError(res, error, { status: 400, noun: 'product' });
     }
 };
 
@@ -217,7 +219,7 @@ const updateProduct = async (req, res) => {
 
         res.json(shapeProduct(product));
     } catch (error) {
-        res.status(400).json({ message: errorMessage(error) });
+        sendError(res, error, { status: 400, noun: 'product' });
     }
 };
 
@@ -240,7 +242,7 @@ const deleteProduct = async (req, res) => {
         await product.save();
         res.json({ message: 'Product removed successfully' });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 };
 

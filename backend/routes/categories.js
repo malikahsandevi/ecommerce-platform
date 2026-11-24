@@ -6,6 +6,7 @@ const { makeDeleteImpactHandler } = require('../controllers/deleteImpactControll
 const { protect } = require('../middleware/auth');
 const { requirePermission } = require('../middleware/permissions');
 const { NOT_DELETED } = require('../utils/softDelete');
+const { sendError } = require('../utils/apiError');
 
 
 // List categories with the real number of products in each one, so the
@@ -26,7 +27,7 @@ router.get('/', async (req, res) => {
             productsCount: byId.get(String(category._id)) || 0,
         })));
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        sendError(res, error, 500);
     }
 });
 

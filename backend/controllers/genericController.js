@@ -3,8 +3,8 @@ const {
     supportsSoftDelete,
     applySoftDelete,
 } = require('../utils/softDelete');
-const { duplicateKeyMessage } = require('../utils/duplicateKey');
 const { detachForDelete } = require('../utils/deleteImpact');
+const { sendError } = require('../utils/apiError');
 
 // Delete-impact modules served by this shared controller: deleting a
 // category or brand no longer REFUSES while live records point at it
@@ -15,9 +15,11 @@ const { detachForDelete } = require('../utils/deleteImpact');
 // so a restore re-links exactly (utils/deleteImpact).
 const DELETE_IMPACT_MODULES = { Category: 'categories', Brand: 'brands' };
 
-// A duplicate unique field (slug / code / …) answers with a clean
-// sentence, never the raw MongoDB E11000 driver text.
-const errorMessage = (error, noun) => duplicateKeyMessage(error, noun) || error.message;
+// Every catch answers through utils/apiError's sendError: a
+// duplicate unique field (slug / code / …) gets its clean sentence,
+// a Mongoose validation failure becomes a short main-point message,
+// and deliberate hand-thrown sentences pass through byte-identical —
+// raw system text never leaves the API (Ahsan's toast rule).
 
 // The soft-delete stamps are server-owned: soft delete writes them
 // (with the tombstone swap of unique values) and the Deleted Items
@@ -54,7 +56,7 @@ const genericController = (Model) => {
                 // legacy records gain one just by being listed.
                 if (typeof Model.withCodes === 'function') await Model.withCodes(items);
                 res.json(items);
-            } catch (error) { res.status(500).json({ message: error.message }); }
+            } catch (error) { sendError(res, error, 500); }
         },
         getById: async (req, res) => {
             try {
@@ -62,14 +64,14 @@ const genericController = (Model) => {
                 if (!item) return res.status(404).json({ message: 'Not found' });
                 if (typeof Model.withCodes === 'function') await Model.withCodes(item);
                 res.json(item);
-            } catch (error) { res.status(500).json({ message: error.message }); }
+            } catch (error) { sendError(res, error, 500); }
         },
         create: async (req, res) => {
             try {
                 const item = new Model(stripServerOwnedFields(req.body));
                 const saved = await item.save();
                 res.status(201).json(saved);
-            } catch (error) { res.status(400).json({ message: errorMessage(error, 'record') }); }
+            } catch (error) { sendError(res, error, { status: 400, noun: 'record' }); }
         },
         update: async (req, res) => {
             try {
@@ -83,7 +85,7 @@ const genericController = (Model) => {
                     : await Model.findByIdAndUpdate(req.params.id, body, { new: true, runValidators: true });
                 if (!updated) return res.status(404).json({ message: 'Not found' });
                 res.json(updated);
-            } catch (error) { res.status(400).json({ message: errorMessage(error, 'record') }); }
+            } catch (error) { sendError(res, error, { status: 400, noun: 'record' }); }
         },
         remove: async (req, res) => {
             try {
@@ -102,7 +104,7 @@ const genericController = (Model) => {
                 applySoftDelete(Model, doc, req.user?._id);
                 await doc.save();
                 res.json({ message: 'Deleted successfully' });
-            } catch (error) { res.status(500).json({ message: error.message }); }
+            } catch (error) { sendError(res, error, 500); }
         }
     };
 };
