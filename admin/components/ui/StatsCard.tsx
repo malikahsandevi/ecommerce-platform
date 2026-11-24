@@ -18,12 +18,15 @@ export interface StatCardProps {
   theme?: CardTheme;
   /** Optional extra content rendered inside the card, under the
    *  period line (e.g. the Media page's upload-destination control
-   *  inside its Storage Providers card). Cards that pass nothing
-   *  render exactly as before. */
+   *  inside its Storage Providers card). It is anchored to the
+   *  card's bottom edge, so the value row above it never moves.
+   *  Cards that pass nothing render exactly as before. */
   extra?: React.ReactNode;
   /** Optional small control rendered inline, right beside the value
    *  (e.g. the Media page's upload-destination arrow menu beside the
-   *  Storage Providers card's destination name). Cards that pass
+   *  Storage Providers card's destination name). It sits in a slot
+   *  exactly as tall as the value's own line, so it can never push
+   *  the value off the shared headline line. Cards that pass
    *  nothing render exactly as before. */
   valueAddon?: React.ReactNode;
 }
@@ -65,7 +68,7 @@ const StatCard: React.FC<StatCardProps> = ({
   const accent = variantColor(theme, useAdminColor());
 
   return (
-    <div className="w-full min-w-0 flex flex-col justify-between p-4 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-xl transition-all">
+    <div className="w-full min-w-0 flex flex-col p-4 bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-xl transition-all">
       {/* Top Header */}
       <div className="flex items-center justify-between gap-1">
         <div className="flex items-center gap-1.5">
@@ -94,19 +97,30 @@ const StatCard: React.FC<StatCardProps> = ({
         )}
       </div>
 
-      {/* Main Content */}
+      {/* Main Content — pinned directly under the header: the value
+          row sits at the same height in every card of a strip, no
+          matter how much detail each card carries below it. (The
+          card used to spread header and content apart with
+          justify-between, which pushed the value down by however
+          much shorter its card's detail block was.) */}
       <div className="mt-2">
         <div className="flex items-center gap-1">
-          <h3 className="text-xl font-bold tracking-tight text-[var(--text)]">
+          <h3 className="min-w-0 truncate text-xl font-bold tracking-tight text-[var(--text)]">
             {value}
           </h3>
-          {valueAddon}
+          {valueAddon ? (
+            <div className="flex h-7 shrink-0 items-center">{valueAddon}</div>
+          ) : null}
         </div>
 
         <p className="text-[11px] text-[var(--text-muted)] mt-0.5">{t(period)}</p>
-
-        {extra ? <div className="mt-3">{extra}</div> : null}
       </div>
+
+      {/* Extra detail — anchored to the card's bottom edge (the
+          mt-auto absorbs whatever height the grid's stretch adds),
+          with the same 12px separation from the period line the
+          in-flow mt-3 used to give. */}
+      {extra ? <div className="mt-auto pt-3">{extra}</div> : null}
     </div>
   );
 };

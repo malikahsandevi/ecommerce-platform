@@ -310,7 +310,7 @@ export default function MediaStats({ items, isLoading = false }: { items: Row[];
           aria-label={t("Upload destination")}
         />
       ) : undefined;
-    // The -mt-3 cancels the extra slot's own top margin for THIS
+    // The -mt-3 cancels the extra slot's own top spacing for THIS
     // card only (Ahsan's order): the per-entry status lines sit
     // directly under the "Auto → …" uploads line, with no empty
     // space between them.
@@ -371,34 +371,25 @@ export default function MediaStats({ items, isLoading = false }: { items: Row[];
       const total = groupTotal(group);
       for (const entry of group) groupTotalBySlug.set(entry.slug, total);
     }
+    // The account rows reuse the shared StatRows (Ahsan's order):
+    // the account name reads as a normal-weight row label and its
+    // total as the row value, with the exact rhythm of cards 1/2.
     const providerBlocks = (
-      <div className="flex flex-col gap-2.5">
-        {entries.map((entry) => {
-          const total = groupTotalBySlug.get(entry.slug) ?? null;
-          return (
-            <div
-              key={entry.slug}
-              className="flex items-baseline justify-between gap-2 text-[11px] leading-tight"
-            >
-              <span className="font-semibold text-[var(--text)]">{entry.title}</span>
-              <span className="font-semibold text-[var(--text)]">
-                {total != null ? formatBytes(total) : t("total not set")}
-              </span>
-            </div>
-          );
-        })}
-        {legacyBuckets.map(([key]) => (
-          <div
-            key={key}
-            className="flex items-baseline justify-between gap-2 text-[11px] leading-tight"
-          >
-            <span className="font-semibold text-[var(--text)]">
-              {PROVIDER_LABELS[key] || key}
-            </span>
-            <span className="font-semibold text-[var(--text)]">{t("total not set")}</span>
-          </div>
-        ))}
-      </div>
+      <StatRows
+        rows={[
+          ...entries.map((entry) => {
+            const total = groupTotalBySlug.get(entry.slug) ?? null;
+            return {
+              label: entry.title,
+              value: total != null ? formatBytes(total) : t("total not set"),
+            };
+          }),
+          ...legacyBuckets.map(([key]) => ({
+            label: PROVIDER_LABELS[key] || key,
+            value: t("total not set"),
+          })),
+        ]}
+      />
     );
     const hasProviderBlocks = entries.length > 0 || legacyBuckets.length > 0;
 
