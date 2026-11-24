@@ -48,6 +48,12 @@ import type {
   SettingsUser,
 } from "@/services/settingsService";
 import { choiceDialog, confirmDialog } from "@/components/ui/ConfirmDialog";
+import DateRangePicker, {
+  type DateRange,
+  formatRangeDayShort,
+  fromIsoDay,
+  toIsoDay,
+} from "@/components/ui/DateRangePicker";
 import {
   securityCheckDialog,
   isSecurityCheckCancelled,
@@ -3085,6 +3091,17 @@ function DeletedItemsPanel({ timeZone }: { timeZone?: string }) {
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // By-Date filter (Ahsan's order — the same pattern as every list
+  // page): presets in a dropdown (All Dates · Last 7/30/90 Days ·
+  // Custom), Custom opens the shared DateRangePicker. The range
+  // tests each item's DELETED-AT day with day boundaries in the
+  // STORE timezone — the same days the rows display below
+  // (formatDeletedAt renders in the store timezone too). The module
+  // filter narrows the fetch; the date range filters the fetched
+  // list on top, so the two combine.
+  const [datePreset, setDatePreset] = useState<string>("all");
+  const [dateRange, setDateRange] = useState<DateRange | null>(null);
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -3131,6 +3148,72 @@ function DeletedItemsPanel({ timeZone }: { timeZone?: string }) {
       return date.toLocaleString();
     }
   };
+
+  // The calendar day (yyyy-mm-dd) a moment falls on IN THE STORE
+  // TIMEZONE — Intl does the zone math; without a configured zone
+  // (or an unknown one) it falls back to the picker's own local day.
+  const isoDayInStoreTz = (d: Date): string => {
+    if (!timeZone) return toIsoDay(d);
+    try {
+      const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).formatToParts(d);
+      const part = (type: string) =>
+        parts.find((p) => p.type === type)?.value || "";
+      const year = part("year");
+      const month = part("month");
+      const day = part("day");
+      if (year && month && day) return `${year}-${month}-${day}`;
+    } catch {
+      // Unknown zone name — fall through to the local day.
+    }
+    return toIsoDay(d);
+  };
+
+  // "Last N Days" = today − (N−1) days through today, inclusive, in
+  // store-timezone days — the same window the list pages apply.
+  const presetRange = (days: number): DateRange => {
+    const to = isoDayInStoreTz(new Date());
+    const fromDate = fromIsoDay(to) ?? new Date();
+    fromDate.setDate(fromDate.getDate() - (days - 1));
+    return { from: toIsoDay(fromDate), to };
+  };
+
+  // Mirrors FilterBar exactly: a preset applies at once, "All Dates"
+  // clears the range, "Custom" never switches by itself — it opens
+  // the shared DateRangePicker and only its Apply commits.
+  const handleDatePresetChange = (value: string) => {
+    if (value === "custom") {
+      setDatePickerOpen(true);
+      return;
+    }
+    if (value === "all") {
+      setDatePreset("all");
+      setDateRange(null);
+      return;
+    }
+    setDatePreset(value);
+    setDateRange(presetRange(Number(value)));
+  };
+
+  // The date range applied on top of the fetched (module-filtered)
+  // list: an item stays when its deleted-at day, in the store
+  // timezone, falls inside [from, to] inclusive. An item with no
+  // readable date cannot be inside a range, so it drops out while a
+  // range is applied — the same rule as the list pages.
+  const visibleItems = dateRange
+    ? items.filter((item) => {
+        const deleted = new Date(item.deletedAt);
+        if (Number.isNaN(deleted.getTime())) return false;
+        const day = isoDayInStoreTz(deleted);
+        return day >= dateRange.from && day <= dateRange.to;
+      })
+    : items;
+
+  const filtersActive = moduleFilter !== "all" || dateRange !== null;
 
   const canActOn = (item: DeletedItem) =>
     typeof hasPermission !== "function" ||
@@ -3203,22 +3286,50 @@ function DeletedItemsPanel({ timeZone }: { timeZone?: string }) {
     <SettingsCard
       title={t("Deleted Items")}
       description="Deleted records from every module wait here. Restore one to bring it back exactly as it was, or delete it permanently."
+      headerActions={
+        <>
+          {/* By-Date filter — the list pages' control in the same
+              dress: presets apply at once, Custom opens the shared
+              DateRangePicker, and the trigger shows the applied
+              custom range in the short format while one is active. */}
+          <div className="w-52 max-w-full">
+            <Select
+              value={datePreset}
+              options={[
+                { label: t("All Dates"), value: "all" },
+                { label: t("Last 7 Days"), value: "7" },
+                { label: t("Last 30 Days"), value: "30" },
+                { label: t("Last 90 Days"), value: "90" },
+                { label: t("Custom"), value: "custom" },
+              ]}
+              onChange={handleDatePresetChange}
+              aria-label={t("Filter by date")}
+              fullWidth
+              triggerFullWidth
+              menuWide
+              triggerLabel={
+                datePreset === "custom" && dateRange
+                  ? `${formatRangeDayShort(dateRange.from)} – ${formatRangeDayShort(dateRange.to)}`
+                  : undefined
+              }
+            />
+          </div>
+          <div className="w-56 max-w-full">
+            <Select
+              value={moduleFilter}
+              options={DELETED_MODULE_OPTIONS.map((option) => ({
+                ...option,
+                label: t(option.label),
+              }))}
+              onChange={setModuleFilter}
+              aria-label={t("Filter by module")}
+              fullWidth
+              triggerFullWidth
+            />
+          </div>
+        </>
+      }
     >
-      <div className="mb-4 flex justify-end">
-        <div className="w-56 max-w-full">
-          <Select
-            value={moduleFilter}
-            options={DELETED_MODULE_OPTIONS.map((option) => ({
-              ...option,
-              label: t(option.label),
-            }))}
-            onChange={setModuleFilter}
-            aria-label={t("Filter by module")}
-            triggerFullWidth
-          />
-        </div>
-      </div>
-
       {loading ? (
         <div className="flex items-center justify-center gap-2 py-10 text-[var(--text-muted)]">
           <LoaderCircle size={18} className="animate-spin" />
@@ -3228,17 +3339,30 @@ function DeletedItemsPanel({ timeZone }: { timeZone?: string }) {
         <p className="rounded-lg border border-red-300 bg-red-500/10 p-3 text-xs text-red-600" role="alert">
           {t("Deleted items could not be loaded.")}
         </p>
-      ) : items.length === 0 ? (
-        <div className="flex flex-col items-center gap-2 py-10 text-center">
-          <Trash2 size={28} className="text-[var(--text-muted)]" />
-          <p className="font-medium text-[var(--text)]">{t("No deleted items")}</p>
-          <p className="max-w-md text-sm text-[var(--text-muted)]">
-            {t("Records deleted from any module will appear here, ready to restore.")}
-          </p>
-        </div>
+      ) : visibleItems.length === 0 ? (
+        filtersActive ? (
+          // Filters are on and nothing matches: the list pages'
+          // filtered-empty state — the plain "No deleted items"
+          // below is reserved for a truly empty trash.
+          <div className="flex flex-col items-center gap-2 py-10 text-center">
+            <Trash2 size={28} className="text-[var(--text-muted)]" />
+            <p className="font-medium text-[var(--text)]">{t("No records found")}</p>
+            <p className="max-w-md text-sm text-[var(--text-muted)]">
+              {t("No deleted items match the selected filters.")}
+            </p>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center gap-2 py-10 text-center">
+            <Trash2 size={28} className="text-[var(--text-muted)]" />
+            <p className="font-medium text-[var(--text)]">{t("No deleted items")}</p>
+            <p className="max-w-md text-sm text-[var(--text-muted)]">
+              {t("Records deleted from any module will appear here, ready to restore.")}
+            </p>
+          </div>
+        )
       ) : (
         <div className="divide-y divide-[var(--border)]">
-          {items.map((item) => (
+          {visibleItems.map((item) => (
             <div
               key={`${item.module}:${item.id}`}
               className="flex flex-wrap items-center gap-x-4 gap-y-2 py-3"
@@ -3285,6 +3409,20 @@ function DeletedItemsPanel({ timeZone }: { timeZone?: string }) {
           ))}
         </div>
       )}
+
+      <DateRangePicker
+        open={datePickerOpen}
+        value={dateRange}
+        onApply={(range) => {
+          // Applying in the picker commits a CUSTOM range: the
+          // dropdown selection switches to "custom" and the trigger
+          // shows the range itself (see triggerLabel above).
+          setDateRange(range);
+          setDatePreset("custom");
+          setDatePickerOpen(false);
+        }}
+        onClose={() => setDatePickerOpen(false)}
+      />
     </SettingsCard>
   );
 }

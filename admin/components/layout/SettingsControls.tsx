@@ -10,18 +10,29 @@ import { StepperButtons, steppedValue } from "@/components/ui/NumberStepper";
 export function SettingsCard({
   title,
   description,
+  headerActions,
   children,
 }: {
   title: string;
   description: string;
+  /** Optional controls rendered right-aligned on the header row,
+   *  beside the title/description block (e.g. the Deleted Items
+   *  filters). Cards that pass none render the plain header as
+   *  before. */
+  headerActions?: ReactNode;
   children: ReactNode;
 }) {
   const { t } = useLanguage();
   return (
     <section className="rounded-xl border border-[var(--border)] bg-[var(--background)] p-5 lg:p-6">
-      <header className="mb-6">
-        <h2 className="text-base font-semibold text-[var(--text)]">{t(title)}</h2>
-        <p className="mt-1 text-xs text-[var(--text-muted)]">{t(description)}</p>
+      <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h2 className="text-base font-semibold text-[var(--text)]">{t(title)}</h2>
+          <p className="mt-1 text-xs text-[var(--text-muted)]">{t(description)}</p>
+        </div>
+        {headerActions ? (
+          <div className="flex flex-wrap items-center gap-2">{headerActions}</div>
+        ) : null}
       </header>
       {children}
     </section>

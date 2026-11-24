@@ -1581,4 +1581,9 @@ export const T_X7: Dict = {
   "{used} used · total not set": { ur: "{used} استعمال شدہ · کل سائز مقرر نہیں", ar: "{used} مستخدم · الإجمالي غير محدد", hi: "{used} उपयोग किया गया · कुल निर्धारित नहीं है", bn: "{used} ব্যবহৃত · মোট নির্ধারিত নয়", es: "{used} usados · total no definido", fr: "{used} utilisés · total non défini", de: "{used} verwendet · Gesamtgröße nicht festgelegt", tr: "{used} kullanıldı · toplam belirlenmedi", zh: "已用 {used} · 未设置总容量" },
 };
 
-export const T: Dict = { ...T_CORE, ...T_SET1, ...T_SET2, ...T_SET3, ...T_DASH, ...T_CRUD, ...T_MEDIA, ...T_FORM, ...T_X1, ...T_X2, ...T_CFG1, ...T_CFG2, ...T_X3, ...T_PALETTE, ...T_UROLE, ...T_X4, ...T_X5, ...T_X6, ...T_X7 };
+export const T_X8: Dict = {
+  "Filter by date": { ur: "تاریخ کے حساب سے فلٹر کریں", ar: "تصفية حسب التاريخ", hi: "तिथि के अनुसार फ़िल्टर करें", bn: "তারিখ অনুযায়ী ফিল্টার করুন", es: "Filtrar por fecha", fr: "Filtrer par date", de: "Nach Datum filtern", tr: "Tarihe göre filtrele", zh: "按日期筛选" },
+  "No deleted items match the selected filters.": { ur: "منتخب فلٹرز کے مطابق کوئی حذف شدہ آئٹم نہیں ملا۔", ar: "لا توجد عناصر محذوفة مطابقة لعوامل التصفية المحددة.", hi: "चुने गए फ़िल्टर से कोई हटाई गई वस्तु मेल नहीं खाती।", bn: "নির্বাচিত ফিল্টারের সাথে কোনো মুছে ফেলা আইটেম মিলছে না।", es: "Ningún elemento eliminado coincide con los filtros seleccionados.", fr: "Aucun élément supprimé ne correspond aux filtres sélectionnés.", de: "Keine gelöschten Einträge entsprechen den ausgewählten Filtern.", tr: "Seçilen filtrelerle eşleşen silinmiş öğe yok.", zh: "没有已删除项目与所选筛选条件匹配。" },
+};
+
+export const T: Dict = { ...T_CORE, ...T_SET1, ...T_SET2, ...T_SET3, ...T_DASH, ...T_CRUD, ...T_MEDIA, ...T_FORM, ...T_X1, ...T_X2, ...T_CFG1, ...T_CFG2, ...T_X3, ...T_PALETTE, ...T_UROLE, ...T_X4, ...T_X5, ...T_X6, ...T_X7, ...T_X8 };
