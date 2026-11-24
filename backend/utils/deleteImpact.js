@@ -35,6 +35,16 @@
 //     block for both: warn + detach replaces refuse).
 //   • A customer's product links live on the User record: cart
 //     entries (`cart.product`), `favorites`, `liked`, `wishlist`.
+//   • A customer's favorite categories live on the same record
+//     (`favoriteCategories`, at most 3) — a category delete takes
+//     the category out of those lists, and a restore puts it back
+//     only for customers who have not re-added it meanwhile (and
+//     only while their list still has room under the cap of 3).
+//   • A review's media live on the Review record (`media`) as
+//     Media ObjectIds — ids, not URLs, so a media delete matches
+//     reviews by id alone (unlike product galleries, which match
+//     by mediaId OR URL). A restore re-inserts the id at its
+//     original positions unless the review references it again.
 const { NOT_DELETED } = require('./softDelete');
 const Product = require('../models/Product');
 const Category = require('../models/Category');
@@ -88,25 +98,29 @@ const normalizeStoredGallery = (product) => {
 const computeDeleteImpact = async (moduleKey, doc) => {
     switch (moduleKey) {
         case 'media': {
-            const [products, categories, brands] = await Promise.all([
+            const [products, categories, brands, reviews] = await Promise.all([
                 Product.countDocuments(mediaProductFilter(doc)),
                 doc.url ? Category.countDocuments({ image: doc.url, ...NOT_DELETED }) : 0,
                 doc.url ? Brand.countDocuments({ logo: doc.url, ...NOT_DELETED }) : 0,
+                Review.countDocuments({ media: doc._id, ...NOT_DELETED }),
             ]);
             return onlyCounted([
                 link('products', 'products', 'product', products, 'remove'),
                 link('categories', 'categories', 'category', categories, 'remove'),
                 link('brands', 'brands', 'brand', brands, 'remove'),
+                link('reviews', 'reviews', 'review', reviews, 'remove'),
             ]);
         }
         case 'categories': {
-            const [products, subcategories] = await Promise.all([
+            const [products, subcategories, favoriteLists] = await Promise.all([
                 Product.countDocuments({ category: doc._id, ...NOT_DELETED }),
                 Category.countDocuments({ parent: doc._id, ...NOT_DELETED }),
+                User.countDocuments({ favoriteCategories: doc._id, ...NOT_DELETED }),
             ]);
             return onlyCounted([
                 link('products', 'products', 'product', products, 'remove'),
                 link('subcategories', 'subcategories', 'subcategory', subcategories, 'remove'),
+                link('favoriteCategories', 'favorite category lists', 'favorite category list', favoriteLists, 'remove'),
             ]);
         }
         case 'brands': {
@@ -158,7 +172,7 @@ const computeDeleteImpact = async (moduleKey, doc) => {
 
 // ── Detach (at soft-delete time) ────────────────────────────────────
 const detachMedia = async (media) => {
-    const snapshot = { products: [], categories: [], brands: [] };
+    const snapshot = { products: [], categories: [], brands: [], reviews: [] };
 
     const products = await Product.find(mediaProductFilter(media));
     for (const product of products) {
@@ -205,17 +219,36 @@ const detachMedia = async (media) => {
         }
     }
 
-    return snapshot.products.length || snapshot.categories.length || snapshot.brands.length
+    // Reviews reference the media by id (Review.media) — take the id
+    // out of every live review, remembering the positions it held.
+    const reviews = await Review.find({ media: media._id, ...NOT_DELETED });
+    for (const review of reviews) {
+        const indices = [];
+        (review.media || []).forEach((id, index) => {
+            if (String(id) === String(media._id)) indices.push(index);
+        });
+        if (!indices.length) continue;
+        snapshot.reviews.push({ review: String(review._id), indices });
+        review.media = review.media.filter((id) => String(id) !== String(media._id));
+        // eslint-disable-next-line no-await-in-loop
+        await review.save();
+    }
+
+    return snapshot.products.length ||
+        snapshot.categories.length ||
+        snapshot.brands.length ||
+        snapshot.reviews.length
         ? snapshot
         : null;
 };
 
 const detachCategory = async (category) => {
-    const [productIds, subcategoryIds] = await Promise.all([
+    const [productIds, subcategoryIds, favoriteUserIds] = await Promise.all([
         Product.find({ category: category._id, ...NOT_DELETED }).distinct('_id'),
         Category.find({ parent: category._id, ...NOT_DELETED }).distinct('_id'),
+        User.find({ favoriteCategories: category._id, ...NOT_DELETED }).distinct('_id'),
     ]);
-    if (!productIds.length && !subcategoryIds.length) return null;
+    if (!productIds.length && !subcategoryIds.length && !favoriteUserIds.length) return null;
     if (productIds.length) {
         await Product.updateMany(
             { _id: { $in: productIds } },
@@ -228,9 +261,16 @@ const detachCategory = async (category) => {
             { $set: { parent: null } },
         );
     }
+    if (favoriteUserIds.length) {
+        await User.updateMany(
+            { _id: { $in: favoriteUserIds } },
+            { $pull: { favoriteCategories: category._id } },
+        );
+    }
     return {
         products: productIds.map(String),
         subcategories: subcategoryIds.map(String),
+        favoriteCategories: favoriteUserIds.map(String),
     };
 };
 
@@ -363,6 +403,24 @@ const relinkMedia = async (media, snapshot) => {
             { $set: { logo: media.url } },
         );
     }
+
+    // Reviews regain the media id at its original positions, unless
+    // the review already references it again (added back meanwhile).
+    for (const item of snapshot.reviews || []) {
+        // eslint-disable-next-line no-await-in-loop
+        const review = await Review.findById(item.review);
+        if (!review) continue;
+        if ((review.media || []).some((id) => String(id) === String(media._id))) continue;
+        const ids = [...(review.media || [])];
+        const sorted = [...(item.indices || [])].sort((a, b) => a - b);
+        for (const index of sorted) {
+            const at = Math.max(0, Math.min(index, ids.length));
+            ids.splice(at, 0, media._id);
+        }
+        review.media = ids;
+        // eslint-disable-next-line no-await-in-loop
+        await review.save();
+    }
 };
 
 const relinkCategory = async (category, snapshot) => {
@@ -380,6 +438,23 @@ const relinkCategory = async (category, snapshot) => {
             { _id: { $in: snapshot.subcategories }, parent: null },
             { $set: { parent: category._id } },
         );
+    }
+    // Favorite lists regain the category only for customers who
+    // still exist, have not re-added it meanwhile, and still have
+    // room under the favorite-categories cap (3) — a list the
+    // customer refilled while the category was trashed is left as
+    // they made it.
+    for (const userId of snapshot.favoriteCategories || []) {
+        // eslint-disable-next-line no-await-in-loop
+        const user = await User.findById(userId);
+        if (!user) continue;
+        const current = user.favoriteCategories || [];
+        if (current.some((id) => String(id) === String(category._id))) continue;
+        if (current.length >= 3) continue;
+        current.push(category._id);
+        user.favoriteCategories = current;
+        // eslint-disable-next-line no-await-in-loop
+        await user.save();
     }
 };
 
