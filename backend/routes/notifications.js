@@ -65,7 +65,7 @@ router.get('/', async (req, res) => {
                 .limit(FEED_LIMIT)
                 .select('name stock updatedAt code')
                 .lean(),
-            Order.find({ status: { $nin: ['delivered', 'cancelled'] }, ...NOT_DELETED })
+            Order.find({ status: { $nin: ['delivered', 'cancelled', 'refunded'] }, ...NOT_DELETED })
                 .sort({ createdAt: -1 })
                 .limit(5)
                 .select('orderNumber status createdAt')

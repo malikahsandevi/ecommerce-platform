@@ -163,6 +163,20 @@ const updateUser = async (req, res) => {
     try {
         const { password, currentPassword, confirmPassword, ...updateData } = req.body || {};
 
+        // Server-owned fields never ride a profile update: the
+        // soft-delete stamps (soft delete / Deleted Items own them)
+        // and the account's security material — 2FA state and reset
+        // tokens change only through their dedicated endpoints. A
+        // body carrying them (a stray field, or a self-edit trying to
+        // switch its own 2FA off) must not apply them.
+        delete updateData.deletedAt;
+        delete updateData.deletedBy;
+        delete updateData.deletedUniques;
+        delete updateData.twoFactorSecret;
+        delete updateData.twoFactorEnabled;
+        delete updateData.passwordResetTokenHash;
+        delete updateData.passwordResetExpires;
+
         // Password change: the edit forms promise "leave blank to keep
         // the current password" — an absent or blank password therefore
         // changes NOTHING (the stored hash stays byte-identical). A
@@ -408,8 +422,8 @@ const resetUserTwoFactor = async (req, res) => {
 // The STORED lists (favorites, liked, cart, favoriteCategories) come
 // off the User record, populated with product/category names + images.
 // Everything transactional is DERIVED from the customer's Orders on
-// every request — purchased history, total spend (non-cancelled
-// orders), order count, average order value, last order date and the
+// every request — purchased history, total spend (non-cancelled,
+// non-refunded orders), order count, average order value, last order date and the
 // distinct coupons used with their counts — so it can never go stale
 // and nothing is invented for customers without orders.
 // A product's main image: the `image` mirror first, then the gallery
@@ -452,7 +466,15 @@ const getUserProfile = async (req, res) => {
             .populate('items.product', 'image images')
             .lean();
 
-        const activeOrders = orders.filter((order) => order.status !== 'cancelled');
+        // The money set: an order counts toward spend, order count,
+        // AOV and last-order date only while its money stayed with the
+        // store — cancelled orders never took money and refunded
+        // orders handed it back (the dashboard's revenue rule; a
+        // customer who was refunded did not spend the money). The raw
+        // history list below still shows every order with its status.
+        const activeOrders = orders.filter(
+            (order) => order.status !== 'cancelled' && order.status !== 'refunded'
+        );
         const totalSpend = activeOrders.reduce((sum, order) => sum + (order.total || 0), 0);
         const totalOrders = activeOrders.length;
         const averageOrderValue = totalOrders > 0 ? totalSpend / totalOrders : 0;

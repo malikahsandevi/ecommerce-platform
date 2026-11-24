@@ -193,6 +193,90 @@ const validateBackup = (backup) => {
     return null;
 };
 
+/** Business-unique values per collection — the fields a restore
+ *  would collide on at insert time. */
+const UNIQUE_VALUE_FIELDS = {
+    products: ['slug', 'sku'],
+    categories: ['slug'],
+    brands: ['slug'],
+    coupons: ['code'],
+    orders: ['orderNumber'],
+    users: ['email', 'username'],
+};
+
+/**
+ * Duplicate pre-flight, run BEFORE anything is written. Structural
+ * validation alone cannot see that two products in the file share a
+ * slug, or that two records carry the same _id — the restore used to
+ * discover that at insert time, AFTER earlier collections had
+ * already been replaced, leaving the store half-restored. Any
+ * duplicate now refuses the whole restore with nothing changed.
+ */
+const validateDuplicates = (data) => {
+    for (const key of ALL_DATA_KEYS) {
+        const seenIds = new Set();
+        for (const entry of data[key]) {
+            if (entry._id == null) continue;
+            const id = String(entry._id);
+            if (seenIds.has(id)) {
+                return `The backup file is corrupted: "${key}" contains the same record twice. Nothing was restored.`;
+            }
+            seenIds.add(id);
+        }
+        for (const field of UNIQUE_VALUE_FIELDS[key] || []) {
+            const seenValues = new Set();
+            for (const entry of data[key]) {
+                const raw = entry[field];
+                if (raw == null || raw === '') continue;
+                const value = field === 'email' ? String(raw).toLowerCase() : String(raw);
+                if (seenValues.has(value)) {
+                    return `The backup file is corrupted: "${key}" contains two records with the same ${field} ("${String(raw)}"). Nothing was restored.`;
+                }
+                seenValues.add(value);
+            }
+        }
+    }
+    return null;
+};
+
+const MODEL_BY_KEY = {
+    settings: Setting,
+    rolePermissions: RolePermission,
+    products: Product,
+    categories: Category,
+    brands: Brand,
+    coupons: Coupon,
+    orders: Order,
+    users: User,
+    reviews: Review,
+    media: Media,
+};
+
+/**
+ * Schema pre-flight: every record in the file is validated against
+ * its model (required fields, types, enums) BEFORE the first write,
+ * so a record MongoDB would refuse at insert time refuses the whole
+ * restore up front instead of stranding it half-applied. Users are
+ * validated as the PREPARED documents (credentials transplanted), in
+ * exactly the shape that will be inserted.
+ */
+const validateAgainstModels = async (data, preparedUserDocs) => {
+    for (const key of ALL_DATA_KEYS) {
+        const Model = MODEL_BY_KEY[key];
+        if (!Model) continue;
+        const docs = key === 'users' ? preparedUserDocs : data[key];
+        for (const doc of docs) {
+            try {
+                // eslint-disable-next-line no-await-in-loop
+                await new Model(doc).validate();
+            } catch {
+                return `The backup file is corrupted: a "${key}" record is missing required data or holds an invalid value. Nothing was restored.`;
+            }
+        }
+    }
+    return null;
+};
+
 /** Replaces one collection with the file's records (original _ids
  *  ride along, so cross-references between collections stay intact). */
 const replaceCollection = async (Model, docs) => {
@@ -209,8 +293,13 @@ const replaceCollection = async (Model, docs) => {
  *  (transplanted from the current database); accounts the file brings
  *  back from deletion get a random unknown password (hashed) and 2FA
  *  off. The caller's own account is never deleted out from under the
- *  restore: if it is not in the file it is kept as-is. */
-const restoreUsers = async (req, backupUsers) => {
+ *  restore: if it is not in the file it is kept as-is.
+ *
+ *  Split in two: prepareRestoredUsers only READS (it assembles the
+ *  exact documents that will be inserted, so the restore's
+ *  pre-flight can validate them before anything is written);
+ *  writeRestoredUsers performs the replacement. */
+const prepareRestoredUsers = async (req, backupUsers) => {
     const current = await User.find()
         .select('+password +twoFactorSecret +passwordResetTokenHash')
         .lean();
@@ -251,6 +340,11 @@ const restoreUsers = async (req, backupUsers) => {
     }
 
     const keepIds = callerInFile ? [] : [callerId].filter(Boolean);
+    return { docs, recreated, keepIds };
+};
+
+const writeRestoredUsers = async (prepared) => {
+    const { docs, recreated, keepIds } = prepared;
     await User.deleteMany(keepIds.length ? { _id: { $nin: keepIds } } : {});
     if (docs.length > 0) {
         await User.insertMany(docs, { ordered: true });
@@ -269,6 +363,21 @@ const restoreBackup = async (req, res) => {
             return res.status(400).json({ message: validationError });
         }
         const data = backup.data;
+
+        // FULL pre-flight before the first write: duplicates the
+        // insert would collide on, then every record validated
+        // against its schema. A file that fails either check changes
+        // NOTHING — a restore never strands the store half-restored.
+        const duplicateError = validateDuplicates(data);
+        if (duplicateError) {
+            return res.status(400).json({ message: duplicateError });
+        }
+        const preparedUsers = await prepareRestoredUsers(req, data.users);
+        const schemaError = await validateAgainstModels(data, preparedUsers.docs);
+        if (schemaError) {
+            return res.status(400).json({ message: schemaError });
+        }
+
         const counts = {};
 
         counts.settings = await replaceCollection(Setting, data.settings);
@@ -277,7 +386,7 @@ const restoreBackup = async (req, res) => {
             // eslint-disable-next-line no-await-in-loop
             counts[key] = await replaceCollection(Model, data[key]);
         }
-        const userResult = await restoreUsers(req, data.users);
+        const userResult = await writeRestoredUsers(preparedUsers);
         counts.users = userResult.restored;
         counts.usersRecreated = userResult.recreated;
         counts.usersKept = userResult.kept;

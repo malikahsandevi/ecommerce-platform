@@ -20,6 +20,20 @@
 // Nothing here invents new semantics — change the panel's rules and
 // this file must change with them.
 
+const COUPON_DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Coupon expiry, mirroring utils/coupon.js `couponExpired`: a
+ *  date-only validUntil (exactly UTC midnight — what the admin form
+ *  saves) covers that whole day and expires at its END; a validUntil
+ *  carrying a time compares exactly. */
+function couponExpired(validUntil, now = new Date()) {
+    if (!validUntil) return false;
+    const end = new Date(validUntil).getTime();
+    if (Number.isNaN(end)) return false;
+    const dateOnly = end % COUPON_DAY_MS === 0;
+    return now.getTime() > (dateOnly ? end + COUPON_DAY_MS - 1 : end);
+}
+
 /** adaptRow mirror (resourceRegistry.ts). Mutates and returns the row. */
 function adaptRow(moduleKey, row) {
     if (!row || typeof row !== 'object') return row;
@@ -37,8 +51,7 @@ function adaptRow(moduleKey, row) {
         case 'coupons': {
             let status = 'active';
             if (row.isActive === false) status = 'disabled';
-            else if (row.validUntil && new Date(row.validUntil) < new Date())
-                status = 'expired';
+            else if (couponExpired(row.validUntil)) status = 'expired';
             row.status = status;
             break;
         }

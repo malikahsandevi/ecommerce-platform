@@ -118,6 +118,16 @@ const shapeProduct = (product) => {
 const normalizeProductInput = async (data) => {
     const normalized = { ...data };
 
+    // The soft-delete stamps are server-owned (soft delete writes
+    // them with the tombstone swap; the Deleted Items restore clears
+    // them): a create/update body must never carry them — a product
+    // born trashed would be invisible everywhere while still holding
+    // its slug/SKU, and an update carrying them could trash or
+    // un-trash a product while skipping the delete guard entirely.
+    delete normalized.deletedAt;
+    delete normalized.deletedBy;
+    delete normalized.deletedUniques;
+
     if (data.category !== undefined) {
         normalized.category = await resolveReference(Category, data.category, 'Category', true);
     }

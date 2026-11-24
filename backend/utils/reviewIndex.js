@@ -36,7 +36,19 @@ const ensureReviewIndex = async () => {
     if (!migrationPromise) {
         migrationPromise = (async () => {
             const collection = Review.collection;
-            const indexes = await collection.indexes();
+            // On a brand-new database the reviews collection does not
+            // exist yet and listing its indexes fails with a
+            // namespace error — that is not a migration failure: the
+            // createIndex below creates the collection with the right
+            // index, and there is no legacy index to drop.
+            let indexes = [];
+            try {
+                indexes = await collection.indexes();
+            } catch (error) {
+                if (!/ns does not exist|NamespaceNotFound/i.test(error.message)) {
+                    throw error;
+                }
+            }
             for (const index of indexes) {
                 if (isLegacyPairIndex(index)) {
                     // eslint-disable-next-line no-await-in-loop

@@ -284,6 +284,7 @@ const getShellBootstrap = async (req, res) => {
             general: {
                 language: doc?.general?.language || '',
                 currency: doc?.general?.currency || '',
+                timeZone: doc?.general?.timeZone || '',
             },
         });
     } catch (error) {

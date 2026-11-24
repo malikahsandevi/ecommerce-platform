@@ -1,5 +1,11 @@
 const { User, Product, Order, ActivityLog, Analytics, Category, Setting } = require('../models');
 const { NOT_DELETED } = require('../utils/softDelete');
+const {
+    dayInTimezone,
+    addDaysToDayKey,
+    monthStartDayKey,
+    tzMidnightUtc,
+} = require('../utils/storeTime');
 
 // @desc    Get dashboard data
 // @route   GET /api/dashboard
@@ -17,11 +23,13 @@ const pctChange = (current, previous) => {
     return Math.round(((current - previous) / previous) * 10000) / 100;
 };
 
-const startOfDay = (date) => {
-    const d = new Date(date);
-    d.setHours(0, 0, 0, 0);
-    return d;
-};
+/** The store's configured timezone — the canonical day for every
+ *  figure below. Day and month boundaries are computed in THIS
+ *  timezone (utils/storeTime), never the server's: the host runs on
+ *  UTC, so server-local bucketing put an order placed at 01:30 store
+ *  time on the previous day's chart row. */
+const storeTimeZoneOf = (settingsDoc) =>
+    settingsDoc?.general?.timeZone || 'Asia/Karachi';
 
 // Revenue sums an order's total only while the order is neither
 // cancelled nor refunded — a refund hands the money back, so it is no
@@ -40,17 +48,30 @@ const getDashboardData = async (req, res) => {
     try {
         const now = new Date();
 
+        // The settings document is read first: the monthly target and
+        // the store timezone both live there, and every day/month
+        // window below is derived from the timezone before the
+        // parallel block runs.
+        const settingsDoc = await Setting.findOne()
+            .sort({ createdAt: 1 })
+            .select('general.monthlyTarget general.timeZone')
+            .lean();
+        const storeTz = storeTimeZoneOf(settingsDoc);
+        const todayKey = dayInTimezone(now, storeTz);
+
         // Windows used by the series / comparison blocks. All of them are
         // computed from the real Order and User collections — cancelled
         // orders never count as revenue or as orders in the charts, and a
         // refunded order's money is not revenue either, though the order
-        // itself still counts as an order.
-        const sixMonthsStart = new Date(now.getFullYear(), now.getMonth() - 5, 1);
-        const eightDaysStart = startOfDay(new Date(now.getTime() - 7 * DAY_MS));
+        // itself still counts as an order. Day and month windows open at
+        // STORE-timezone midnights; the rolling week windows are
+        // instant-based (now − 7/14 days) and timezone-free by nature.
+        const sixMonthsStart = tzMidnightUtc(monthStartDayKey(todayKey, -5), storeTz);
+        const eightDaysStart = tzMidnightUtc(addDaysToDayKey(todayKey, -7), storeTz);
         const thisWeekStart = new Date(now.getTime() - 7 * DAY_MS);
         const lastWeekStart = new Date(now.getTime() - 14 * DAY_MS);
-        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-        const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const monthStart = tzMidnightUtc(monthStartDayKey(todayKey, 0), storeTz);
+        const lastMonthStart = tzMidnightUtc(monthStartDayKey(todayKey, -1), storeTz);
 
         // Revenue-only match: neither a cancelled nor a refunded order's
         // money is income.
@@ -89,7 +110,6 @@ const getDashboardData = async (req, res) => {
             statusRows,
             inventoryRows,
             newestCustomers,
-            settingsDoc,
         ] = await Promise.all([
             User.countDocuments({ role: 'Customer', ...NOT_DELETED }),
             Product.countDocuments({ ...NOT_DELETED }),
@@ -138,7 +158,13 @@ const getDashboardData = async (req, res) => {
                 { $match: { createdAt: { $gte: sixMonthsStart }, ...NOT_DELETED } },
                 {
                     $group: {
-                        _id: { year: { $year: '$createdAt' }, month: { $month: '$createdAt' } },
+                        _id: {
+                            $dateToString: {
+                                format: '%Y-%m',
+                                date: '$createdAt',
+                                timezone: storeTz,
+                            },
+                        },
                         revenue: revenueTotalSum,
                         orders: nonCancelledCount,
                     },
@@ -148,7 +174,13 @@ const getDashboardData = async (req, res) => {
                 { $match: { createdAt: { $gte: eightDaysStart }, ...NOT_DELETED } },
                 {
                     $group: {
-                        _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+                        _id: {
+                            $dateToString: {
+                                format: '%Y-%m-%d',
+                                date: '$createdAt',
+                                timezone: storeTz,
+                            },
+                        },
                         revenue: revenueTotalSum,
                         orders: nonCancelledCount,
                     },
@@ -193,37 +225,34 @@ const getDashboardData = async (req, res) => {
                 .limit(30)
                 .select('firstName lastName email createdAt avatar')
                 .lean(),
-            Setting.findOne().sort({ createdAt: 1 }).select('general.monthlyTarget').lean(),
         ]);
 
         const totalRevenue = revenueAggregate[0]?.total || 0;
 
         // Fill every one of the last 6 months — months without orders are
-        // honest zeros, never interpolated or seeded values.
-        const monthlyMap = new Map(
-            revenueMonthly.map((row) => [`${row._id.year}-${row._id.month}`, row])
-        );
+        // honest zeros, never interpolated or seeded values. Month keys
+        // are store-timezone months, matching the aggregation's buckets.
+        const monthlyMap = new Map(revenueMonthly.map((row) => [row._id, row]));
         const revenueSeries = [];
         for (let i = 5; i >= 0; i--) {
-            const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-            const row = monthlyMap.get(`${d.getFullYear()}-${d.getMonth() + 1}`);
+            const monthKey = monthStartDayKey(todayKey, -i).slice(0, 7);
+            const row = monthlyMap.get(monthKey);
             revenueSeries.push({
-                month: MONTH_NAMES[d.getMonth()],
+                month: MONTH_NAMES[Number(monthKey.slice(5, 7)) - 1],
                 revenue: row ? round2(row.revenue) : 0,
                 orders: row ? row.orders : 0,
             });
         }
 
         // Same fill for the last 8 days (today included) — the daily view
-        // of the Revenue Analytics card.
+        // of the Revenue Analytics card, keyed by store-timezone days.
         const dailyMap = new Map(revenueDaily.map((row) => [row._id, row]));
         const dailySeries = [];
         for (let i = 7; i >= 0; i--) {
-            const d = startOfDay(new Date(now.getTime() - i * DAY_MS));
-            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            const key = addDaysToDayKey(todayKey, -i);
             const row = dailyMap.get(key);
             dailySeries.push({
-                day: `${d.getDate()} ${MONTH_NAMES[d.getMonth()]}`,
+                day: `${Number(key.slice(8, 10))} ${MONTH_NAMES[Number(key.slice(5, 7)) - 1]}`,
                 revenue: row ? round2(row.revenue) : 0,
                 orders: row ? row.orders : 0,
             });
@@ -351,33 +380,51 @@ const getDashboardData = async (req, res) => {
 const getRevenueRange = async (req, res) => {
     try {
         const { from, to } = req.query;
-        const parseDay = (value) => {
-            if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
-            const d = new Date(`${value}T00:00:00`);
-            if (Number.isNaN(d.getTime())) return null;
-            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-            return key === value ? startOfDay(d) : null;
-        };
-        const fromDate = parseDay(from);
-        const toDate = parseDay(to);
-        if (!fromDate || !toDate || fromDate > toDate) {
+        // from/to are DAY KEYS in the store's timezone: the window is
+        // [store-midnight of `from`, store-midnight of the day after
+        // `to`) and the buckets are store days, so the chart's days
+        // are the store's days — the same days the export's by-date
+        // filter uses.
+        const isDayKey = (value) =>
+            typeof value === 'string' &&
+            /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+            addDaysToDayKey(value, 0) === value;
+        if (!isDayKey(from) || !isDayKey(to) || from > to) {
             return res.status(400).json({ message: 'A valid from/to date range is required.' });
         }
-        const dayCount = Math.round((toDate - fromDate) / DAY_MS) + 1;
+        const dayCount =
+            Math.round(
+                (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / DAY_MS
+            ) + 1;
         if (dayCount > 366) {
             return res.status(400).json({ message: 'Date range is too large.' });
         }
 
+        const settingsDoc = await Setting.findOne()
+            .sort({ createdAt: 1 })
+            .select('general.timeZone')
+            .lean();
+        const storeTz = storeTimeZoneOf(settingsDoc);
+
         const rows = await Order.aggregate([
             {
                 $match: {
-                    createdAt: { $gte: fromDate, $lt: new Date(toDate.getTime() + DAY_MS) },
+                    createdAt: {
+                        $gte: tzMidnightUtc(from, storeTz),
+                        $lt: tzMidnightUtc(addDaysToDayKey(to, 1), storeTz),
+                    },
                     ...NOT_DELETED,
                 },
             },
             {
                 $group: {
-                    _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+                    _id: {
+                        $dateToString: {
+                            format: '%Y-%m-%d',
+                            date: '$createdAt',
+                            timezone: storeTz,
+                        },
+                    },
                     revenue: revenueTotalSum,
                     orders: nonCancelledCount,
                 },
@@ -386,12 +433,11 @@ const getRevenueRange = async (req, res) => {
         const byDay = new Map(rows.map((row) => [row._id, row]));
         const series = [];
         for (let i = 0; i < dayCount; i++) {
-            const d = new Date(fromDate.getTime() + i * DAY_MS);
-            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            const key = addDaysToDayKey(from, i);
             const row = byDay.get(key);
             series.push({
                 date: key,
-                day: `${d.getDate()} ${MONTH_NAMES[d.getMonth()]}`,
+                day: `${Number(key.slice(8, 10))} ${MONTH_NAMES[Number(key.slice(5, 7)) - 1]}`,
                 revenue: row ? round2(row.revenue) : 0,
                 orders: row ? row.orders : 0,
             });

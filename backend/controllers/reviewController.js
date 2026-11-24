@@ -20,6 +20,19 @@ const syncProductRating = async (productId) => {
     });
 };
 
+// The soft-delete stamps are server-owned (see genericController):
+// a create/update body must never carry them — a review born trashed
+// would vanish from every list while still blocking nothing and
+// counting nowhere, and an update carrying them could trash or
+// un-trash a review while skipping the rating sync entirely.
+const stripServerOwnedFields = (body) => {
+    const clean = { ...(body || {}) };
+    delete clean.deletedAt;
+    delete clean.deletedBy;
+    delete clean.deletedUniques;
+    return clean;
+};
+
 const populateReview = (query) => query
     // The product's image rides along: the Reviews list's Product cell
     // renders the product's photo, and a name-only populate left every
@@ -66,7 +79,7 @@ const createReview = async (req, res) => {
         if (!product) return res.status(400).json({ message: 'The selected product no longer exists.' });
         if (!user) return res.status(400).json({ message: 'The selected reviewer no longer exists.' });
 
-        const saved = await new Review(req.body).save();
+        const saved = await new Review(stripServerOwnedFields(req.body)).save();
 
         await syncProductRating(saved.product);
         await logActivity(
@@ -97,7 +110,7 @@ const updateReview = async (req, res) => {
         const previousProductId = existing.product;
         const updated = await Review.findOneAndUpdate(
             { _id: req.params.id, ...NOT_DELETED },
-            req.body,
+            stripServerOwnedFields(req.body),
             { new: true, runValidators: true },
         );
 

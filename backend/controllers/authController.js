@@ -133,13 +133,41 @@ const loginAdmin = async (req, res) => {
         // password is managed from the panel (profile / password
         // settings), never from here.
         const envAdminEmail = process.env.ADMIN_EMAIL || 'admin@gmail.com';
-        const envAdminPass = process.env.ADMIN_PASSWORD || 'admin';
+        // The built-in default satisfies the account schema's own
+        // 6-character password minimum — the previous default
+        // ('admin', 5 chars) made the seed save fail validation, so a
+        // first run on a fresh database with default configuration
+        // answered this login with a 500 and could NEVER create the
+        // first admin.
+        const envAdminPass = process.env.ADMIN_PASSWORD || 'admin123';
 
         // Check for admin user in DB first
         let adminUser = await User.findOne({ email, ...NOT_DELETED }).select('+password');
 
         // Auto-seed admin user from .env if it doesn't exist and credentials match the .env request
         if (!adminUser && email === envAdminEmail && password === envAdminPass) {
+            if (envAdminPass.length < 6) {
+                // A configured seed password the account schema itself
+                // would refuse: fail closed with an operator-actionable
+                // message instead of the raw validation dump.
+                console.error(
+                    'ADMIN_PASSWORD is shorter than the 6-character minimum — the first Super Admin cannot be seeded. Set a longer ADMIN_PASSWORD.'
+                );
+                return res.status(500).json({
+                    message:
+                        'The server is misconfigured: the seeded admin password is too short. Set a longer ADMIN_PASSWORD and try again.',
+                });
+            }
+            if (!process.env.ADMIN_PASSWORD) {
+                // First run with the built-in default password: the
+                // account works (and mandatory 2FA enrolment applies
+                // at this very login), but the operator must be told
+                // loudly to set ADMIN_PASSWORD / change the password.
+                console.warn(
+                    'WARNING: the first Super Admin was seeded with the DEFAULT password. ' +
+                    'Change the account password in the panel immediately and set ADMIN_PASSWORD in the environment.'
+                );
+            }
             adminUser = new User({
                 firstName: 'Super',
                 lastName: 'Admin',
@@ -191,6 +219,14 @@ const loginAdmin = async (req, res) => {
     } catch (error) {
         if (error.code === 'JWT_SIGNING_DISABLED') {
             return res.status(403).json({ message: error.message });
+        }
+        if (error.code === 11000) {
+            // A seed colliding with an existing unique value (e.g.
+            // the username "admin" already taken) — a clean sentence,
+            // never the raw MongoDB duplicate-key text.
+            return res.status(400).json({
+                message: 'An account already exists with one of the seeded values — sign in with that account instead.',
+            });
         }
         res.status(500).json({ message: error.message });
     }

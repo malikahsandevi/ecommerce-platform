@@ -42,6 +42,20 @@ const deleteRefusal = async (Model, doc) => {
 // sentence, never the raw MongoDB E11000 driver text.
 const errorMessage = (error, noun) => duplicateKeyMessage(error, noun) || error.message;
 
+// The soft-delete stamps are server-owned: soft delete writes them
+// (with the tombstone swap of unique values) and the Deleted Items
+// restore clears them. A create/update body carrying them could
+// birth a record already trashed — invisible in every list yet still
+// holding its unique values — or trash/un-trash a record while
+// skipping every side effect and guard on those paths.
+const stripServerOwnedFields = (body) => {
+    const clean = { ...(body || {}) };
+    delete clean.deletedAt;
+    delete clean.deletedBy;
+    delete clean.deletedUniques;
+    return clean;
+};
+
 // Shared CRUD for the simple catalogue modules. Models carrying the
 // soft-delete fields (utils/softDelete) read as if trashed records do
 // not exist and their DELETE stamps the record instead of removing
@@ -74,20 +88,21 @@ const genericController = (Model) => {
         },
         create: async (req, res) => {
             try {
-                const item = new Model(req.body);
+                const item = new Model(stripServerOwnedFields(req.body));
                 const saved = await item.save();
                 res.status(201).json(saved);
             } catch (error) { res.status(400).json({ message: errorMessage(error, 'record') }); }
         },
         update: async (req, res) => {
             try {
+                const body = stripServerOwnedFields(req.body);
                 const updated = soft
                     ? await Model.findOneAndUpdate(
                           { _id: req.params.id, ...NOT_DELETED },
-                          req.body,
+                          body,
                           { new: true, runValidators: true }
                       )
-                    : await Model.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
+                    : await Model.findByIdAndUpdate(req.params.id, body, { new: true, runValidators: true });
                 if (!updated) return res.status(404).json({ message: 'Not found' });
                 res.json(updated);
             } catch (error) { res.status(400).json({ message: errorMessage(error, 'record') }); }
