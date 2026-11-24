@@ -77,10 +77,18 @@ export default function ShippingQuoteField({
   const discount = couponDiscount && couponDiscount > 0 ? couponDiscount : 0;
   const total = Math.max(0, quote.subtotal - discount + (quote.configured ? quote.shippingCharge : 0));
 
+  // Money rows stay inside the panel however long a figure gets:
+  // the label keeps its width, the value right-aligns in tabular
+  // figures and truncates with the full amount on hover.
   const row = (label: string, value: string, strong = false) => (
-    <div className="flex items-center justify-between py-1">
-      <span className="text-xs text-[var(--text-muted)]">{label}</span>
-      <span className={strong ? "text-sm font-bold text-[var(--text)]" : "text-xs font-semibold text-[var(--text)]"}>
+    <div className="flex items-center justify-between gap-3 py-1">
+      <span className="shrink-0 text-xs text-[var(--text-muted)]">{label}</span>
+      <span
+        title={value}
+        className={`min-w-0 truncate text-right tabular-nums ${
+          strong ? "text-sm font-bold text-[var(--text)]" : "text-xs font-semibold text-[var(--text)]"
+        }`}
+      >
         {value}
       </span>
     </div>

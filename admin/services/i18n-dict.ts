@@ -1702,4 +1702,8 @@ export const T_X14: Dict = {
   "Select a delivery option": { ur: "ڈیلیوری آپشن منتخب کریں", ar: "اختر خيار توصيل", hi: "डिलीवरी विकल्प चुनें", bn: "একটি ডেলিভারি বিকল্প নির্বাচন করুন", es: "Selecciona una opción de entrega", fr: "Sélectionnez une option de livraison", de: "Lieferoption auswählen", tr: "Bir teslimat seçeneği seçin", zh: "选择配送选项" },
 };
 
-export const T: Dict = { ...T_CORE, ...T_SET1, ...T_SET2, ...T_SET3, ...T_DASH, ...T_CRUD, ...T_MEDIA, ...T_FORM, ...T_X1, ...T_X2, ...T_CFG1, ...T_CFG2, ...T_X3, ...T_PALETTE, ...T_UROLE, ...T_X4, ...T_X5, ...T_X6, ...T_X7, ...T_X8, ...T_X9, ...T_X10, ...T_X11, ...T_X12, ...T_X13, ...T_X14 };
+export const T_X15: Dict = {
+  "{count} in stock": { ur: "{count} اسٹاک میں موجود", ar: "{count} في المخزون", hi: "{count} स्टॉक में", bn: "{count} স্টকে আছে", es: "{count} en stock", fr: "{count} en stock", de: "{count} auf Lager", tr: "{count} stokta", zh: "库存 {count} 件" },
+};
+
+export const T: Dict = { ...T_CORE, ...T_SET1, ...T_SET2, ...T_SET3, ...T_DASH, ...T_CRUD, ...T_MEDIA, ...T_FORM, ...T_X1, ...T_X2, ...T_CFG1, ...T_CFG2, ...T_X3, ...T_PALETTE, ...T_UROLE, ...T_X4, ...T_X5, ...T_X6, ...T_X7, ...T_X8, ...T_X9, ...T_X10, ...T_X11, ...T_X12, ...T_X13, ...T_X14, ...T_X15 };
