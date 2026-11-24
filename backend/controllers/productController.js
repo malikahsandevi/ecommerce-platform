@@ -136,7 +136,13 @@ const normalizeProductInput = async (data) => {
         normalized.category = await resolveReference(Category, data.category, 'Category', true);
     }
     if (data.brand !== undefined) {
-        normalized.brand = await resolveReference(Brand, data.brand, 'Brand');
+        const resolvedBrand = await resolveReference(Brand, data.brand, 'Brand');
+        // Brand is optional: an explicit empty/null from the client
+        // means "no brand" — write null so an update actually clears
+        // a brand set earlier (resolveReference answers undefined for
+        // empty, and an undefined value is dropped from the update,
+        // which would silently keep the old brand).
+        normalized.brand = resolvedBrand ?? null;
     }
     if (!normalized.slug && normalized.name) {
         normalized.slug = createSlug(normalized.name);
