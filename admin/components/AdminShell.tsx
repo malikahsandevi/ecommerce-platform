@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import Sidebar from "@/components/layout/Sidebar";
 import MobileNav from "@/components/layout/MobileNav";
 import AdminLoginPopup from "@/components/Login";
+import BuiltByFooter from "@/components/layout/BuiltByFooter";
 import PaletteDecisionPopup from "@/components/layout/PaletteDecisionPopup";
 import { ConfirmDialogHost } from "@/components/ui/ConfirmDialog";
 import { SecurityCheckDialogHost } from "@/components/ui/SecurityCheckDialog";
@@ -86,7 +87,15 @@ function AdminShellInner({ children }: { children: React.ReactNode }) {
             devices. */}
         <MobileNav />
         <Sidebar />
-        <div className="flex-1 min-w-0">{children}</div>
+        {/* The "built by" credit line closes every page: appended in
+            plain flow after the page's own content inside the content
+            column — no wrapper or layout change for the pages
+            themselves (list pages run their own full-height internal
+            scroll and must not be restructured). */}
+        <div className="flex-1 min-w-0">
+          {children}
+          <BuiltByFooter />
+        </div>
       </div>
 
       <AdminLoginPopup

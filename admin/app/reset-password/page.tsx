@@ -9,6 +9,7 @@ import React, { Suspense, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { AlertCircle, CheckCircle2, KeyRound, Loader2 } from "lucide-react";
+import BuiltByFooter from "@/components/layout/BuiltByFooter";
 import { apiClient } from "@/services/api";
 import { describeAuthError } from "@/services/authContext";
 import { useLanguage } from "@/services/i18n";
@@ -56,7 +57,8 @@ function ResetPasswordForm() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4" style={{ backgroundColor: "var(--background)" }}>
+    <div className="min-h-screen flex flex-col" style={{ backgroundColor: "var(--background)" }}>
+      <div className="flex-1 flex items-center justify-center p-4">
       <div
         className="w-full max-w-sm p-6 rounded-2xl shadow-2xl"
         style={{
@@ -158,6 +160,8 @@ function ResetPasswordForm() {
           </>
         )}
       </div>
+      </div>
+      <BuiltByFooter />
     </div>
   );
 }
