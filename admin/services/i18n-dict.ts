@@ -1618,4 +1618,9 @@ export const T_X10: Dict = {
   "No options available yet.": { ur: "ابھی کوئی آپشن دستیاب نہیں۔", ar: "لا توجد خيارات متاحة بعد.", hi: "अभी कोई विकल्प उपलब्ध नहीं है।", bn: "এখনো কোনো বিকল্প উপলব্ধ নেই।", es: "Aún no hay opciones disponibles.", fr: "Aucune option disponible pour le moment.", de: "Noch keine Optionen verfügbar.", tr: "Henüz seçenek yok.", zh: "暂无可用选项。" },
 };
 
-export const T: Dict = { ...T_CORE, ...T_SET1, ...T_SET2, ...T_SET3, ...T_DASH, ...T_CRUD, ...T_MEDIA, ...T_FORM, ...T_X1, ...T_X2, ...T_CFG1, ...T_CFG2, ...T_X3, ...T_PALETTE, ...T_UROLE, ...T_X4, ...T_X5, ...T_X6, ...T_X7, ...T_X8, ...T_X9, ...T_X10 };
+export const T_X11: Dict = {
+  "Add Item": { ur: "آئٹم شامل کریں", ar: "إضافة عنصر", hi: "आइटम जोड़ें", bn: "আইটেম যোগ করুন", es: "Añadir artículo", fr: "Ajouter un article", de: "Artikel hinzufügen", tr: "Öğe ekle", zh: "添加商品" },
+  "Used when creating a new order. Prices are taken from the products.": { ur: "نیا آرڈر بناتے وقت استعمال ہوتا ہے۔ قیمتیں مصنوعات سے لی جاتی ہیں۔", ar: "يُستخدم عند إنشاء طلب جديد. تُؤخذ الأسعار من المنتجات.", hi: "नया ऑर्डर बनाते समय उपयोग किया जाता है। कीमतें उत्पादों से ली जाती हैं।", bn: "নতুন অর্ডার তৈরি করার সময় ব্যবহৃত হয়। মূল্য পণ্যগুলো থেকে নেওয়া হয়।", es: "Se usa al crear un pedido nuevo. Los precios se toman de los productos.", fr: "Utilisé lors de la création d'une nouvelle commande. Les prix proviennent des produits.", de: "Wird beim Erstellen einer neuen Bestellung verwendet. Die Preise stammen von den Produkten.", tr: "Yeni sipariş oluşturulurken kullanılır. Fiyatlar ürünlerden alınır.", zh: "创建新订单时使用。价格取自产品。" },
+};
+
+export const T: Dict = { ...T_CORE, ...T_SET1, ...T_SET2, ...T_SET3, ...T_DASH, ...T_CRUD, ...T_MEDIA, ...T_FORM, ...T_X1, ...T_X2, ...T_CFG1, ...T_CFG2, ...T_X3, ...T_PALETTE, ...T_UROLE, ...T_X4, ...T_X5, ...T_X6, ...T_X7, ...T_X8, ...T_X9, ...T_X10, ...T_X11 };

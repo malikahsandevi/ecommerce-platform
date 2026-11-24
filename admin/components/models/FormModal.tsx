@@ -22,6 +22,7 @@ import ProductMediaManager, {
 } from "@/components/models/ProductMediaManager";
 import CustomerShoppingProfile from "@/components/models/CustomerShoppingProfile";
 import CouponApplyField from "@/components/models/CouponApplyField";
+import OrderItemsField from "@/components/models/OrderItemsField";
 import { mediaService } from "@/services/resourceRegistry";
 import { extractApiError } from "@/services/api";
 import { useLanguage } from "@/services/i18n";
@@ -43,6 +44,7 @@ export type FormFieldType =
   | "image"
   | "media-gallery"
   | "shopping-profile"
+  | "order-items"
   | "coupon";
 
 export interface FormField {
@@ -866,6 +868,32 @@ export const FormModal: React.FC<FormModalProps> = ({
           </div>
         );
 
+      case "order-items": {
+        // Create Order's line editor: any number of product lines.
+        // While editing, an order's items are fixed at creation, so
+        // the lines render read-only (the update endpoint accepts
+        // lifecycle/payment/shipping fields only).
+        const itemLines = Array.isArray(rawValue) ? rawValue : [];
+        return (
+          <div key={field.name} className={colClass}>
+            <label className="font-bold text-[var(--text)] block mb-1 text-xs">
+              {t(field.label)} {field.required && <span className="text-red-500">*</span>}
+            </label>
+            <OrderItemsField
+              value={itemLines}
+              options={field.options || []}
+              disabled={field.disabled || formMode === "edit"}
+              onChange={(next) => handleFieldChange(field.name, next)}
+            />
+            {field.helperText && (
+              <span className="text-[10px] text-[var(--text-muted)] mt-0.5 block">
+                {t(field.helperText)}
+              </span>
+            )}
+          </div>
+        );
+      }
+
       case "coupon": {
         // Create Order only: a coupon is applied when the order is
         // placed (the server validates it again and counts the use) —
@@ -880,8 +908,7 @@ export const FormModal: React.FC<FormModalProps> = ({
               value={typeof rawValue === "string" ? rawValue : ""}
               applied={formData?.couponApplied === true}
               discount={formData?.couponDiscount}
-              productId={formData?.product ? String(formData.product) : ""}
-              quantity={Number(formData?.quantity) || 1}
+              items={Array.isArray(formData?.items) ? formData.items : []}
               userId={formData?.user ? String(formData.user) : ""}
               onFieldChange={handleFieldChange}
             />

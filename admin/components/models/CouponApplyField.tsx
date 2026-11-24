@@ -19,7 +19,7 @@ import { useLanguage } from "@/services/i18n";
  *
  * Applied state lives in formData (couponCode + couponApplied +
  * couponDiscount) so the order payload builder can pick the code up;
- * changing the product, the quantity, the customer or the code itself
+ * changing any order line, the customer or the code itself
  * re-validates or clears the application — a stale discount never
  * survives.
  */
@@ -27,8 +27,8 @@ interface CouponApplyFieldProps {
   value: string;
   applied: boolean;
   discount?: number;
-  productId: string;
-  quantity: number;
+  /** The order's lines as they stand in the form (any number of them). */
+  items: Array<{ product?: string; quantity?: number }>;
   userId: string;
   onFieldChange: (fieldName: string, value: unknown) => void;
 }
@@ -42,8 +42,7 @@ export default function CouponApplyField({
   value,
   applied,
   discount,
-  productId,
-  quantity,
+  items,
   userId,
   onFieldChange,
 }: CouponApplyFieldProps) {
@@ -54,8 +53,10 @@ export default function CouponApplyField({
   const [appliedCode, setAppliedCode] = useState("");
   const validatedSignature = useRef("");
 
-  // Product prices price the order's single line item — the same
-  // source the payload builder uses for the subtotal.
+  // Product prices price the order's lines — the same source the
+  // payload builder uses for the subtotal. Only lines with a product
+  // picked take part; an order may hold several lines, and the same
+  // product may appear on more than one of them.
   useEffect(() => {
     let cancelled = false;
     apiClient
@@ -69,8 +70,17 @@ export default function CouponApplyField({
     };
   }, []);
 
-  const product = products.find((p) => p._id === productId);
-  const subtotal = (product?.price ?? 0) * Math.max(1, Number(quantity) || 1);
+  const lines = (Array.isArray(items) ? items : [])
+    .filter((item) => item?.product)
+    .map((item) => ({
+      product: String(item.product),
+      quantity: Math.max(1, Number(item.quantity) || 1),
+    }));
+  const subtotal = lines.reduce(
+    (sum, line) =>
+      sum + (products.find((p) => p._id === line.product)?.price ?? 0) * line.quantity,
+    0
+  );
   const appliedDiscount = applied ? Number(discount) || 0 : 0;
 
   const clearApplied = () => {
@@ -84,7 +94,8 @@ export default function CouponApplyField({
   // AND the customer (per-customer limits, customer/product/category
   // scoping), so any of them changing re-runs the same validation the
   // server runs again at order time.
-  const contextSignature = `${subtotal}|${userId}|${productId}|${quantity}`;
+  const linesSignature = lines.map((line) => `${line.product}x${line.quantity}`).join(",");
+  const contextSignature = `${subtotal}|${userId}|${linesSignature}`;
 
   const validate = async (code: string, amount: number, silent: boolean) => {
     if (!silent) setBusy(true);
@@ -93,9 +104,7 @@ export default function CouponApplyField({
         code,
         subtotal: amount,
         user: userId || undefined,
-        items: productId
-          ? [{ product: productId, quantity: Math.max(1, Number(quantity) || 1) }]
-          : undefined,
+        items: lines.length ? lines : undefined,
       });
       onFieldChange("couponCode", data.code);
       onFieldChange("couponApplied", true);
@@ -132,7 +141,7 @@ export default function CouponApplyField({
       setError(t("Please enter a coupon code."));
       return;
     }
-    if (!productId) {
+    if (!lines.length) {
       setError(t("Select a product first so the discount can be calculated."));
       return;
     }

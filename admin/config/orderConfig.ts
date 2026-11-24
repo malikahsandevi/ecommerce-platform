@@ -210,8 +210,7 @@ export const orderConfig = {
       return {
         orderNumber: `ORD-${Date.now().toString().slice(-6)}`,
         user: "",
-        product: "",
-        quantity: 1,
+        items: [{ product: "", quantity: 1 }],
         status: "pending",
         paymentMethod: "cod",
         paymentStatus: "pending",
@@ -226,13 +225,16 @@ export const orderConfig = {
       };
     }
 
-    const firstItem = order.items?.[0];
     return {
       _id: order._id,
       orderNumber: order.orderNumber || "",
       user: userId(order),
-      product: typeof firstItem?.product === "string" ? firstItem.product : "",
-      quantity: firstItem?.quantity || 1,
+      // Every line the order carries (shown read-only while editing —
+      // an order's items are fixed at creation).
+      items: (order.items || []).map((item) => ({
+        product: typeof item?.product === "string" ? item.product : "",
+        quantity: item?.quantity || 1,
+      })),
       status: order.status || "pending",
       paymentMethod: order.paymentMethod || "cod",
       paymentStatus: order.paymentStatus || "pending",
@@ -302,22 +304,13 @@ export const orderConfig = {
       section: "Order",
     },
 
-    // Section 2: Item (single line item for manual orders)
+    // Section 2: Items (any number of lines for manual orders)
     {
-      name: "product",
-      label: "Product",
-      type: "select",
-      colSpan: 2,
-      placeholder: "Select a product",
-      helperText: "Used when creating a new order. The price is taken from the product.",
-      section: "Item",
-    },
-    {
-      name: "quantity",
-      label: "Quantity",
-      type: "number",
-      min: 1,
-      colSpan: 1,
+      name: "items",
+      label: "Items",
+      type: "order-items",
+      colSpan: 4,
+      helperText: "Used when creating a new order. Prices are taken from the products.",
       section: "Item",
     },
 

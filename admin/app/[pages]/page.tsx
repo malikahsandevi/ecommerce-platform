@@ -107,6 +107,9 @@ function withDynamicOptions(
         return options.vendorOptions?.length ? { ...field, options: options.vendorOptions } : field;
       case "product":
         return options.productOptions?.length ? { ...field, options: options.productOptions } : field;
+      case "items":
+        // Create Order's line editor picks from the same product list.
+        return options.productOptions?.length ? { ...field, options: options.productOptions } : field;
       case "user":
         return options.userOptions?.length ? { ...field, options: options.userOptions } : field;
       case "applicableProducts":

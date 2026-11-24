@@ -227,11 +227,33 @@ function transformCouponPayload(data: any) {
 /** Builds a schema-valid order from the flat admin form. */
 async function buildOrderPayload(data: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
   const { data: products } = await apiClient.get('/products');
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const product = (products || []).find((p: any) => p._id === data.product);
-  const quantity = Math.max(1, Number(data.quantity) || 1);
-  const price = product?.price ?? 0;
-  const subtotal = price * quantity;
+
+  // The form's Items editor holds one draft line per order line (the
+  // same product may repeat across lines — the server aggregates the
+  // quantities before its stock check). A lone product/quantity pair
+  // (the form's old shape) still builds a one-line order.
+  const drafts: Array<{ product?: string; quantity?: number }> =
+    Array.isArray(data.items) && data.items.length
+      ? data.items
+      : [{ product: data.product, quantity: data.quantity }];
+
+  let subtotal = 0;
+  const items = drafts.map((line) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const product = (products || []).find((p: any) => p._id === line.product);
+    const quantity = Math.max(1, Number(line.quantity) || 1);
+    const price = product?.price ?? 0;
+    subtotal += price * quantity;
+    return {
+      product: line.product,
+      name: product?.name || 'Product',
+      sku: product?.sku || '',
+      price,
+      quantity,
+      image: product?.images?.[0]?.url || '',
+    };
+  });
+  subtotal = Math.round(subtotal * 100) / 100;
 
   const shippingAddress = {
     street: data.shippingStreet || '',
@@ -246,16 +268,7 @@ async function buildOrderPayload(data: any) { // eslint-disable-line @typescript
     // a browser-side timestamp slice used to collide between orders.
     orderNumber: data.orderNumber || undefined,
     user: data.user,
-    items: [
-      {
-        product: data.product,
-        name: product?.name || 'Product',
-        sku: product?.sku || '',
-        price,
-        quantity,
-        image: product?.images?.[0]?.url || '',
-      },
-    ],
+    items,
     subtotal,
     tax: 0,
     shippingCost: 0,
