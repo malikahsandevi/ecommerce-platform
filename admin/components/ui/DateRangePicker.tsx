@@ -386,7 +386,7 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
             <button
               type="button"
               data-testid="drp-prev-month"
-              aria-label="Previous month"
+              aria-label={t("Previous month")}
               onClick={() => moveMonth(-1)}
               className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-(--border) text-(--text-muted) transition hover:bg-(--surface-muted)"
             >
@@ -401,7 +401,7 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
             <button
               type="button"
               data-testid="drp-next-month"
-              aria-label="Next month"
+              aria-label={t("Next month")}
               onClick={() => moveMonth(1)}
               disabled={atCurrentMonth}
               className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border border-(--border) text-(--text-muted) transition hover:bg-(--surface-muted) disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent"

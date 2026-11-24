@@ -1,6 +1,7 @@
 "use client";
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { apiClient } from './api';
+import { readDeviceLanguage, translate } from './i18n';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const AuthContext = createContext<any>(null);
@@ -133,7 +134,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const handleExpired = () => {
       setIsAuthenticated(false);
       setUser(null);
-      setSessionNotice('Your session expired. Please sign in again.');
+      setSessionNotice(
+        translate(readDeviceLanguage(), 'Your session expired. Please sign in again.'),
+      );
     };
     window.addEventListener('admin:session-expired', handleExpired);
     return () => window.removeEventListener('admin:session-expired', handleExpired);

@@ -3144,7 +3144,10 @@ function DeletedItemsPanel({ timeZone }: { timeZone?: string }) {
         <div className="w-56 max-w-full">
           <Select
             value={moduleFilter}
-            options={DELETED_MODULE_OPTIONS}
+            options={DELETED_MODULE_OPTIONS.map((option) => ({
+              ...option,
+              label: t(option.label),
+            }))}
             onChange={setModuleFilter}
             aria-label={t("Filter by module")}
             triggerFullWidth

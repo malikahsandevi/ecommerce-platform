@@ -143,6 +143,12 @@ export function DetailPanel<T extends DetailPanelData>({
   const displayAttributeValue = (attrKey: string, attrVal: unknown): string => {
     if (typeof attrVal !== "string") return String(attrVal ?? "-");
     const keyLabel = attrKey.replace(/([A-Z])/g, " $1").trim().toLowerCase();
+    // The category parent row's "Main Category" is a UI label the
+    // config synthesises for top-level categories, not data — it
+    // translates like the other known labels below.
+    if (keyLabel === "parent category" && attrVal === "Main Category") {
+      return t("Main Category");
+    }
     if (
       !["role", "payment status", "payment method", "moderation status", "account status"].includes(keyLabel)
     ) {
