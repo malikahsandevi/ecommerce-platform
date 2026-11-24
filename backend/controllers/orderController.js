@@ -126,10 +126,11 @@ const createOrder = async (req, res) => {
             quantityByProduct.set(key, (quantityByProduct.get(key) || 0) + (Number(item.quantity) || 0));
         }
         const pricedItems = [];
+        const couponLines = [];
         let computedSubtotal = 0;
         for (const item of data.items) {
             const product = await Product.findOne({ _id: item.product, ...NOT_DELETED })
-                .select('stock name sku price image')
+                .select('stock name sku price image category')
                 .lean();
             if (!product) {
                 return res.status(400).json({ message: 'One of the ordered products no longer exists.' });
@@ -143,6 +144,13 @@ const createOrder = async (req, res) => {
             const quantity = Number(item.quantity) || 0;
             const price = Number(product.price) || 0;
             computedSubtotal += price * quantity;
+            // The coupon resolver's scoping view of this line: which
+            // product, which category it belongs to, what it totals.
+            couponLines.push({
+                product: product._id,
+                category: product.category || null,
+                lineTotal: price * quantity,
+            });
             pricedItems.push({
                 ...item,
                 name: item.name || product.name,
@@ -166,7 +174,11 @@ const createOrder = async (req, res) => {
         delete data.couponCode;
         let appliedCoupon = null;
         if (couponCode) {
-            const resolved = await resolveCoupon(couponCode, data.subtotal);
+            const resolved = await resolveCoupon(couponCode, {
+                subtotal: data.subtotal,
+                userId: data.user,
+                lines: couponLines,
+            });
             appliedCoupon = resolved.coupon;
             data.coupon = appliedCoupon._id;
             data.discount = resolved.discount;

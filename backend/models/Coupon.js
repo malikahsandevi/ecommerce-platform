@@ -38,7 +38,11 @@ const couponSchema = new mongoose.Schema({
   },
   usageLimit: { 
     type: Number, 
-    default: null // null means unlimited
+    default: null // null means unlimited; 0 means the coupon can never be used
+  },
+  perCustomerLimit: { 
+    type: Number, 
+    default: null // null means no per-customer limit; 0 means no customer may use it
   },
   usedCount: { 
     type: Number, 
