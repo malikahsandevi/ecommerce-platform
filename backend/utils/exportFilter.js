@@ -110,6 +110,16 @@ const BUCKETS = {
         if (price < 250) return '100_250';
         return 'over_250';
     },
+    // admin/app/[pages]/page.tsx products category filter: the
+    // record's own category id (the export rows are populated, so the
+    // ref is an object; fall back to the raw value when it is not).
+    category(row) {
+        const category = row.category;
+        if (category && typeof category === 'object') {
+            return String(category._id || category.id || '');
+        }
+        return category == null ? '' : String(category);
+    },
     // admin/app/[pages]/page.tsx mediaTypeBucket
     mediaType(row) {
         const mime = String(row.mimeType || row.type || '').toLowerCase();
@@ -124,7 +134,7 @@ const BUCKETS = {
 // per module (filter id → bucket name). Everything else compares
 // String(row[filterId]) === value, exactly like FilterBar.
 const FILTER_BUCKETS = {
-    products: { stockLevel: 'stockLevel', priceRange: 'priceRange' },
+    products: { stockLevel: 'stockLevel', priceRange: 'priceRange', category: 'category' },
     media: { mediaType: 'mediaType' },
 };
 

@@ -374,6 +374,7 @@ const getDashboardData = async (req, res) => {
         );
         const topCategories = allCategories
             .map((category) => ({
+                id: String(category._id),
                 name: category.name,
                 revenue: revenueByCategory.get(String(category._id)) || 0,
                 products: productCountByCategory.get(String(category._id)) || 0,
