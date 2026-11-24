@@ -629,7 +629,7 @@ router.get('/:id/delete-impact', protect, requirePermission('Media', 'delete'), 
 // before mediaId existed only have the URL to go on. Brands and
 // categories keep a single image URL (Brand.logo, Category.image —
 // neither stores a mediaId), so for them the URL match is the only link.
-router.get('/:id/usage', async (req, res) => {
+router.get('/:id/usage', protect, requirePermission('Media', 'view'), async (req, res) => {
     try {
         const media = await Media.findOne({ _id: req.params.id, ...NOT_DELETED }).select('_id url');
         if (!media) return res.status(404).json({ message: 'Not found' });
@@ -1254,9 +1254,9 @@ router.post('/folder-migration', protect, requirePermission('Media', 'edit'), as
     }
 });
 
-router.route('/').get(listMedia).post(protect, requirePermission('Media', 'create'), genericController.create);
+router.route('/').get(protect, requirePermission('Media', 'view'), listMedia).post(protect, requirePermission('Media', 'create'), genericController.create);
 router.route('/:id')
-    .get(genericController.getById)
+    .get(protect, requirePermission('Media', 'view'), genericController.getById)
     .put(protect, requirePermission('Media', 'edit'), genericController.update)
     .delete(protect, requirePermission('Media', 'delete'), async (req, res) => {
         try {

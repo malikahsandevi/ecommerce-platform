@@ -11,6 +11,7 @@ import {
   Pencil,
   Trash2,
   Lock,
+  Calendar,
 } from "lucide-react";
 import Select, { SelectOption } from "@/components/ui/Select";
 import Button from "@/components/ui/Button";
@@ -24,6 +25,8 @@ import CustomerShoppingProfile from "@/components/models/CustomerShoppingProfile
 import CouponApplyField from "@/components/models/CouponApplyField";
 import OrderItemsField from "@/components/models/OrderItemsField";
 import ShippingQuoteField from "@/components/models/ShippingQuoteField";
+import DatePicker from "@/components/ui/DatePicker";
+import { formatRangeDay } from "@/components/ui/DateRangePicker";
 import { mediaService } from "@/services/resourceRegistry";
 import { extractApiError } from "@/services/api";
 import { useLanguage } from "@/services/i18n";
@@ -176,6 +179,8 @@ export const FormModal: React.FC<FormModalProps> = ({
   });
   // Which image field the Media library picker is open for (Select button).
   const [pickerField, setPickerField] = useState<string | null>(null);
+  // Which date field the single-date picker popup is open for.
+  const [dateField, setDateField] = useState<string | null>(null);
   // "Set image" cropper target: the field being edited, the image it
   // opens on, and whether it was launched from inside the media picker
   // (then applying also confirms the cropped image as the pick).
@@ -258,11 +263,15 @@ export const FormModal: React.FC<FormModalProps> = ({
         setPickerField(null);
         return;
       }
+      if (dateField) {
+        setDateField(null);
+        return;
+      }
       onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [isOpen, cropTarget, pickerField, onClose]);
+  }, [isOpen, cropTarget, pickerField, dateField, onClose]);
 
   // A file chosen for an image field. Square-crop fields (profile
   // avatars) do NOT upload yet: the cropper opens on the local file
@@ -336,6 +345,17 @@ export const FormModal: React.FC<FormModalProps> = ({
   // Change handler for standard input fields
   const handleFieldChange = (fieldName: string, value: any) => {
     setFormData((prev) => setNestedValue(prev, fieldName, value));
+  };
+
+  // A date field's current value as an ISO day string (or null) — the
+  // same normalization the old native <input type="date"> applied on
+  // render, shared by the field's trigger and the picker popup.
+  const dateFieldIso = (name: string): string | null => {
+    const v = getNestedValue(formData, name);
+    if (!v) return null;
+    return typeof v === "string"
+      ? v.split("T")[0]
+      : new Date(v).toISOString().split("T")[0];
   };
 
   // Tag helper functions
@@ -489,26 +509,33 @@ export const FormModal: React.FC<FormModalProps> = ({
           </div>
         );
 
-      case "date":
+      case "date": {
+        // House custom date input: a trigger in the form inputs' own
+        // style opens the shared single-date calendar popup
+        // (DatePicker); only its Apply commits, as an ISO day string
+        // byte-identical to the old native input's value.
+        const isoValue = dateFieldIso(field.name) || "";
         return (
           <div key={field.name} className={colClass}>
             <label className="font-bold text-[var(--text)] block mb-1 text-xs">
               {t(field.label)} {field.required && <span className="text-red-500">*</span>}
             </label>
-            <input
-              type="date"
-              required={field.required}
+            <button
+              type="button"
               disabled={field.disabled}
-              value={
-                rawValue
-                  ? typeof rawValue === "string"
-                    ? rawValue.split("T")[0]
-                    : new Date(rawValue).toISOString().split("T")[0]
-                  : ""
-              }
-              onChange={(e) => handleFieldChange(field.name, e.target.value)}
-              className="w-full px-3 py-2 bg-[var(--surface-muted)] border border-[var(--border)] rounded-xl outline-none text-xs text-[var(--text)] focus:border-[var(--primary)] transition-colors"
-            />
+              onClick={() => setDateField(field.name)}
+              data-testid={`date-field-${field.name}`}
+              className="flex w-full items-center justify-between px-3 py-2 bg-[var(--surface-muted)] border border-[var(--border)] rounded-xl outline-none text-xs text-[var(--text)] focus:border-[var(--primary)] transition-colors disabled:opacity-50"
+            >
+              <span className={isoValue ? "" : "text-[var(--text-muted)]"}>
+                {isoValue
+                  ? formatRangeDay(isoValue)
+                  : field.placeholder
+                    ? t(field.placeholder)
+                    : "01 01 2026"}
+              </span>
+              <Calendar className="h-3.5 w-3.5 shrink-0 text-[var(--text-muted)]" />
+            </button>
             {field.helperText && (
               <span className="text-[10px] text-[var(--text-muted)] mt-0.5 block">
                 {t(field.helperText)}
@@ -516,6 +543,7 @@ export const FormModal: React.FC<FormModalProps> = ({
             )}
           </div>
         );
+      }
 
       case "select":
         if (field.disableOnEdit && formMode === "edit") {
@@ -1113,6 +1141,24 @@ export const FormModal: React.FC<FormModalProps> = ({
             });
           }
         }}
+      />
+
+      {/* Single-date calendar popup for date fields (coupon Valid
+          From / Valid Until) — the house DatePicker; only its Apply
+          commits the ISO day string to the field. */}
+      <DatePicker
+        open={dateField !== null}
+        value={dateField ? dateFieldIso(dateField) : null}
+        title={
+          dateField
+            ? t(fields.find((f) => f.name === dateField)?.label || "Date")
+            : undefined
+        }
+        onApply={(iso) => {
+          if (dateField) handleFieldChange(dateField, iso);
+          setDateField(null);
+        }}
+        onClose={() => setDateField(null)}
       />
 
       {/* "Set image" cropper — opened from a field's pencil or from the

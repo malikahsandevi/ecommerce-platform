@@ -18,6 +18,7 @@ import {
   FolderTree,
 } from "lucide-react";
 import Button from "@/components/ui/Button";
+import Select from "@/components/ui/Select";
 import { useBackdropClose } from "@/hooks/useBackdropClose";
 import { mediaService, purposeFromAssetUrl } from "@/services/resourceRegistry";
 import { useLanguage } from "@/services/i18n";
@@ -1091,15 +1092,19 @@ const MediaHandlerModal: React.FC<MediaHandlerModalProps> = ({
                 <label className="block text-xs mb-1 text-[var(--text-soft)]">
                   {t("Status")}
                 </label>
-                <select
+                <Select
                   value={currentItem.status || "published"}
-                  onChange={(e) => handleInputChange("status", e.target.value)}
-                  className="w-full rounded-md px-3 py-1.5 text-xs focus:outline-none bg-[var(--surface)] border border-[var(--border)] text-[var(--text)] focus:border-[var(--primary)]"
-                >
-                  <option value="published">{t("Published")}</option>
-                  <option value="draft">{t("Draft")}</option>
-                  <option value="archived">{t("Archived")}</option>
-                </select>
+                  options={[
+                    { value: "published", label: t("Published") },
+                    { value: "draft", label: t("Draft") },
+                    { value: "archived", label: t("Archived") },
+                  ]}
+                  onChange={(val) => handleInputChange("status", val)}
+                  variant="outline"
+                  size="sm"
+                  fullWidth
+                  triggerClassName="px-3 py-1.5 rounded-md font-normal"
+                />
               </div>
             </div>
           </div>
