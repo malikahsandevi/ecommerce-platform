@@ -106,6 +106,14 @@ export interface FormField {
     resource: string;
   };
   /**
+   * Select fields only: plain text shown inside the open dropdown
+   * when the option list is empty and no `createNew` action is
+   * attached — form guidance, e.g. a dependent picker whose parent
+   * choice has no entries yet (the product form's Sub Category
+   * field when the chosen main has no subcategories).
+   */
+  emptyText?: string;
+  /**
    * "subcategories" fields only: the record's own subcategories,
    * attached by the page and rendered read-only inside the edit
    * popup (categories — a main category's edit form shows its subs;
@@ -599,7 +607,13 @@ export const FormModal: React.FC<FormModalProps> = ({
               variant="outline"
               size="md"
               disabled={field.disabled}
-              emptyText={field.createNew ? t(field.createNew.emptyMessage) : undefined}
+              emptyText={
+                field.createNew
+                  ? t(field.createNew.emptyMessage)
+                  : field.emptyText
+                    ? t(field.emptyText)
+                    : undefined
+              }
               emptyActionLabel={field.createNew ? t(field.createNew.buttonLabel) : undefined}
               onEmptyAction={
                 field.createNew ? () => handleCreateNew(field.createNew!) : undefined

@@ -54,6 +54,7 @@ function withDynamicOptions(
   options: EntityOptions,
   optionsLoaded: boolean,
   t: (key: string) => string,
+  formData?: ItemFormData,
 ): FormField[] {
   return fields.map((field) => {
     switch (field.name) {
@@ -68,12 +69,39 @@ function withDynamicOptions(
             }
           : field;
       case "category":
+        // Product form only (the "category" field name is unique to
+        // it): Category is the MAIN-category picker in Ahsan's
+        // two-field design — top-level categories only; the stored
+        // value rides on the dependent Sub Category field below.
+        if (options.mainCategoryOptions) {
+          if (options.mainCategoryOptions.length) {
+            return { ...field, options: options.mainCategoryOptions };
+          }
+          // Mains list loaded empty: only a store with NO categories
+          // at all gets the create-new offer; a store whose categories
+          // are all subcategories honestly shows the empty picker.
+          if (
+            optionsLoaded &&
+            Array.isArray(options.categoryOptions) &&
+            options.categoryOptions.length === 0
+          ) {
+            return {
+              ...field,
+              createNew: {
+                emptyMessage: t("No categories yet"),
+                buttonLabel: t("Create New Category"),
+                path: "/categories",
+                resource: "categories",
+              },
+            };
+          }
+          return { ...field, options: options.mainCategoryOptions };
+        }
         if (options.categoryOptions?.length) {
           return { ...field, options: options.categoryOptions };
         }
         // Loaded and genuinely empty: offer to create the first category
-        // instead of leaving a dead dropdown (product form only — the
-        // "category" field name is unique to it).
+        // instead of leaving a dead dropdown.
         if (
           optionsLoaded &&
           Array.isArray(options.categoryOptions) &&
@@ -90,6 +118,33 @@ function withDynamicOptions(
           };
         }
         return field;
+      case "subCategory": {
+        // The dependent picker: a chosen main narrows the list to
+        // that main's subcategories; no main → every subcategory.
+        // A chosen main with no subs shows a plain empty state in
+        // the dropdown (form guidance, not a toast).
+        const mainId = String(formData?.category || "");
+        if (mainId && options.subCategoryOptionsByParent) {
+          const subs = options.subCategoryOptionsByParent[mainId] || [];
+          return {
+            ...field,
+            options: subs,
+            ...(subs.length === 0 && optionsLoaded
+              ? { emptyText: "This category has no sub categories." }
+              : {}),
+          };
+        }
+        if (options.subCategoryOptions) {
+          return {
+            ...field,
+            options: options.subCategoryOptions,
+            ...(options.subCategoryOptions.length === 0 && optionsLoaded
+              ? { emptyText: "No sub categories yet." }
+              : {}),
+          };
+        }
+        return field;
+      }
       case "brand":
         if (options.brandOptions?.length) {
           // Brand is optional (the schema does not require it): a
@@ -612,7 +667,7 @@ const PageLayout: React.FC = () => {
   const formFields = useMemo(() => {
     // Not every route config declares form fields (media uses its own modal).
     const base = (currentConfig as { formFields?: FormField[] }).formFields || [];
-    const withOptions = withDynamicOptions(base, options, optionsLoaded, t);
+    const withOptions = withDynamicOptions(base, options, optionsLoaded, t, formData);
     // Only products need the vendor picker.
     const routed =
       Route.toLowerCase() === "products"
@@ -682,8 +737,50 @@ const PageLayout: React.FC = () => {
     formMode,
     selectedRawRow,
     items,
+    formData,
     t,
   ]);
+
+  // Products only (Ahsan's two-field category design): the Category
+  // (main) and Sub Category pickers lean on each other — picking a
+  // subcategory pulls its main category in with it; changing the main
+  // category clears a subcategory that belongs to another main. The
+  // logic rides on the FormModal's setFormData wire so the modal
+  // itself stays generic; every other page passes state through
+  // untouched.
+  const formDataSetter = useCallback<
+    React.Dispatch<React.SetStateAction<ItemFormData>>
+  >(
+    (action) => {
+      setFormData((prev) => {
+        const next =
+          typeof action === "function"
+            ? (action as (prevState: ItemFormData) => ItemFormData)(prev)
+            : action;
+        if (!isProductsPage || !next || typeof next !== "object") return next;
+        const parentById = options.subCategoryParentById || {};
+        const prevSub = String(prev?.subCategory || "");
+        const nextSub = String(next.subCategory || "");
+        const prevMain = String(prev?.category || "");
+        const nextMain = String(next.category || "");
+        if (nextSub && nextSub !== prevSub) {
+          // A subcategory was picked → its main category follows.
+          const parent = parentById[nextSub];
+          if (parent && parent !== nextMain) return { ...next, category: parent };
+        } else if (
+          nextMain !== prevMain &&
+          nextSub &&
+          parentById[nextSub] &&
+          parentById[nextSub] !== nextMain
+        ) {
+          // The main changed → a foreign subcategory cannot stay.
+          return { ...next, subCategory: "" };
+        }
+        return next;
+      });
+    },
+    [isProductsPage, options.subCategoryParentById],
+  );
 
   // Static fallbacks declared in the route configs, read through one shape so
   // the union of config types does not fight the props.
@@ -1573,7 +1670,7 @@ const PageLayout: React.FC = () => {
           formMode={formMode}
           itemTypeLabel={t(Route)}
           formData={formData}
-          setFormData={setFormData}
+          setFormData={formDataSetter}
           handleSave={handleSaveItem}
           fields={formFields}
           categoryOptions={options.categoryOptions || configOptions.categoryOptions || []}

@@ -1725,4 +1725,10 @@ export const T_X18: Dict = {
   "No subcategories": { ur: "کوئی ذیلی زمرے نہیں", ar: "لا توجد فئات فرعية", hi: "कोई उप श्रेणी नहीं", bn: "কোনো সাব ক্যাটাগরি নেই", es: "Sin subcategorías", fr: "Aucune sous-catégorie", de: "Keine Unterkategorien", tr: "Alt kategori yok", zh: "暂无子类别" },
 };
 
-export const T: Dict = { ...T_CORE, ...T_SET1, ...T_SET2, ...T_SET3, ...T_DASH, ...T_CRUD, ...T_MEDIA, ...T_FORM, ...T_X1, ...T_X2, ...T_CFG1, ...T_CFG2, ...T_X3, ...T_PALETTE, ...T_UROLE, ...T_X4, ...T_X5, ...T_X6, ...T_X7, ...T_X8, ...T_X9, ...T_X10, ...T_X11, ...T_X12, ...T_X13, ...T_X14, ...T_X15, ...T_X16, ...T_X17, ...T_X18 };
+export const T_X19: Dict = {
+  "Products can only be added to a sub category.": { ur: "پروڈکٹ صرف ذیلی کیٹیگری میں شامل کی جا سکتی ہے۔", ar: "لا يمكن إضافة منتج إلا إلى فئة فرعية.", hi: "उत्पाद केवल उप श्रेणी में ही जोड़ा जा सकता है।", bn: "পণ্য শুধুমাত্র সাব ক্যাটাগরিতেই যোগ করা যাবে।", es: "Los productos solo se pueden añadir a una subcategoría.", fr: "Les produits ne peuvent être ajoutés qu'à une sous-catégorie.", de: "Produkte können nur zu einer Unterkategorie hinzugefügt werden.", tr: "Ürünler yalnızca bir alt kategoriye eklenebilir.", zh: "产品只能添加到子分类。" },
+  "This category has no sub categories.": { ur: "اس کیٹیگری کی کوئی ذیلی کیٹیگری نہیں ہے۔", ar: "لا توجد فئات فرعية لهذه الفئة.", hi: "इस श्रेणी की कोई उप श्रेणी नहीं है।", bn: "এই ক্যাটাগরির কোনো সাব ক্যাটাগরি নেই।", es: "Esta categoría no tiene subcategorías.", fr: "Cette catégorie n'a aucune sous-catégorie.", de: "Diese Kategorie hat keine Unterkategorien.", tr: "Bu kategorinin alt kategorisi yok.", zh: "此分类没有子分类。" },
+  "No sub categories yet.": { ur: "ابھی کوئی ذیلی کیٹیگری نہیں ہے۔", ar: "لا توجد فئات فرعية بعد.", hi: "अभी कोई उप श्रेणी नहीं है।", bn: "এখনও কোনো সাব ক্যাটাগরি নেই।", es: "Aún no hay subcategorías.", fr: "Aucune sous-catégorie pour le moment.", de: "Noch keine Unterkategorien.", tr: "Henüz alt kategori yok.", zh: "暂无子分类。" },
+};
+
+export const T: Dict = { ...T_CORE, ...T_SET1, ...T_SET2, ...T_SET3, ...T_DASH, ...T_CRUD, ...T_MEDIA, ...T_FORM, ...T_X1, ...T_X2, ...T_CFG1, ...T_CFG2, ...T_X3, ...T_PALETTE, ...T_UROLE, ...T_X4, ...T_X5, ...T_X6, ...T_X7, ...T_X8, ...T_X9, ...T_X10, ...T_X11, ...T_X12, ...T_X13, ...T_X14, ...T_X15, ...T_X16, ...T_X17, ...T_X18, ...T_X19 };

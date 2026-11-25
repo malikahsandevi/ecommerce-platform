@@ -30,7 +30,14 @@ export interface Product {
   costPrice?: number;
   stock: number;
   lowStockThreshold?: number;
-  category: string | { _id?: string; name?: string };
+  category:
+    | string
+    | {
+        _id?: string;
+        name?: string;
+        /** The category's own parent id (populated docs carry the raw ref). */
+        parent?: string | { _id?: string } | null;
+      };
   brand?: string | { _id?: string; name?: string };
   /** Mirror of the main gallery image's URL (kept by the API). */
   image?: string;
@@ -200,13 +207,21 @@ export const productConfig = {
     })),
   }),
 
-  // Map Data for FormModal (Add/Edit Mode)
+  // Map Data for FormModal (Add/Edit Mode). The form carries TWO
+  // category fields (Ahsan's design): `category` is the MAIN
+  // category, `subCategory` the dependent subcategory whose id is
+  // what actually gets stored. Edit pre-fill splits the product's
+  // stored category accordingly: a subcategory's product fills Main
+  // with its parent and Sub with itself; a product filed directly
+  // under a main (grandfathered) fills Main with that category and
+  // leaves Sub empty.
   mapFormData: (product?: Product) => {
     if (!product) {
       return {
         name: "",
         sku: "",
         category: "",
+        subCategory: "",
         brand: "",
         status: "published",
         price: 0,
@@ -223,10 +238,16 @@ export const productConfig = {
       };
     }
 
+    const storedCategoryId = referenceId(product.category);
+    const storedParentId =
+      product.category && typeof product.category === "object"
+        ? referenceId(product.category.parent as Reference)
+        : "";
     return {
       name: product.name || "",
       sku: product.sku || "",
-      category: referenceId(product.category),
+      category: storedParentId || storedCategoryId,
+      subCategory: storedParentId ? storedCategoryId : "",
       brand: referenceId(product.brand),
       status: product.status || "draft",
       price: product.price ?? 0,
@@ -353,6 +374,17 @@ export const productConfig = {
     {
       name: "category",
       label: "Category",
+      type: "select",
+      required: true,
+      colSpan: 1,
+      section: "Basic Information",
+    },
+    {
+      // Dependent picker (Ahsan's design): with no main chosen it
+      // lists every subcategory; with a main chosen, only that
+      // main's subs. The chosen sub's id is the stored category.
+      name: "subCategory",
+      label: "Sub Category",
       type: "select",
       required: true,
       colSpan: 1,

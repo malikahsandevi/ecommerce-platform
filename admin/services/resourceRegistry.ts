@@ -98,6 +98,17 @@ export function effectiveMediaAlt(media: any): string {
 function transformProductPayload(data: any) {
   const payload = { ...data };
 
+  // The product form's two pickers (Ahsan's design): Category holds
+  // the MAIN category, Sub Category the dependent subcategory — the
+  // stored value is the SUBcategory's id alone. An empty Sub Category
+  // (editing a product filed directly under a main before the
+  // sub-only rule) leaves `category` exactly as the form sent it, and
+  // the backend's grandfathering lets that save through.
+  if ('subCategory' in payload) {
+    if (payload.subCategory) payload.category = payload.subCategory;
+    delete payload.subCategory;
+  }
+
   if (Array.isArray(payload.images)) {
     // The gallery from the product form's media manager — send the
     // canonical entry shape; the backend enforces the 7-image cap, the
@@ -463,6 +474,52 @@ export function getResourceService(pathname: string): ResourceService | null {
         }));
       };
 
+      // The product form's two pickers (Ahsan's design): Category
+      // selects a MAIN category; Sub Category is dependent — every
+      // subcategory (full-path labels, tree order) when no main is
+      // chosen, only the chosen main's subs otherwise. Built from the
+      // same records as the hierarchical options, plus the parent
+      // lookup the form's dependency behaviour (auto-fill / clear)
+      // runs on.
+      const categoryPickerData = (
+        records: Array<{
+          _id: string;
+          code?: string;
+          name: string;
+          parent?: string | { _id?: string } | null;
+        }>,
+      ) => {
+        const parentIdOf = (record: (typeof records)[number]): string => {
+          const parent = record.parent;
+          if (!parent) return "";
+          return typeof parent === "string" ? parent : String(parent._id || "");
+        };
+        const subCategoryParentById: Record<string, string> = {};
+        records.forEach((record) => {
+          const pid = parentIdOf(record);
+          if (pid) subCategoryParentById[String(record._id)] = pid;
+        });
+        const subCategoryOptions = hierarchicalCategoryOptions(records).filter(
+          (option) => subCategoryParentById[String(option.value)],
+        );
+        const subCategoryOptionsByParent: Record<string, { label: string; value: string }[]> = {};
+        subCategoryOptions.forEach((option) => {
+          const pid = subCategoryParentById[String(option.value)];
+          (subCategoryOptionsByParent[pid] ||= []).push(option);
+        });
+        return {
+          mainCategoryOptions: records
+            .filter((record) => !parentIdOf(record))
+            .map((record) => ({
+              label: entityLabel(record, record.name),
+              value: record._id,
+            })),
+          subCategoryOptions,
+          subCategoryOptionsByParent,
+          subCategoryParentById,
+        };
+      };
+
       if (apiEndpoint === 'products' || apiEndpoint === 'categories') {
         const [categoriesResponse, brandsResponse] = await Promise.all([
           apiClient.get('/categories'),
@@ -473,11 +530,11 @@ export function getResourceService(pathname: string): ResourceService | null {
         // dropdowns used to offer deactivated entries too, so a product
         // could silently end up filed under an inactive category/brand.
         const isEnabled = (record: { isActive?: boolean }) => record.isActive !== false;
+        const activeCategories = (categoriesResponse.data || []).filter(isEnabled);
 
         return {
-          categoryOptions: hierarchicalCategoryOptions(
-            (categoriesResponse.data || []).filter(isEnabled),
-          ),
+          categoryOptions: hierarchicalCategoryOptions(activeCategories),
+          ...categoryPickerData(activeCategories),
           brandOptions: (brandsResponse.data || [])
             .filter(isEnabled)
             .map((brand: { _id: string; code?: string; name: string }) => ({
