@@ -8,6 +8,7 @@ const { sendError, translateError } = require('../utils/apiError');
 const { getJwtSecret, getJwtSignSecret } = require('../utils/credentials');
 const { resolveCoupon } = require('../utils/coupon');
 const { getShippingConfig, computeShippingCharge, shipmentBlock } = require('../utils/shipping');
+const { paletteById, resolvePaletteId } = require('../config/palettes');
 
 // PUBLIC storefront endpoints. These never re-implement business
 // rules: order placement goes through the SAME createOrder the admin
@@ -82,11 +83,41 @@ const PUBLISHED = { status: 'published', ...NOT_DELETED };
 // document (credentials, integrations, payment secrets) is exposed.
 // @route   GET /api/storefront/config
 // @access  Public
+// ── Storefront appearance ──────────────────────────────────────────
+// The theme the ADMIN keeps (Settings → Appearance): ONE palette
+// colours the admin panel and this storefront together. The public
+// config serves the resolved palette id, the resolved mode and the
+// palette's own colour values (from backend/config/palettes.js — the
+// single source the admin mirrors), so the storefront never keeps a
+// colour copy that can drift. Mode resolution mirrors the admin's:
+// the universal mode field wins, then the legacy theme field
+// (Dark/Light), else "system" (the client picks via its OS setting,
+// using colorsDark/colorsLight below).
+const resolveStorefrontAppearance = (appearance) => {
+    const palette = paletteById(resolvePaletteId(appearance));
+    let mode = 'system';
+    if (appearance && (appearance.mode === 'dark' || appearance.mode === 'light')) {
+        mode = appearance.mode;
+    } else if (appearance && appearance.theme === 'Dark') {
+        mode = 'dark';
+    } else if (appearance && appearance.theme === 'Light') {
+        mode = 'light';
+    }
+    return {
+        palette: palette.id,
+        mode,
+        colors: { ...(mode === 'light' ? palette.light : palette.dark) },
+        colorsDark: { ...palette.dark },
+        colorsLight: { ...palette.light },
+    };
+};
+
 const getStoreConfig = async (req, res) => {
     try {
-        const settings = await Setting.findOne().sort({ createdAt: 1 }).select('general paymentMethods').lean();
+        const settings = await Setting.findOne().sort({ createdAt: 1 }).select('general paymentMethods appearance').lean();
         const general = settings?.general || {};
         res.json({
+            appearance: resolveStorefrontAppearance(settings?.appearance),
             storeName: general.storeName || '',
             tagline: general.storeTagline || '',
             logo: general.logo || '',
