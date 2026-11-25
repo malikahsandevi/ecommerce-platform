@@ -12,6 +12,7 @@ const {
     getShippingOptions,
     quoteCart,
     placeOrder,
+    createStripeSession,
     trackOrder,
     submitReview,
     requireCustomer,
@@ -64,6 +65,10 @@ router.get('/categories', getCatalogCategories);
 router.get('/shipping-options', getShippingOptions);
 router.post('/quote', quoteCart);
 router.post('/orders', placeOrder);
+// Online card payment: opens a Stripe Checkout session for a placed
+// order whose method is the Stripe entry (amount/identity server-side
+// only; the webhook in routes/payments.js settles it to Paid).
+router.post('/orders/:id/stripe-session', createStripeSession);
 router.post('/track', trackOrder);
 router.post('/reviews', submitReview);
 

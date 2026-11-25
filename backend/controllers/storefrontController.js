@@ -9,6 +9,7 @@ const { getJwtSecret, getJwtSignSecret } = require('../utils/credentials');
 const { resolveCoupon } = require('../utils/coupon');
 const { getShippingConfig, computeShippingCharge, shipmentBlock } = require('../utils/shipping');
 const { paletteById, resolvePaletteId } = require('../config/palettes');
+const { resolveStripeCheckout, isStripePaymentMethod, createCheckoutSession } = require('../utils/stripePay');
 
 // PUBLIC storefront endpoints. These never re-implement business
 // rules: order placement goes through the SAME createOrder the admin
@@ -129,6 +130,11 @@ const getStoreConfig = async (req, res) => {
             paymentMethods: (settings?.paymentMethods || [])
                 .filter((method) => method && method.enabled !== false && method.name)
                 .map((method) => ({ name: method.name, description: method.description || '' })),
+            // A single boolean: can the "Stripe" method actually take
+            // a card right now (active Stripe entry + secret key in
+            // Settings → Payments)? No keys or entry details — just
+            // whether the checkout may offer the redirect at all.
+            stripePayAvailable: (await resolveStripeCheckout()) !== null,
         });
     } catch (error) {
         sendError(res, error, 500);
@@ -526,6 +532,82 @@ const placeOrder = async (req, res) => {
     }
 };
 
+// The storefront's own origin, for the payment return URLs Stripe
+// requires to be absolute. The shopper's browser calls this API
+// cross-origin, so its Origin (or Referer) IS the storefront; the
+// STOREFRONT_URL env is a last-resort fallback. Anything that does
+// not parse as http(s) is ignored.
+const storefrontOrigin = (req) => {
+    const candidates = [req.headers.origin, req.headers.referer, process.env.STOREFRONT_URL];
+    for (const candidate of candidates) {
+        if (!candidate) continue;
+        try {
+            const url = new URL(String(candidate));
+            if (url.protocol === 'http:' || url.protocol === 'https:') return url.origin;
+        } catch {
+            // Not a URL — try the next candidate.
+        }
+    }
+    return '';
+};
+
+// @desc    Start Stripe Checkout for an already-placed storefront
+//          order: creates the hosted-page session and returns its
+//          URL for the browser to redirect to. Amount, currency and
+//          identity come ONLY from the stored order — the client
+//          names the order, never a price.
+// @route   POST /api/storefront/orders/:id/stripe-session
+// @access  Public
+const createStripeSession = async (req, res) => {
+    try {
+        const { id } = req.params;
+        if (!/^[a-f0-9]{24}$/i.test(String(id || ''))) {
+            return res.status(404).json({ message: 'Order not found.' });
+        }
+        const order = await Order.findOne({ _id: id, ...NOT_DELETED });
+        if (!order) return res.status(404).json({ message: 'Order not found.' });
+        if (order.paymentStatus === 'paid') {
+            return res.status(400).json({ message: 'This order is already paid.' });
+        }
+        if (order.status === 'cancelled') {
+            return res.status(400).json({ message: 'This order was cancelled.' });
+        }
+        if (!isStripePaymentMethod(order.paymentMethod)) {
+            return res.status(400).json({ message: 'This order was not placed with online card payment.' });
+        }
+        const stripe = await resolveStripeCheckout();
+        if (!stripe) {
+            return res.status(503).json({ message: 'Online card payment is not available right now.' });
+        }
+        if (!(Number(order.total) > 0)) {
+            return res.status(400).json({ message: 'This order has no amount to pay.' });
+        }
+        const origin = storefrontOrigin(req);
+        if (!origin) {
+            return res.status(400).json({ message: 'The store address for returning from payment could not be determined.' });
+        }
+        const settings = await Setting.findOne().sort({ createdAt: 1 }).select('general').lean();
+        const currency = settings?.general?.currency || 'USD';
+
+        let session;
+        try {
+            session = await createCheckoutSession({ config: stripe, order, currency, origin });
+        } catch {
+            // The real Stripe reason was logged in the util; the
+            // shopper gets one clean sentence and the order simply
+            // stays placed + unpaid.
+            return res.status(502).json({ message: 'Online payment could not be started — your order is placed but unpaid.' });
+        }
+        // The session id becomes the order's paymentId — the first
+        // key the webhook matcher tries for checkout.session.completed.
+        order.paymentId = session.id;
+        await order.save();
+        return res.json({ url: session.url });
+    } catch (error) {
+        return sendError(res, error, 500);
+    }
+};
+
 // @desc    Track an order without an account: order number + the
 //          email the order was placed with. Both must match — the
 //          answer never confirms which one was wrong.
@@ -891,6 +973,7 @@ module.exports = {
     getShippingOptions,
     quoteCart,
     placeOrder,
+    createStripeSession,
     trackOrder,
     submitReview,
     requireCustomer,
