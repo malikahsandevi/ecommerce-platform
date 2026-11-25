@@ -15,6 +15,10 @@ import { CreateTable } from "@/components/models/CreateTable";
 import Pagination from "@/components/models/Pagination";
 import { DetailPanel } from "@/components/models/DetailPanel";
 import { CustomerProfileSections } from "@/components/models/CustomerProfileSections";
+import {
+  CategorySubcategoriesSection,
+  directSubcategories,
+} from "@/components/models/CategorySubcategories";
 import { OrderShipmentSection } from "@/components/models/OrderShipmentSection";
 import { trackingNumberPrompt } from "@/components/models/TrackingNumberPrompt";
 import type { Order } from "@/config/orderConfig";
@@ -513,22 +517,13 @@ const PageLayout: React.FC = () => {
   // Categories hierarchy tabs: the config declares the two tabs;
   // the list flow below (FilterBar → table → pagination, and the
   // export criteria) runs over the tab's scope only — Main = no
-  // parent, Sub = has a parent. Tab counts come from the full set.
+  // parent, Sub = has a parent. The tabs carry NO counts (Ahsan's
+  // order) — the main/sub numbers live in the first stats card.
   const hierarchyTabs = (
     currentConfig as unknown as {
       hierarchyTabs?: { id: string; label: string }[];
     }
   ).hierarchyTabs;
-  const categoryCounts = useMemo(() => {
-    if (!isCategoriesPage) return { main: 0, sub: 0 };
-    let main = 0;
-    let sub = 0;
-    items.forEach((item) => {
-      if (categoryRowParentId(item)) sub += 1;
-      else main += 1;
-    });
-    return { main, sub };
-  }, [items, isCategoriesPage]);
   const scopedItems = useMemo(() => {
     if (!isCategoriesPage || !hierarchyTabs) return items;
     return items.filter((item) =>
@@ -636,23 +631,47 @@ const PageLayout: React.FC = () => {
     const subContext = editing
       ? categoryRowParentId(editing) !== ""
       : categoryTab === "sub";
+    let fields: FormField[];
     if (!subContext) {
-      return routed.filter((field) => field.name !== "parentCategory");
+      fields = routed.filter((field) => field.name !== "parentCategory");
+    } else {
+      const banned = editing
+        ? categoryDescendantIds(String(editing._id || editing.id), items)
+        : new Set<string>();
+      if (editing) banned.add(String(editing._id || editing.id));
+      fields = routed.map((field) => {
+        if (field.name !== "parentCategory") return field;
+        return {
+          ...field,
+          required: true,
+          options: (field.options || []).filter(
+            (option) => option.value !== "" && !banned.has(String(option.value)),
+          ),
+        };
+      });
     }
-    const banned = editing
-      ? categoryDescendantIds(String(editing._id || editing.id), items)
-      : new Set<string>();
-    if (editing) banned.add(String(editing._id || editing.id));
-    return routed.map((field) => {
-      if (field.name !== "parentCategory") return field;
-      return {
-        ...field,
-        required: true,
-        options: (field.options || []).filter(
-          (option) => option.value !== "" && !banned.has(String(option.value)),
-        ),
-      };
-    });
+    // Edit popup (Ahsan's order): a category that HAS subcategories
+    // shows them as a read-only block inside its own edit form.
+    // The rows ride on the field itself (the shopping-profile
+    // pattern) — the block is display-only: nothing in it is
+    // editable and nothing about it is saved. No subs → no block.
+    if (editing) {
+      const subs = directSubcategories(String(editing._id || editing.id), items);
+      if (subs.length > 0) {
+        fields = [
+          ...fields,
+          {
+            name: "subcategoriesInfo",
+            label: "Sub Categories",
+            type: "subcategories",
+            colSpan: 4,
+            section: "Sub Categories",
+            subcategories: subs,
+          } as FormField,
+        ];
+      }
+    }
+    return fields;
   }, [
     currentConfig,
     options,
@@ -1388,7 +1407,6 @@ const PageLayout: React.FC = () => {
                   tablist={hierarchyTabs.map((tab) => ({
                     id: tab.id,
                     label: tab.label,
-                    count: tab.id === "sub" ? categoryCounts.sub : categoryCounts.main,
                   }))}
                   activeTab={categoryTab}
                   onTabChange={(tab) => setCategoryTab(tab === "sub" ? "sub" : "main")}
@@ -1484,7 +1502,20 @@ const PageLayout: React.FC = () => {
           editLabel={t("Edit {route}").replace("{route}", t(Route))}
           deleteLabel={t("Delete {route}").replace("{route}", t(Route))}
           extraSections={
-            isCustomersPage && selectedRawRow ? (
+            isCategoriesPage && selectedRawRow ? (
+              <CategorySubcategoriesSection
+                parentId={String(selectedRawRow._id || selectedRawRow.id)}
+                items={items}
+                onOpen={(id) => {
+                  // Same hand-off as a table-row click: the panel
+                  // re-points at the fresh row from the loaded set.
+                  const row = items.find(
+                    (item) => String(item._id || item.id) === id,
+                  );
+                  if (row) setSelectedRawRow(row);
+                }}
+              />
+            ) : isCustomersPage && selectedRawRow ? (
               <CustomerProfileSections
                 customerId={String(selectedRawRow._id || selectedRawRow.id)}
               />

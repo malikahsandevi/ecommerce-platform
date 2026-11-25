@@ -31,6 +31,10 @@ interface PageStatConfig {
   /** Optional numeric field to total up, plus how to label it. */
   amountField?: string;
   amountLabel?: string;
+  /** Card 1's sub-line becomes the hierarchy breakdown ("Main
+   *  Category n · Sub Category m") instead of "All records" —
+   *  counted over the full loaded set by parent presence. */
+  hierarchyBreakdown?: boolean;
   icon: LucideIcon;
 }
 
@@ -66,6 +70,7 @@ const PAGE_STATS: Record<string, PageStatConfig> = {
     liveLabel: "Active",
     pendingStatuses: ["inactive"],
     pendingLabel: "Inactive",
+    hierarchyBreakdown: true,
     icon: FolderTree,
   },
   coupons: {
@@ -161,6 +166,34 @@ export default function StatsGrid({ pageUrl, items = [], isLoading = false }: St
 
     const placeholder = isLoading ? "…" : undefined;
 
+    // Hierarchy breakdown for card 1 (categories — Ahsan's order):
+    // the total stays on top and the line under it names the main
+    // and sub counts instead of "All records". Counted over the
+    // FULL loaded set by parent presence (the list API populates
+    // the ref, so a parent is an object; a bare id string counts
+    // too) — main + sub always equals the total, and tab/filter
+    // state never reaches this component.
+    let hierarchyPeriod: string | null = null;
+    if (config.hierarchyBreakdown) {
+      let main = 0;
+      let sub = 0;
+      items.forEach((item) => {
+        const parent = item.parent as
+          | { _id?: unknown; id?: unknown }
+          | string
+          | null
+          | undefined;
+        const parentId = !parent
+          ? ""
+          : typeof parent === "object"
+            ? String(parent._id || parent.id || "")
+            : String(parent);
+        if (parentId) sub += 1;
+        else main += 1;
+      });
+      hierarchyPeriod = `${t("Main Category")} ${main} · ${t("Sub Category")} ${sub}`;
+    }
+
     const resourceName = `${pageUrl.charAt(0).toUpperCase()}${pageUrl.slice(1)}`;
     const cards: StatCardProps[] = [
       {
@@ -168,7 +201,7 @@ export default function StatsGrid({ pageUrl, items = [], isLoading = false }: St
         value: placeholder ?? total.toLocaleString(),
         change: "",
         isPositive: true,
-        period: t("All records"),
+        period: isLoading ? t("All records") : (hierarchyPeriod ?? t("All records")),
         icon: config.icon,
         theme: "blue",
       },

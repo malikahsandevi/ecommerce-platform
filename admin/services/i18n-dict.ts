@@ -1720,4 +1720,9 @@ export const T_X17: Dict = {
   "Parent category not found.": { ur: "والد کیٹیگری نہیں ملی۔", ar: "لم يتم العثور على الفئة الأصل.", hi: "मूल श्रेणी नहीं मिली।", bn: "প্যারেন্ট ক্যাটাগরি পাওয়া যায়নি।", es: "Categoría padre no encontrada.", fr: "Catégorie parente introuvable.", de: "Übergeordnete Kategorie nicht gefunden.", tr: "Üst kategori bulunamadı.", zh: "未找到父级分类。" },
 };
 
-export const T: Dict = { ...T_CORE, ...T_SET1, ...T_SET2, ...T_SET3, ...T_DASH, ...T_CRUD, ...T_MEDIA, ...T_FORM, ...T_X1, ...T_X2, ...T_CFG1, ...T_CFG2, ...T_X3, ...T_PALETTE, ...T_UROLE, ...T_X4, ...T_X5, ...T_X6, ...T_X7, ...T_X8, ...T_X9, ...T_X10, ...T_X11, ...T_X12, ...T_X13, ...T_X14, ...T_X15, ...T_X16, ...T_X17 };
+export const T_X18: Dict = {
+  "Sub Category": { ur: "ذیلی زمرہ", ar: "الفئة الفرعية", hi: "उप श्रेणी", bn: "সাব ক্যাটাগরি", es: "Subcategoría", fr: "Sous-catégorie", de: "Unterkategorie", tr: "Alt Kategori", zh: "子类别" },
+  "No subcategories": { ur: "کوئی ذیلی زمرے نہیں", ar: "لا توجد فئات فرعية", hi: "कोई उप श्रेणी नहीं", bn: "কোনো সাব ক্যাটাগরি নেই", es: "Sin subcategorías", fr: "Aucune sous-catégorie", de: "Keine Unterkategorien", tr: "Alt kategori yok", zh: "暂无子类别" },
+};
+
+export const T: Dict = { ...T_CORE, ...T_SET1, ...T_SET2, ...T_SET3, ...T_DASH, ...T_CRUD, ...T_MEDIA, ...T_FORM, ...T_X1, ...T_X2, ...T_CFG1, ...T_CFG2, ...T_X3, ...T_PALETTE, ...T_UROLE, ...T_X4, ...T_X5, ...T_X6, ...T_X7, ...T_X8, ...T_X9, ...T_X10, ...T_X11, ...T_X12, ...T_X13, ...T_X14, ...T_X15, ...T_X16, ...T_X17, ...T_X18 };

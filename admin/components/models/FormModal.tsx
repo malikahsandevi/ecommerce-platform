@@ -22,6 +22,7 @@ import ProductMediaManager, {
   GalleryImage,
 } from "@/components/models/ProductMediaManager";
 import CustomerShoppingProfile from "@/components/models/CustomerShoppingProfile";
+import { CategorySubcategoryList } from "@/components/models/CategorySubcategories";
 import CouponApplyField from "@/components/models/CouponApplyField";
 import OrderItemsField from "@/components/models/OrderItemsField";
 import ShippingQuoteField from "@/components/models/ShippingQuoteField";
@@ -48,6 +49,7 @@ export type FormFieldType =
   | "image"
   | "media-gallery"
   | "shopping-profile"
+  | "subcategories"
   | "order-items"
   | "coupon"
   | "shipping-quote";
@@ -103,6 +105,14 @@ export interface FormField {
     path: string;
     resource: string;
   };
+  /**
+   * "subcategories" fields only: the record's own subcategories,
+   * attached by the page and rendered read-only inside the edit
+   * popup (categories — a main category's edit form shows its subs;
+   * managing them stays in their own forms). The field's formData
+   * value is never read or saved.
+   */
+  subcategories?: import("@/components/models/CategorySubcategories").SubcategoryRow[];
 }
 
 export interface ItemFormData {
@@ -1029,6 +1039,21 @@ export const FormModal: React.FC<FormModalProps> = ({
                 {t(field.helperText)}
               </span>
             )}
+          </div>
+        );
+      }
+
+      case "subcategories": {
+        // The category edit popup's read-only block (Ahsan's order):
+        // the record's own subcategories — thumbnails + names +
+        // counts — shown inside its edit form. The page attaches
+        // the rows to the field; with none, the field renders
+        // nothing at all.
+        const rows = field.subcategories || [];
+        if (rows.length === 0) return null;
+        return (
+          <div key={field.name} className={colClass}>
+            <CategorySubcategoryList rows={rows} />
           </div>
         );
       }
