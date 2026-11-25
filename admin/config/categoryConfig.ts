@@ -15,6 +15,8 @@ export interface Category {
   sortOrder?: number;
   /** Real usage count attached by GET /categories. */
   productsCount?: number;
+  /** Direct subcategory count attached by GET /categories. */
+  subcategoriesCount?: number;
   createdAt?: string;
 }
 
@@ -84,13 +86,17 @@ export const categoryConfig = {
   // Search Fields
   searchFields: ["name", "slug", "description", "code"],
 
-  // Table Column Labels
+  // Table Column Labels — the Main tab carries NO Products column
+  // (Ahsan's model: Main → Sub → Product — products live in
+  // subcategories); in its place each main shows how many
+  // subcategories it has. The Sub tab keeps its Products column
+  // (subColumnHeaders below).
   columnHeaders: {
     _id: "ID",
     name: "Name",
     slug: "Slug",
     sortOrder: "Sort",
-    productsCount: "Products",
+    subcategoriesCount: "Sub Categories",
     status: "Status",
   },
 
@@ -128,12 +134,18 @@ export const categoryConfig = {
         : "",
     slug: category.slug,
     sortOrder: category.sortOrder ?? 0,
-    // Real count attached by the API (products actually using this category).
+    // Real counts attached by the API (products actually using this
+    // category; the category's direct subcategories).
     productsCount: category.productsCount ?? 0,
+    subcategoriesCount: category.subcategoriesCount ?? 0,
     status: category.status || (category.isActive === false ? "inactive" : "active"),
   }),
 
-  // Map Data for DetailPanel Component
+  // Map Data for DetailPanel Component. The usage stat follows
+  // Ahsan's model (Main → Sub → Product): a MAIN category's stat is
+  // its subcategory count (its subs and their product counts are
+  // listed in the panel's Sub Categories section); a SUBcategory
+  // keeps its Products count, because products live there.
   mapDetailData: (category: Category) => ({
     id: category._id,
     code: category.code,
@@ -145,7 +157,9 @@ export const categoryConfig = {
       Slug: category.slug,
       "Parent Category": parentLabel(category),
       "Sort Order": category.sortOrder ?? 0,
-      Products: category.productsCount ?? 0,
+      ...(category.parent
+        ? { Products: category.productsCount ?? 0 }
+        : { "Sub Categories": category.subcategoriesCount ?? 0 }),
       "Created Date": category.createdAt
         ? new Date(category.createdAt).toLocaleDateString()
         : "—",

@@ -82,7 +82,12 @@ const validateCategoryParent = async (req, res, next) => {
 
 
 // List categories with the real number of products in each one, so the
-// panel can show usage instead of a stored (stale) counter.
+// panel can show usage instead of a stored (stale) counter. Each row
+// also carries its DIRECT subcategory count, counted over the whole
+// live set right here — the panel's Main tab shows it in place of a
+// products column (Ahsan's model: Main → Sub → Product), and a
+// server-side count stays correct whatever page of rows the panel
+// happens to display.
 router.get('/', async (req, res) => {
     try {
         const [categories, counts] = await Promise.all([
@@ -96,9 +101,16 @@ router.get('/', async (req, res) => {
         ]);
         await Category.withCodes(categories);
         const byId = new Map(counts.map((entry) => [String(entry._id), entry.count]));
+        const subCounts = new Map();
+        categories.forEach((category) => {
+            if (!category.parent) return;
+            const parentId = String(category.parent._id || category.parent);
+            subCounts.set(parentId, (subCounts.get(parentId) || 0) + 1);
+        });
         res.json(categories.map((category) => ({
             ...category,
             productsCount: byId.get(String(category._id)) || 0,
+            subcategoriesCount: subCounts.get(String(category._id)) || 0,
         })));
     } catch (error) {
         sendError(res, error, 500);
