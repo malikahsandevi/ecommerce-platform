@@ -125,6 +125,16 @@ const getStoreConfig = async (req, res) => {
         const paymentMethods = (settings?.paymentMethods || [])
             .filter((method) => method && method.enabled !== false && method.name)
             .map((method) => ({ name: method.name, description: method.description || '' }));
+        // Cash on Delivery is the system's built-in method — the
+        // order flow, the COD auto-paid-on-delivery automation and
+        // the checkout copy all assume it exists — so it is ALWAYS
+        // offered: appended when the stored list doesn't already
+        // carry it (a stored entry is served as-is, never
+        // duplicated), and ahead of the auto-offered Stripe method
+        // below so it stays the checkout's default selection.
+        if (!paymentMethods.some((method) => String(method.name).trim().toLowerCase() === 'cash on delivery')) {
+            paymentMethods.push({ name: 'Cash on Delivery', description: '' });
+        }
         // The legacy paymentMethods array is no longer editable in the
         // admin (the services system replaced it), so a configured
         // Stripe gateway offers its method itself — appended only when
