@@ -104,6 +104,16 @@ export interface FormField {
     buttonLabel: string;
     path: string;
     resource: string;
+    /** Sub-category creates only: the parent category to pre-set in
+     *  the target page's create form (the product form's Sub Category
+     *  field passes the chosen main; absent = a general create). */
+    parentId?: string;
+    /** When set, the handoff also carries this form's current data so
+     *  the target page can send the user back after the create saves,
+     *  with the new record filled into this field (the product form's
+     *  Sub Category field — see the createNewFlow handling in the
+     *  [pages] shell). */
+    returnField?: string;
   };
   /**
    * Select fields only: plain text shown inside the open dropdown
@@ -355,6 +365,28 @@ export const FormModal: React.FC<FormModalProps> = ({
       sessionStorage.setItem("openCreate", createNew.resource);
     } catch {
       /* navigation still happens; the create form just won't auto-open */
+    }
+    // Return-carrying handoffs (the product form's Sub Category field):
+    // stash this form's current state so that, once the new record is
+    // created on the target page, the shell can bring the user back
+    // here with the record already selected in the dependent field.
+    if (createNew.returnField) {
+      try {
+        sessionStorage.setItem(
+          "createNewFlow",
+          JSON.stringify({
+            resource: createNew.resource,
+            parentId: createNew.parentId || "",
+            returnPath: window.location.pathname,
+            returnField: createNew.returnField,
+            formMode,
+            formData,
+            ts: Date.now(),
+          }),
+        );
+      } catch {
+        /* the plain handoff above still applies */
+      }
     }
     onClose();
     router.push(createNew.path);

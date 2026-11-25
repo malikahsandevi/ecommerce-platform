@@ -121,8 +121,11 @@ function withDynamicOptions(
       case "subCategory": {
         // The dependent picker: a chosen main narrows the list to
         // that main's subcategories; no main → every subcategory.
-        // A chosen main with no subs shows a plain empty state in
-        // the dropdown (form guidance, not a toast).
+        // An EMPTY list offers "+ Create New" (Ahsan's order): the
+        // same create-new handoff the Category/Brand fields use,
+        // extended with the chosen main as the pre-set parent and a
+        // return trip that selects the new subcategory here. The
+        // guidance sentence stays as the empty state's message.
         const mainId = String(formData?.category || "");
         if (mainId && options.subCategoryOptionsByParent) {
           const subs = options.subCategoryOptionsByParent[mainId] || [];
@@ -130,7 +133,16 @@ function withDynamicOptions(
             ...field,
             options: subs,
             ...(subs.length === 0 && optionsLoaded
-              ? { emptyText: "This category has no sub categories." }
+              ? {
+                  createNew: {
+                    emptyMessage: "This category has no sub categories.",
+                    buttonLabel: t("Create New Sub Category"),
+                    path: "/categories",
+                    resource: "categories",
+                    parentId: mainId,
+                    returnField: "subCategory",
+                  },
+                }
               : {}),
           };
         }
@@ -139,7 +151,15 @@ function withDynamicOptions(
             ...field,
             options: options.subCategoryOptions,
             ...(options.subCategoryOptions.length === 0 && optionsLoaded
-              ? { emptyText: "No sub categories yet." }
+              ? {
+                  createNew: {
+                    emptyMessage: "No sub categories yet.",
+                    buttonLabel: t("Create New Sub Category"),
+                    path: "/categories",
+                    resource: "categories",
+                    returnField: "subCategory",
+                  },
+                }
               : {}),
           };
         }
@@ -1051,6 +1071,31 @@ const PageLayout: React.FC = () => {
                   .replace("{password}", generated)
               : t("{route} created successfully.").replace("{route}", t(Route)),
           );
+          // Return trip for a create-new handoff (product form's Sub
+          // Category → Create New): record what was created and go
+          // back — the origin page reopens its form with the new
+          // record selected. Best-effort: the create itself stands
+          // either way.
+          if (isCategoriesPage) {
+            try {
+              const raw = sessionStorage.getItem("createNewFlow");
+              const flow = raw ? JSON.parse(raw) : null;
+              const recordId = String(
+                (created as { _id?: string; id?: string } | null)?._id ||
+                  (created as { _id?: string; id?: string } | null)?.id ||
+                  "",
+              );
+              if (flow?.resource === "categories" && flow?.returnPath && recordId) {
+                sessionStorage.setItem(
+                  "createNewResult",
+                  JSON.stringify({ recordId, ts: Date.now() }),
+                );
+                router.push(String(flow.returnPath));
+              }
+            } catch {
+              /* the create stands; only the return trip is skipped */
+            }
+          }
         } else {
           const id = selectedRawRow?._id || selectedRawRow?.id;
           if (!service.update || !id) {
@@ -1072,7 +1117,7 @@ const PageLayout: React.FC = () => {
         setIsSaving(false);
       }
     },
-    [service, formMode, formData, selectedRawRow, Route, reload, isOrdersPage, isCategoriesPage, categoryTab],
+    [service, formMode, formData, selectedRawRow, Route, reload, isOrdersPage, isCategoriesPage, categoryTab, router],
   );
 
   const handleDeleteItem = useCallback(
@@ -1429,10 +1474,109 @@ const PageLayout: React.FC = () => {
     }
     // Mirror the Add button's visibility rule — no create rights, no form.
     if (!canCreate || isMediaPage) return;
+    // Return-carrying handoff (product form → Sub Category → Create
+    // New): the flow context pre-sets this create as a SUB-category
+    // create — with the product form's chosen main as the parent, or
+    // general (no parent pre-set) when it carries none. The flow
+    // itself stays stored; the save handler and the return trip use it.
+    let flow: { resource?: string; parentId?: string } | null = null;
+    try {
+      const raw = sessionStorage.getItem("createNewFlow");
+      if (raw) flow = JSON.parse(raw);
+    } catch {
+      flow = null;
+    }
     setFormMode("add");
-    setFormData(buildInitialFormValues());
+    if (flow && flow.resource === segment && isCategoriesPage) {
+      setCategoryTab("sub");
+      setFormData({
+        ...buildInitialFormValues(),
+        parentCategory: flow.parentId || "",
+      });
+    } else {
+      setFormData(buildInitialFormValues());
+    }
     setIsModalOpen(true);
-  }, [pathname, canCreate, isMediaPage, buildInitialFormValues]);
+  }, [pathname, canCreate, isMediaPage, buildInitialFormValues, isCategoriesPage]);
+
+  // --- "Create New" return trip ---------------------------------------
+  // The product form's Sub Category "Create New" handoff comes back
+  // here once the subcategory exists on the Categories page: reopen
+  // the form exactly as the user left it, with the new record selected
+  // in the dependent field and the Main field synced to its parent (a
+  // record created as a MAIN instead lands in the Main field). A flow
+  // whose create never completed is cleared, never acted on.
+  useEffect(() => {
+    let flow: {
+      returnPath?: string;
+      returnField?: string;
+      formMode?: string;
+      formData?: ItemFormData;
+      ts?: number;
+    } | null = null;
+    let result: { recordId?: string; ts?: number } | null = null;
+    try {
+      const f = sessionStorage.getItem("createNewFlow");
+      const r = sessionStorage.getItem("createNewResult");
+      if (f) flow = JSON.parse(f);
+      if (r) result = JSON.parse(r);
+    } catch {
+      flow = null;
+      result = null;
+    }
+    if (!flow) return;
+    if (flow.returnPath !== pathname) return;
+    if (!result) {
+      // No create completed (yet): only a STALE flow is cleared here —
+      // a fresh one may still be mid-trip on the Categories page.
+      if (Date.now() - (flow.ts || 0) > 10 * 60 * 1000) {
+        try {
+          sessionStorage.removeItem("createNewFlow");
+        } catch {
+          /* ignore */
+        }
+      }
+      return;
+    }
+    if (!optionsLoaded) return; // wait for the fresh option lists
+    if (flow.formMode === "edit" && items.length === 0) return; // wait for the list
+    try {
+      sessionStorage.removeItem("createNewFlow");
+      sessionStorage.removeItem("createNewResult");
+    } catch {
+      /* ignore */
+    }
+    const fresh =
+      Date.now() - Math.max(flow.ts || 0, result.ts || 0) < 10 * 60 * 1000;
+    if (!fresh || !result.recordId) return;
+    const recordId = String(result.recordId);
+    const parentById = options.subCategoryParentById || {};
+    let patch: ItemFormData = {};
+    if (Object.prototype.hasOwnProperty.call(parentById, recordId)) {
+      patch = { subCategory: recordId, category: parentById[recordId] };
+    } else if (
+      (options.mainCategoryOptions || []).some(
+        (option) => String(option.value) === recordId,
+      )
+    ) {
+      patch = { category: recordId, subCategory: "" };
+    }
+    if (flow.formMode === "edit") {
+      const rowId = String(
+        (flow.formData as { _id?: string; id?: string } | undefined)?._id ||
+          (flow.formData as { _id?: string; id?: string } | undefined)?.id ||
+          "",
+      );
+      const row = items.find((item) => String(item._id || item.id) === rowId);
+      if (!row) return; // the record vanished meanwhile — no reopen
+      setSelectedRawRow(row);
+      setFormMode("edit");
+    } else {
+      setFormMode("add");
+    }
+    setFormData({ ...(flow.formData || {}), ...patch });
+    setIsModalOpen(true);
+  }, [pathname, optionsLoaded, options, items]);
 
   // Click-through hand-off (TopBar bell / messages, global search,
   // dashboard cards): the target record is handed over via

@@ -1740,4 +1740,8 @@ export const T_X20: Dict = {
   "Deleted": { ur: "حذف شدہ", ar: "محذوف", hi: "हटाया गया", bn: "মুছে ফেলা", es: "Eliminado", fr: "Supprimé", de: "Gelöscht", tr: "Silindi", zh: "已删除" },
 };
 
-export const T: Dict = { ...T_CORE, ...T_SET1, ...T_SET2, ...T_SET3, ...T_DASH, ...T_CRUD, ...T_MEDIA, ...T_FORM, ...T_X1, ...T_X2, ...T_CFG1, ...T_CFG2, ...T_X3, ...T_PALETTE, ...T_UROLE, ...T_X4, ...T_X5, ...T_X6, ...T_X7, ...T_X8, ...T_X9, ...T_X10, ...T_X11, ...T_X12, ...T_X13, ...T_X14, ...T_X15, ...T_X16, ...T_X17, ...T_X18, ...T_X19, ...T_X20 };
+export const T_X21: Dict = {
+  "Create New Sub Category": { ur: "نئی ذیلی کیٹیگری بنائیں", ar: "إنشاء فئة فرعية جديدة", hi: "नई उप श्रेणी बनाएं", bn: "নতুন সাব ক্যাটাগরি তৈরি করুন", es: "Crear nueva subcategoría", fr: "Créer une nouvelle sous-catégorie", de: "Neue Unterkategorie erstellen", tr: "Yeni Alt Kategori Oluştur", zh: "创建新子分类" },
+};
+
+export const T: Dict = { ...T_CORE, ...T_SET1, ...T_SET2, ...T_SET3, ...T_DASH, ...T_CRUD, ...T_MEDIA, ...T_FORM, ...T_X1, ...T_X2, ...T_CFG1, ...T_CFG2, ...T_X3, ...T_PALETTE, ...T_UROLE, ...T_X4, ...T_X5, ...T_X6, ...T_X7, ...T_X8, ...T_X9, ...T_X10, ...T_X11, ...T_X12, ...T_X13, ...T_X14, ...T_X15, ...T_X16, ...T_X17, ...T_X18, ...T_X19, ...T_X20, ...T_X21 };
