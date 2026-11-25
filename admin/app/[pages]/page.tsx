@@ -118,6 +118,23 @@ function withDynamicOptions(
           };
         }
         return field;
+      case "price": {
+        // Product form only (the field name is unique to it): the
+        // Sale Price helper line carries the LIVE discount readout —
+        // (compareAt − sale) / compareAt as a whole percent while the
+        // compare-at price beats the sale price, otherwise 0%. It
+        // recomputes on every keystroke (display only, no saving).
+        const sale = Number(formData?.price) || 0;
+        const compare = Number(formData?.comparePrice) || 0;
+        const pct =
+          compare > sale && sale > 0
+            ? Math.round(((compare - sale) / compare) * 100)
+            : 0;
+        return {
+          ...field,
+          helperSuffix: t("Discount: {pct}%").replace("{pct}", String(pct)),
+        };
+      }
       case "subCategory": {
         // The dependent picker: a chosen main narrows the list to
         // that main's subcategories; no main → every subcategory.

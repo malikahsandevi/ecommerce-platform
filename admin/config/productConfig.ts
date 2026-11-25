@@ -417,6 +417,9 @@ export const productConfig = {
       min: 0,
       step: 0.01,
       colSpan: 1,
+      // The shell appends the live discount readout (computed from
+      // the form's current sale/compare values) as the helper suffix.
+      helperText: "The price the customer pays.",
       section: "Pricing & Inventory",
     },
     {
@@ -436,6 +439,7 @@ export const productConfig = {
       min: 0,
       step: 0.01,
       colSpan: 1,
+      helperText: "Your own buying or making cost; never shown to customers.",
       section: "Pricing & Inventory",
     },
     {

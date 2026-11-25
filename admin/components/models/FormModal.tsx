@@ -91,6 +91,10 @@ export interface FormField {
   step?: number;
   rows?: number;
   helperText?: string;
+  /** Already-translated dynamic text appended to the helper line
+   *  (the product form's Sale Price carries the live discount readout
+   *  here — the page computes it from the form's current values). */
+  helperSuffix?: string;
   /**
    * For a select whose options come from another resource (Category,
    * Brand): when the loaded list is empty, the dropdown shows
@@ -554,6 +558,7 @@ export const FormModal: React.FC<FormModalProps> = ({
             {field.helperText && (
               <span className="text-[10px] text-[var(--text-muted)] mt-0.5 block">
                 {t(field.helperText)}
+                {field.helperSuffix ? <> {field.helperSuffix}</> : null}
               </span>
             )}
           </div>

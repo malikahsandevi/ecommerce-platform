@@ -1744,4 +1744,10 @@ export const T_X21: Dict = {
   "Create New Sub Category": { ur: "نئی ذیلی کیٹیگری بنائیں", ar: "إنشاء فئة فرعية جديدة", hi: "नई उप श्रेणी बनाएं", bn: "নতুন সাব ক্যাটাগরি তৈরি করুন", es: "Crear nueva subcategoría", fr: "Créer une nouvelle sous-catégorie", de: "Neue Unterkategorie erstellen", tr: "Yeni Alt Kategori Oluştur", zh: "创建新子分类" },
 };
 
-export const T: Dict = { ...T_CORE, ...T_SET1, ...T_SET2, ...T_SET3, ...T_DASH, ...T_CRUD, ...T_MEDIA, ...T_FORM, ...T_X1, ...T_X2, ...T_CFG1, ...T_CFG2, ...T_X3, ...T_PALETTE, ...T_UROLE, ...T_X4, ...T_X5, ...T_X6, ...T_X7, ...T_X8, ...T_X9, ...T_X10, ...T_X11, ...T_X12, ...T_X13, ...T_X14, ...T_X15, ...T_X16, ...T_X17, ...T_X18, ...T_X19, ...T_X20, ...T_X21 };
+export const T_X22: Dict = {
+  "The price the customer pays.": { ur: "وہ قیمت جو گاہک ادا کرتا ہے۔", ar: "السعر الذي يدفعه العميل.", hi: "वह कीमत जो ग्राहक चुकाता है।", bn: "গ্রাহক যে দাম দেয়।", es: "El precio que paga el cliente.", fr: "Le prix que paie le client.", de: "Der Preis, den der Kunde zahlt.", tr: "Müşterinin ödediği fiyat.", zh: "客户支付的价格。" },
+  "Your own buying or making cost; never shown to customers.": { ur: "آپ کی اپنی خرید یا تیاری کی لاگت؛ گاہکوں کو کبھی نہیں دکھائی جاتی۔", ar: "تكلفة الشراء أو التصنيع الخاصة بك؛ لا تُعرض للعملاء أبدًا.", hi: "आपकी अपनी खरीद या निर्माण लागत; ग्राहकों को कभी नहीं दिखाई जाती।", bn: "আপনার নিজের কেনা বা তৈরির খরচ; গ্রাহকদের কখনও দেখানো হয় না।", es: "Tu propio coste de compra o fabricación; nunca se muestra a los clientes.", fr: "Votre propre coût d'achat ou de fabrication ; jamais montré aux clients.", de: "Ihre eigenen Einkaufs- oder Herstellungskosten; werden Kunden nie gezeigt.", tr: "Kendi alış veya üretim maliyetiniz; müşterilere asla gösterilmez.", zh: "您自己的采购或制作成本；从不向客户展示。" },
+  "Discount: {pct}%": { ur: "رعایت: {pct}%", ar: "الخصم: {pct}%", hi: "छूट: {pct}%", bn: "ছাড়: {pct}%", es: "Descuento: {pct}%", fr: "Remise : {pct}%", de: "Rabatt: {pct}%", tr: "İndirim: %{pct}", zh: "折扣：{pct}%" },
+};
+
+export const T: Dict = { ...T_CORE, ...T_SET1, ...T_SET2, ...T_SET3, ...T_DASH, ...T_CRUD, ...T_MEDIA, ...T_FORM, ...T_X1, ...T_X2, ...T_CFG1, ...T_CFG2, ...T_X3, ...T_PALETTE, ...T_UROLE, ...T_X4, ...T_X5, ...T_X6, ...T_X7, ...T_X8, ...T_X9, ...T_X10, ...T_X11, ...T_X12, ...T_X13, ...T_X14, ...T_X15, ...T_X16, ...T_X17, ...T_X18, ...T_X19, ...T_X20, ...T_X21, ...T_X22 };
