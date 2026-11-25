@@ -250,6 +250,26 @@ const getCatalogCategories = async (req, res) => {
             ]),
         ]);
         const byId = new Map(counts.map((entry) => [String(entry._id), entry.count]));
+        // Counts follow the catalog's own rule: a category page lists
+        // its descendants' products too (products live in subcategories
+        // under the Main → Sub → Product model), so each category's
+        // count is its whole subtree's published total — a main
+        // category must not read 0 while its page shows products.
+        const childrenOf = new Map();
+        for (const category of categories) {
+            const parentId = category.parent ? String(category.parent._id) : null;
+            if (parentId) {
+                if (!childrenOf.has(parentId)) childrenOf.set(parentId, []);
+                childrenOf.get(parentId).push(String(category._id));
+            }
+        }
+        const subtreeCount = (id, seen = new Set()) => {
+            if (seen.has(id)) return 0;
+            seen.add(id);
+            let total = byId.get(id) || 0;
+            for (const childId of childrenOf.get(id) || []) total += subtreeCount(childId, seen);
+            return total;
+        };
         res.json(categories.map((category) => ({
             _id: category._id,
             name: category.name,
@@ -259,7 +279,7 @@ const getCatalogCategories = async (req, res) => {
             parent: category.parent
                 ? { _id: category.parent._id, name: category.parent.name, slug: category.parent.slug }
                 : null,
-            productsCount: byId.get(String(category._id)) || 0,
+            productsCount: subtreeCount(String(category._id)),
         })));
     } catch (error) {
         sendError(res, error, 500);
@@ -658,6 +678,8 @@ const trackOrder = async (req, res) => {
             discount: order.discount,
             shippingCost: order.shippingCost,
             total: order.total,
+            shippingMethodName: order.shippingMethodName || '',
+            deliveryOptionName: order.deliveryOptionName || '',
             createdAt: order.createdAt,
             city: order.shippingAddress?.city || '',
             country: order.shippingAddress?.country || '',
@@ -949,6 +971,8 @@ const shapeMyOrder = async (order, config) => {
         subtotal: obj.subtotal,
         discount: obj.discount,
         shippingCost: obj.shippingCost,
+        shippingMethodName: obj.shippingMethodName || '',
+        deliveryOptionName: obj.deliveryOptionName || '',
         total: obj.total,
         shippingAddress: obj.shippingAddress || null,
         createdAt: obj.createdAt,
