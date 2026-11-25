@@ -22,6 +22,7 @@ import RecentOrdersCard, { DashboardOrder } from "@/components/layout/RecentOrde
 import ActivityCard, { ActivityLogItem } from "@/components/layout/ActivityCard";
 import PermissionNotice from "@/components/ui/PermissionNotice";
 import TopBar from "@/components/ui/TopBar";
+import ViewSiteTag from "@/components/ui/ViewSiteTag";
 import {
   DashboardLoadError,
   getDashboardAllData,
@@ -351,6 +352,7 @@ export default function Page() {
         <TopBar
           title={t("Dashboard")}
           subtitle={t("Manage inventory and store items")}
+          titleAddon={<ViewSiteTag />}
           user={{
             name: user?.name || "Admin",
             role: user?.role || "Admin",
@@ -371,6 +373,7 @@ export default function Page() {
       <TopBar
         title={t("Dashboard")}
         subtitle={t("Manage inventory and store items")}
+        titleAddon={<ViewSiteTag />}
         user={{
           name: user?.name || "Admin",
           role: user?.role || "Admin",

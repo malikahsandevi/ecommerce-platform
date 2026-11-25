@@ -52,6 +52,9 @@ export interface MessageItem {
 interface TopBarProps<T extends SearchableEntityRecord> {
   title: string;
   subtitle?: string;
+  /** Optional element rendered inline beside the title (e.g. the
+   *  Dashboard's "View Site" tag). Only pages that pass it show it. */
+  titleAddon?: React.ReactNode;
   user: UserProfile;
   notifications?: NotificationItem[];
   messages?: MessageItem[];
@@ -75,6 +78,7 @@ function initialsOf(name: string): string {
 export const TopBar = <T extends SearchableEntityRecord>({
   title,
   subtitle,
+  titleAddon,
   user,
   searchPlaceholder,
   globalSearch = false,
@@ -209,9 +213,12 @@ export const TopBar = <T extends SearchableEntityRecord>({
             <span className="text-(--primary)">{title}</span>
           </nav>
         )}
-        <h1 className="text-md md:text-xl font-bold text-(--text) leading-tight truncate">
-          {title}
-        </h1>
+        <div className="flex items-center gap-2 min-w-0">
+          <h1 className="text-md md:text-xl font-bold text-(--text) leading-tight truncate min-w-0">
+            {title}
+          </h1>
+          {titleAddon}
+        </div>
         {subtitle && (
           <p className="text-[10px] text-(--text-muted) font-medium w-auto truncate">
             {subtitle}
