@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { getProducts, getProductById, createProduct, updateProduct, deleteProduct } = require('../controllers/productController');
-const { makeDeleteImpactHandler } = require('../controllers/deleteImpactController');
+const { makeDeleteImpactHandler, makeCascadeDeleteHandler } = require('../controllers/deleteImpactController');
 const { Product } = require('../models');
 const { protect } = require('../middleware/auth');
 const { requirePermission } = require('../middleware/permissions');
@@ -9,6 +9,9 @@ const { requirePermission } = require('../middleware/permissions');
 
 // Delete-impact: the links the delete confirmation warns about.
 router.get('/:id/delete-impact', protect, requirePermission('Products', 'delete'), makeDeleteImpactHandler(Product, 'products'));
+
+// Delete All (Part 5): the record plus its containment cascade.
+router.post('/:id/cascade-delete', protect, requirePermission('Products', 'delete'), makeCascadeDeleteHandler(Product, 'products'));
 
 router.route('/')
     .get(getProducts)

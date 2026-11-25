@@ -38,21 +38,48 @@ export interface ConfirmDialogOptions {
    * confirm stays exactly as it was and is never blocked by it.
    */
   loadDetails?: () => Promise<string | null>;
+  /**
+   * Pre-composed detail lines, rendered exactly like a loadDetails
+   * result — for callers that must fetch the data BEFORE the dialog
+   * opens (the delete flow: the cascade counts decide whether the
+   * Delete All button exists at all).
+   */
+  detailsText?: string;
+  /**
+   * The third button (Part 5's Delete All): rendered between Cancel
+   * and the confirm button in a danger-outline style. Clicking it
+   * resolves the action dialog with "alt" — the caller orchestrates
+   * what follows (the cascade's second-step summary confirm).
+   */
+  altLabel?: string;
 }
+
+export type ConfirmActionResult = "cancel" | "confirm" | "alt";
 
 interface PendingRequest {
   options: ConfirmDialogOptions;
-  resolve: (value: boolean) => void;
+  resolve: (value: ConfirmActionResult) => void;
 }
 
 let enqueueRequest: ((request: PendingRequest) => void) | null = null;
 
 export function confirmDialog(options: ConfirmDialogOptions): Promise<boolean> {
+  return confirmActionDialog(options).then((result) => result === "confirm");
+}
+
+/**
+ * The same dialog, resolving WHICH action was taken — the delete
+ * flow's three-way form (Cancel / Delete / Delete All). Without a
+ * host it resolves "cancel" — the safe, nothing-happens answer.
+ */
+export function confirmActionDialog(
+  options: ConfirmDialogOptions,
+): Promise<ConfirmActionResult> {
   return new Promise((resolve) => {
     if (enqueueRequest) {
       enqueueRequest({ options, resolve });
     } else {
-      resolve(false);
+      resolve("cancel");
     }
   });
 }
@@ -165,7 +192,7 @@ export const ConfirmDialogHost: React.FC = () => {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [currentChoice, finishChoice]);
 
-  const finish = useCallback((value: boolean) => {
+  const finish = useCallback((value: ConfirmActionResult) => {
     setQueue((pending) => {
       const [head, ...rest] = pending;
       head?.resolve(value);
@@ -182,7 +209,7 @@ export const ConfirmDialogHost: React.FC = () => {
       setError("");
       try {
         await current.options.onConfirm();
-        finish(true);
+        finish("confirm");
       } catch (confirmError) {
         setBusy(false);
         setError(
@@ -193,12 +220,17 @@ export const ConfirmDialogHost: React.FC = () => {
       }
       return;
     }
-    finish(true);
+    finish("confirm");
   }, [current, busy, finish, t]);
 
   const handleCancel = useCallback(() => {
     if (busy) return;
-    finish(false);
+    finish("cancel");
+  }, [busy, finish]);
+
+  const handleAlt = useCallback(() => {
+    if (busy) return;
+    finish("alt");
   }, [busy, finish]);
 
   // Escape cancels a confirmation; in notice mode it acknowledges.
@@ -332,6 +364,11 @@ export const ConfirmDialogHost: React.FC = () => {
                 {details.text}
               </p>
             )}
+            {!details.text && options.detailsText && (
+              <p className="mt-2 whitespace-pre-line text-xs leading-relaxed font-medium text-[var(--text)]">
+                {options.detailsText}
+              </p>
+            )}
           </div>
         </div>
 
@@ -348,6 +385,17 @@ export const ConfirmDialogHost: React.FC = () => {
           {!options.notice && (
             <Button variant="ghost" size="md" onClick={handleCancel} disabled={busy}>
               {options.cancelLabel ?? t("Cancel")}
+            </Button>
+          )}
+          {!options.notice && options.altLabel && (
+            <Button
+              variant="outline"
+              size="md"
+              onClick={handleAlt}
+              disabled={busy}
+              className="border-red-500! text-red-500! hover:bg-red-500/10!"
+            >
+              {options.altLabel}
             </Button>
           )}
           <Button

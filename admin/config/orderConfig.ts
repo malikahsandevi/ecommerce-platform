@@ -1,6 +1,7 @@
 import { SelectOption, FormField } from "@/components/models/FormModal";
 import { Download, Plus, RefreshCcwDot } from "lucide-react";
 import { formatMoney } from "@/services/currency";
+import { readDeviceLanguage, translate } from "@/services/i18n";
 
 export interface OrderUser {
   _id?: string;
@@ -17,6 +18,10 @@ export interface OrderLineItem {
   price?: number;
   quantity?: number;
   image?: string;
+  /** Set by the admin order read (Part 5): the line's product is
+   *  soft-deleted or permanently gone — the detail marks the line
+   *  "Deleted" while the name snapshot keeps displaying. */
+  productDeleted?: boolean;
 }
 
 export interface OrderAddress {
@@ -213,7 +218,18 @@ export const orderConfig = {
     shortDescription: `Customer: ${customerName(order)}${customerEmail(order) ? ` (${customerEmail(order)})` : ""}`,
     attributes: {
       Items: (order.items || [])
-        .map((item) => `${item.name || "Product"} × ${item.quantity || 1}`)
+        .map((item) => {
+          // The line's name is the order-time snapshot (backfilled
+          // server-side for legacy lines); a permanently-gone product
+          // with no snapshot falls back to its stored id — the line
+          // never renders blank. A deleted product's line carries
+          // the [Deleted] marker beside the name (Part 5).
+          const name = item.name || (item.product ? String(item.product) : "Product");
+          const marker = item.productDeleted
+            ? ` [${translate(readDeviceLanguage(), "Deleted")}]`
+            : "";
+          return `${name} × ${item.quantity || 1}${marker}`;
+        })
         .join(", ") || "—",
       Subtotal: formatMoney(order.subtotal ?? 0, 2),
       Tax: formatMoney(order.tax ?? 0, 2),

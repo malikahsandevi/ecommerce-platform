@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { Brand, Product } = require('../models');
 const genericController = require('../controllers/genericController')(Brand);
-const { makeDeleteImpactHandler } = require('../controllers/deleteImpactController');
+const { makeDeleteImpactHandler, makeCascadeDeleteHandler } = require('../controllers/deleteImpactController');
 const { protect } = require('../middleware/auth');
 const { requirePermission } = require('../middleware/permissions');
 const { NOT_DELETED } = require('../utils/softDelete');
@@ -29,6 +29,9 @@ router.get('/', async (req, res) => {
 
 // Delete-impact: the links the delete confirmation warns about.
 router.get('/:id/delete-impact', protect, requirePermission('Brands', 'delete'), makeDeleteImpactHandler(Brand, 'brands'));
+
+// Delete All (Part 5): the record plus its containment cascade.
+router.post('/:id/cascade-delete', protect, requirePermission('Brands', 'delete'), makeCascadeDeleteHandler(Brand, 'brands'));
 
 router.route('/').post(protect, requirePermission('Brands', 'create'), genericController.create);
 router.route('/:id')

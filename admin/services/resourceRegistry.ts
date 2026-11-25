@@ -22,6 +22,10 @@ export interface ResourceService {
    *  GET /:id/delete-impact). Absent on the other modules. */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   deleteImpact?: (id: string) => Promise<any>;
+  /** Delete All (Part 5): POST /:id/cascade-delete — the record plus
+   *  its containment-linked records, server-computed and permission-
+   *  filtered. Present exactly where deleteImpact is. */
+  removeCascade?: (id: string) => Promise<any>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   loadOptions?: () => Promise<any>;
 }
@@ -402,6 +406,10 @@ export function getResourceService(pathname: string): ResourceService | null {
       ? {
           deleteImpact: async (id: string) => {
             const res = await apiClient.get(`/${apiEndpoint}/${id}/delete-impact`);
+            return res.data;
+          },
+          removeCascade: async (id: string) => {
+            const res = await apiClient.post(`/${apiEndpoint}/${id}/cascade-delete`);
             return res.data;
           },
         }

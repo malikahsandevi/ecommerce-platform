@@ -24,7 +24,7 @@ import { trackingNumberPrompt } from "@/components/models/TrackingNumberPrompt";
 import type { Order } from "@/config/orderConfig";
 import FormModal, { FormField, ItemFormData } from "@/components/models/FormModal";
 import MediaHandlerModal from "@/components/models/MediaHandler";
-import { confirmDialog } from "@/components/ui/ConfirmDialog";
+import { confirmActionDialog, confirmDialog, noticeDialog } from "@/components/ui/ConfirmDialog";
 import { toast } from "@/components/ui/Toast";
 
 import { getRouteConfigByPath } from "@/config";
@@ -1085,69 +1085,82 @@ const PageLayout: React.FC = () => {
       }
 
       // Delete-impact warnings (Ahsan's order): for the modules the
-      // backend serves impact for, the dialog fetches the record's
-      // live links while it is open and warns BEFORE the confirm —
-      // 'remove' links are detached by the delete, 'keep' links are
-      // history that stays. A failed fetch (or no links) falls back
-      // to the plain confirm, exactly as before.
-      const loadDetails = service.deleteImpact
-        ? async (): Promise<string | null> => {
-            try {
-              const impact = await service.deleteImpact!(id);
-              const links = (
-                (impact?.links || []) as Array<{
-                  label: string;
-                  singular: string;
-                  count: number;
-                  action: string;
-                }>
-              ).filter((entry) => entry && entry.count > 0);
-              if (!links.length) return null;
-              const joinList = (items: typeof links) => {
-                const parts = items.map(
-                  (entry) =>
-                    `${entry.count} ${entry.count === 1 ? entry.singular : entry.label}`,
-                );
-                if (parts.length === 1) return parts[0];
-                return `${parts.slice(0, -1).join(", ")} ${t("and")} ${parts[parts.length - 1]}`;
-              };
-              const lines: string[] = [];
-              const removeLinks = links.filter((entry) => entry.action === "remove");
-              const promoteLinks = links.filter((entry) => entry.action === "promote");
-              const keepLinks = links.filter((entry) => entry.action === "keep");
-              if (removeLinks.length) {
-                lines.push(
-                  t(
-                    "This record is used in {list}. Deleting it will remove it from those places.",
-                  ).replace("{list}", joinList(removeLinks)),
-                );
-              }
-              if (promoteLinks.length) {
-                lines.push(
-                  t("{list} will become main categories.").replace(
-                    "{list}",
-                    joinList(promoteLinks),
-                  ),
-                );
-              }
-              if (keepLinks.length) {
-                lines.push(
-                  t(
-                    "Used in {list} — those records keep their history and will not be changed.",
-                  ).replace("{list}", joinList(keepLinks)),
-                );
-              }
-              return lines.length ? lines.join("\n") : null;
-            } catch {
-              return null;
-            }
-          }
-        : undefined;
+      // backend serves impact for, the record's live links are
+      // warned BEFORE the confirm — 'remove' links are detached by
+      // the delete, 'keep' links are history that stays. Part 5: the
+      // impact is fetched BEFORE the dialog opens because its
+      // cascade counts decide whether the third button (Delete All)
+      // exists at all. A failed fetch (or no links) falls back to
+      // the plain two-button confirm, exactly as before.
+      type ImpactEntry = {
+        label: string;
+        singular: string;
+        count: number;
+        action?: string;
+        allowed?: boolean;
+      };
+      let impact: { links?: ImpactEntry[]; cascade?: ImpactEntry[] } | null = null;
+      if (service.deleteImpact) {
+        try {
+          impact = await service.deleteImpact(id);
+        } catch {
+          impact = null;
+        }
+      }
+      const links = (impact?.links || []).filter((entry) => entry && entry.count > 0);
+      const cascade = (impact?.cascade || []).filter((entry) => entry && entry.count > 0);
+      const allowedCascade = cascade.filter((entry) => entry.allowed);
+      const blockedCascade = cascade.filter((entry) => !entry.allowed);
+      const joinList = (items: ImpactEntry[]) => {
+        const parts = items.map(
+          (entry) => `${entry.count} ${entry.count === 1 ? entry.singular : entry.label}`,
+        );
+        if (parts.length === 1) return parts[0];
+        return `${parts.slice(0, -1).join(", ")} ${t("and")} ${parts[parts.length - 1]}`;
+      };
+      const lines: string[] = [];
+      const removeLinks = links.filter((entry) => entry.action === "remove");
+      const promoteLinks = links.filter((entry) => entry.action === "promote");
+      const keepLinks = links.filter((entry) => entry.action === "keep");
+      if (removeLinks.length) {
+        lines.push(
+          t(
+            "This record is used in {list}. Deleting it will remove it from those places.",
+          ).replace("{list}", joinList(removeLinks)),
+        );
+      }
+      if (promoteLinks.length) {
+        lines.push(
+          t("{list} will become main categories.").replace(
+            "{list}",
+            joinList(promoteLinks),
+          ),
+        );
+      }
+      if (keepLinks.length) {
+        lines.push(
+          t(
+            "Used in {list} — those records keep their history and will not be changed.",
+          ).replace("{list}", joinList(keepLinks)),
+        );
+      }
+      // Show, don't remove (Part 5): cascade records this role may
+      // not delete are named in the dialog and stay untouched.
+      if (blockedCascade.length) {
+        lines.push(
+          t("{list} will not be deleted — you don't have permission to delete them.").replace(
+            "{list}",
+            joinList(blockedCascade),
+          ),
+        );
+      }
+      const detailsText = lines.length ? lines.join("\n") : undefined;
 
       // The panel's own confirmation dialog — never the browser's
       // native confirm() (it showed the hosting domain and clashed
-      // with the design).
-      const confirmed = await confirmDialog({
+      // with the design). Delete All appears ONLY when the record
+      // has cascade-deletable linked records.
+      const result = await confirmActionDialog({
         title: t("Delete this {item}?").replace(
           "{item}",
           Route.replace(/s$/, "").toLowerCase(),
@@ -1155,9 +1168,49 @@ const PageLayout: React.FC = () => {
         message: t("It will move to Deleted Items in Settings and can be restored."),
         confirmLabel: t("Delete"),
         variant: "danger",
-        loadDetails,
+        detailsText,
+        altLabel: cascade.length ? t("Delete All") : undefined,
       });
-      if (!confirmed) {
+      if (result === "cancel") {
+        return;
+      }
+
+      if (result === "alt") {
+        // Nothing this role may cascade: the button showed with the
+        // notice (in the details above) instead of acting.
+        if (!allowedCascade.length) {
+          await noticeDialog({
+            message: t("You don't have permission to delete the linked records."),
+          });
+          return;
+        }
+        // Two-step confirm: the cascade never fires on one click —
+        // the summary names exactly what else will be deleted.
+        const step2 = await confirmDialog({
+          title: t("Delete All"),
+          message:
+            t("This will also delete: {list}.").replace(
+              "{list}",
+              joinList(allowedCascade),
+            ) +
+            " " +
+            t("It will move to Deleted Items in Settings and can be restored."),
+          confirmLabel: t("Delete All"),
+          variant: "danger",
+        });
+        if (!step2) {
+          return;
+        }
+        try {
+          await service.removeCascade!(id);
+          setSelectedRawRow(null);
+          toast.success(
+            t("{route} and its linked items deleted.").replace("{route}", t(Route)),
+          );
+          reload();
+        } catch (error) {
+          toast.error(extractApiError(error));
+        }
         return;
       }
 

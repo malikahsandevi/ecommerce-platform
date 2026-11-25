@@ -149,9 +149,38 @@ const logLowStockAlerts = async (items) => {
 // the list/detail rows, so both reads attach it the same way.
 const presentOrders = async (orders) => {
     const config = await getShippingConfig();
+    // Order-line product state (Part 5): a line keeps the product
+    // NAME snapshot taken at order time forever; this read adds
+    // whether that product is now deleted (soft-deleted or
+    // permanently gone) so the admin detail can mark the line, and
+    // backfills the name for legacy lines that predate the snapshot
+    // — resolved from the product record INCLUDING trashed records.
+    // A permanently-gone product with no snapshot leaves the name
+    // empty and the panel falls back to the stored product id.
+    const productIds = new Set();
+    for (const order of orders) {
+        for (const item of order.items || []) {
+            if (item.product) productIds.add(String(item.product));
+        }
+    }
+    const productById = new Map();
+    if (productIds.size) {
+        const products = await Product.find({ _id: { $in: [...productIds] } })
+            .select('name deletedAt')
+            .lean();
+        for (const product of products) productById.set(String(product._id), product);
+    }
     return orders.map((order) => {
         const obj = order.toObject ? order.toObject() : { ...order };
         obj.shipment = shipmentBlock(config, obj);
+        obj.items = (obj.items || []).map((item) => {
+            const product = item.product ? productById.get(String(item.product)) : undefined;
+            return {
+                ...item,
+                name: item.name || product?.name,
+                productDeleted: !product || Boolean(product.deletedAt),
+            };
+        });
         return obj;
     });
 };

@@ -823,6 +823,18 @@ const updateWishlist = async (req, res) => {
 
 const shapeMyOrder = async (order, config) => {
     const obj = typeof order.toObject === 'function' ? order.toObject() : { ...order };
+    // Item names ride the snapshot taken at order time; legacy lines
+    // that predate it resolve from the product record in ANY state
+    // (a deleted product still names the line — customers never see
+    // a "deleted" marker, the name simply keeps displaying).
+    const legacyIds = [...new Set(
+        (obj.items || []).filter((item) => !item.name && item.product).map((item) => String(item.product)),
+    )];
+    const legacyNames = new Map();
+    if (legacyIds.length) {
+        const products = await Product.find({ _id: { $in: legacyIds } }).select('name').lean();
+        for (const product of products) legacyNames.set(String(product._id), product.name);
+    }
     return {
         _id: obj._id,
         orderNumber: obj.orderNumber,
@@ -830,7 +842,8 @@ const shapeMyOrder = async (order, config) => {
         paymentStatus: obj.paymentStatus,
         paymentMethod: obj.paymentMethod,
         items: (obj.items || []).map((item) => ({
-            name: item.name, price: item.price, quantity: item.quantity, image: item.image || '',
+            name: item.name || legacyNames.get(String(item.product)) || '',
+            price: item.price, quantity: item.quantity, image: item.image || '',
         })),
         subtotal: obj.subtotal,
         discount: obj.discount,

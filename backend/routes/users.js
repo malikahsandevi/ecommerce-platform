@@ -9,7 +9,7 @@ const {
     resetUserTwoFactor,
     getUserProfile
 } = require('../controllers/userController');
-const { makeDeleteImpactHandler } = require('../controllers/deleteImpactController');
+const { makeDeleteImpactHandler, makeCascadeDeleteHandler } = require('../controllers/deleteImpactController');
 const { protect } = require('../middleware/auth');
 const { requireStaff } = require('../middleware/admin');
 const { requirePermission, requireAnyPermission } = require('../middleware/permissions');
@@ -78,6 +78,11 @@ const guardDelete = async (req, res, next) => {
 // 'keep' history) — behind the same role-aware guard as the delete
 // itself; staff accounts answer an empty impact (no block).
 router.get('/:id/delete-impact', guardDelete, makeDeleteImpactHandler(User, 'customers'));
+
+// Delete All for CUSTOMER records (Part 5): the customer plus their
+// reviews — behind the same guards as the delete itself (the save-
+// password gate self-skips for customer targets).
+router.post('/:id/cascade-delete', guardDelete, requireSavePasswordForUserDelete, makeCascadeDeleteHandler(User, 'customers'));
 
 router.route('/')
     .get(requireAnyPermission([['Users', 'view'], ['Customers', 'view']]), getUsers)

@@ -334,6 +334,7 @@ const restoreItem = async (req, res) => {
             categories: 'categories',
             brands: 'brands',
             products: 'products',
+            customers: 'customers',
         }[segment];
         const linkSnapshot = linkModule ? doc.get('deletedLinks') : undefined;
 

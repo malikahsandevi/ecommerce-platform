@@ -4,6 +4,7 @@ const Order = require('../models/Order');
 require('../models/Coupon');
 const { getAllRoleNames } = require('../utils/permissions');
 const { NOT_DELETED, applySoftDelete } = require('../utils/softDelete');
+const { detachForDelete } = require('../utils/deleteImpact');
 const { sendError } = require('../utils/apiError');
 
 const FAVORITE_CATEGORY_LIMIT = 3;
@@ -364,6 +365,14 @@ const deleteUser = async (req, res) => {
             return res.status(400).json({
                 message: "You can't remove the last Super Admin account."
             });
+        }
+
+        // Delete-impact: a customer leaves every coupon's user scope
+        // (snapshotted for restore). Orders and reviews are history —
+        // never touched. Staff accounts have no detachments.
+        if (target.role === 'Customer') {
+            const snapshot = await detachForDelete('customers', target);
+            if (snapshot) target.set('deletedLinks', snapshot);
         }
 
         applySoftDelete(User, target, req.user?._id);

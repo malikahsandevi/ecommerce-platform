@@ -45,13 +45,15 @@
 //     reviews by id alone (unlike product galleries, which match
 //     by mediaId OR URL). A restore re-inserts the id at its
 //     original positions unless the review references it again.
-const { NOT_DELETED } = require('./softDelete');
+const { NOT_DELETED, applySoftDelete } = require('./softDelete');
+const { roleHasPermission } = require('./permissions');
 const Product = require('../models/Product');
 const Category = require('../models/Category');
 const Brand = require('../models/Brand');
 const User = require('../models/User');
 const Order = require('../models/Order');
 const Review = require('../models/Review');
+const Coupon = require('../models/Coupon');
 
 const link = (key, label, singular, count, action) => ({ key, label, singular, count, action });
 const onlyCounted = (links) => links.filter((entry) => entry.count > 0);
@@ -112,10 +114,11 @@ const computeDeleteImpact = async (moduleKey, doc) => {
             ]);
         }
         case 'categories': {
-            const [products, subcategories, favoriteLists] = await Promise.all([
+            const [products, subcategories, favoriteLists, coupons] = await Promise.all([
                 Product.countDocuments({ category: doc._id, ...NOT_DELETED }),
                 Category.countDocuments({ parent: doc._id, ...NOT_DELETED }),
                 User.countDocuments({ favoriteCategories: doc._id, ...NOT_DELETED }),
+                Coupon.countDocuments({ applicableCategories: doc._id, ...NOT_DELETED }),
             ]);
             return onlyCounted([
                 link('products', 'products', 'product', products, 'remove'),
@@ -124,6 +127,7 @@ const computeDeleteImpact = async (moduleKey, doc) => {
                 // categories, and the dialog says exactly that.
                 link('subcategories', 'subcategories', 'subcategory', subcategories, 'promote'),
                 link('favoriteCategories', 'favorite category lists', 'favorite category list', favoriteLists, 'remove'),
+                link('coupons', 'coupons', 'coupon', coupons, 'remove'),
             ]);
         }
         case 'brands': {
@@ -131,7 +135,7 @@ const computeDeleteImpact = async (moduleKey, doc) => {
             return onlyCounted([link('products', 'products', 'product', products, 'remove')]);
         }
         case 'products': {
-            const [carts, favoriteUsers, likedUsers, wishlists, orders, reviews] =
+            const [carts, favoriteUsers, likedUsers, wishlists, orders, reviews, coupons] =
                 await Promise.all([
                     User.countDocuments({ 'cart.product': doc._id, ...NOT_DELETED }),
                     User.find({ favorites: doc._id, ...NOT_DELETED }).distinct('_id'),
@@ -139,6 +143,7 @@ const computeDeleteImpact = async (moduleKey, doc) => {
                     User.countDocuments({ wishlist: doc._id, ...NOT_DELETED }),
                     Order.countDocuments({ 'items.product': doc._id, ...NOT_DELETED }),
                     Review.countDocuments({ product: doc._id, ...NOT_DELETED }),
+                    Coupon.countDocuments({ applicableProducts: doc._id, ...NOT_DELETED }),
                 ]);
             // favorites + liked are one warning line ("favorites
             // lists") — a customer holding it in both counts once.
@@ -150,6 +155,7 @@ const computeDeleteImpact = async (moduleKey, doc) => {
                 link('carts', 'customer carts', 'customer cart', carts, 'remove'),
                 link('favorites', 'favorites lists', 'favorites list', favorites, 'remove'),
                 link('wishlists', 'wishlists', 'wishlist', wishlists, 'remove'),
+                link('coupons', 'coupons', 'coupon', coupons, 'remove'),
                 link('orders', 'orders', 'order', orders, 'keep'),
                 link('reviews', 'reviews', 'review', reviews, 'keep'),
             ]);
@@ -159,11 +165,13 @@ const computeDeleteImpact = async (moduleKey, doc) => {
             return onlyCounted([link('orders', 'orders', 'order', orders, 'keep')]);
         }
         case 'customers': {
-            const [orders, reviews] = await Promise.all([
+            const [orders, reviews, coupons] = await Promise.all([
                 Order.countDocuments({ user: doc._id, ...NOT_DELETED }),
                 Review.countDocuments({ user: doc._id, ...NOT_DELETED }),
+                Coupon.countDocuments({ applicableUsers: doc._id, ...NOT_DELETED }),
             ]);
             return onlyCounted([
+                link('coupons', 'coupons', 'coupon', coupons, 'remove'),
                 link('orders', 'orders', 'order', orders, 'keep'),
                 link('reviews', 'reviews', 'review', reviews, 'keep'),
             ]);
@@ -246,12 +254,13 @@ const detachMedia = async (media) => {
 };
 
 const detachCategory = async (category) => {
-    const [productIds, subcategoryIds, favoriteUserIds] = await Promise.all([
+    const [productIds, subcategoryIds, favoriteUserIds, couponIds] = await Promise.all([
         Product.find({ category: category._id, ...NOT_DELETED }).distinct('_id'),
         Category.find({ parent: category._id, ...NOT_DELETED }).distinct('_id'),
         User.find({ favoriteCategories: category._id, ...NOT_DELETED }).distinct('_id'),
+        Coupon.find({ applicableCategories: category._id, ...NOT_DELETED }).distinct('_id'),
     ]);
-    if (!productIds.length && !subcategoryIds.length && !favoriteUserIds.length) return null;
+    if (!productIds.length && !subcategoryIds.length && !favoriteUserIds.length && !couponIds.length) return null;
     if (productIds.length) {
         await Product.updateMany(
             { _id: { $in: productIds } },
@@ -270,10 +279,19 @@ const detachCategory = async (category) => {
             { $pull: { favoriteCategories: category._id } },
         );
     }
+    // Coupon scopes are a use, not history: the category leaves
+    // every coupon's applicableCategories (snapshot restores it).
+    if (couponIds.length) {
+        await Coupon.updateMany(
+            { _id: { $in: couponIds } },
+            { $pull: { applicableCategories: category._id } },
+        );
+    }
     return {
         products: productIds.map(String),
         subcategories: subcategoryIds.map(String),
         favoriteCategories: favoriteUserIds.map(String),
+        coupons: couponIds.map(String),
     };
 };
 
@@ -330,12 +348,36 @@ const detachProduct = async (product) => {
         if (changed) await user.save();
     }
 
+    // Coupon scopes: the product leaves every coupon's
+    // applicableProducts (snapshot restores it).
+    const couponIds = await Coupon.find({ applicableProducts: product._id, ...NOT_DELETED }).distinct('_id');
+    if (couponIds.length) {
+        snapshot.coupons = couponIds.map(String);
+        await Coupon.updateMany(
+            { _id: { $in: couponIds } },
+            { $pull: { applicableProducts: product._id } },
+        );
+    }
+
     return snapshot.cart.length ||
         snapshot.favorites.length ||
         snapshot.liked.length ||
-        snapshot.wishlist.length
+        snapshot.wishlist.length ||
+        snapshot.coupons?.length
         ? snapshot
         : null;
+};
+
+/** A customer's only detachable link is coupon scoping — their
+ *  orders and reviews are history and are never touched. */
+const detachCustomer = async (customer) => {
+    const couponIds = await Coupon.find({ applicableUsers: customer._id, ...NOT_DELETED }).distinct('_id');
+    if (!couponIds.length) return null;
+    await Coupon.updateMany(
+        { _id: { $in: couponIds } },
+        { $pull: { applicableUsers: customer._id } },
+    );
+    return { coupons: couponIds.map(String) };
 };
 
 /** Performs the module's detachments and returns the snapshot to
@@ -350,12 +392,25 @@ const detachForDelete = async (moduleKey, doc) => {
             return detachBrand(doc);
         case 'products':
             return detachProduct(doc);
+        case 'customers':
+            return detachCustomer(doc);
         default:
             return null;
     }
 };
 
 // ── Re-link (at restore time) ───────────────────────────────────────
+
+/** Coupon scopes regain an id only where it is not already back —
+ *  a coupon re-scoped by hand while the record was trashed is never
+ *  duplicated. */
+const relinkCouponScope = async (couponIds, field, id) => {
+    if (!couponIds?.length) return;
+    await Coupon.updateMany(
+        { _id: { $in: couponIds }, [field]: { $ne: id } },
+        { $push: { [field]: id } },
+    );
+};
 const relinkMedia = async (media, snapshot) => {
     for (const item of snapshot.products || []) {
         // eslint-disable-next-line no-await-in-loop
@@ -459,6 +514,7 @@ const relinkCategory = async (category, snapshot) => {
         // eslint-disable-next-line no-await-in-loop
         await user.save();
     }
+    await relinkCouponScope(snapshot.coupons, 'applicableCategories', category._id);
 };
 
 const relinkBrand = async (brand, snapshot) => {
@@ -494,11 +550,16 @@ const relinkProduct = async (product, snapshot) => {
             }
         }
     }
+    await relinkCouponScope(snapshot.coupons, 'applicableProducts', product._id);
+};
+
+const relinkCustomer = async (customer, snapshot) => {
+    await relinkCouponScope(snapshot.coupons, 'applicableUsers', customer._id);
 };
 
 /** Re-applies a snapshot taken by detachForDelete. Modules without
- *  detachments (coupons, customers, reviews, orders) never reach
- *  here — their links are history and were never removed. */
+ *  detachments (coupons, reviews, orders) never reach here — their
+ *  links are history and were never removed. */
 const relinkFromSnapshot = async (moduleKey, doc, snapshot) => {
     if (!snapshot || typeof snapshot !== 'object') return;
     switch (moduleKey) {
@@ -510,13 +571,151 @@ const relinkFromSnapshot = async (moduleKey, doc, snapshot) => {
             return relinkBrand(doc, snapshot);
         case 'products':
             return relinkProduct(doc, snapshot);
+        case 'customers':
+            return relinkCustomer(doc, snapshot);
         default:
             return undefined;
     }
+};
+
+// ── Delete All (cascade) ────────────────────────────────────────────
+// Ahsan's settled design (Part 5): the delete dialog's third button.
+// Delete All soft-deletes the record AND its containment-linked
+// records — each landing in Deleted Items, individually restorable,
+// each running its own detach so its links snapshot too. Containment
+// only: Category → its subcategories (recursively) + the products in
+// it and in those subcategories (+ those products' reviews); Brand →
+// its products (+ their reviews); Product → its reviews; Customer →
+// their reviews. Reference links (coupon scopes, media usages,
+// carts/wishlists/favorites) are DETACH-only — never cascaded.
+// ORDERS ARE NEVER DELETED — not here, not anywhere in this flow.
+
+const CASCADE_MODELS = { categories: Category, products: Product, reviews: Review };
+
+const cascadeGroup = (module, permissionModule, label, singular, ids) => ({
+    module,
+    permissionModule,
+    label,
+    singular,
+    ids: [...new Set(ids.map(String))],
+});
+
+/** The full cascade set for a record, grouped by module. Computed
+ *  fresh at preview time AND again at execution time — the client
+ *  never supplies the set. */
+const collectCascade = async (moduleKey, doc) => {
+    switch (moduleKey) {
+        case 'categories': {
+            const descendantIds = [];
+            let frontier = [doc._id];
+            while (frontier.length) {
+                // eslint-disable-next-line no-await-in-loop
+                const kids = await Category.find({ parent: { $in: frontier }, ...NOT_DELETED }).distinct('_id');
+                if (!kids.length) break;
+                descendantIds.push(...kids);
+                frontier = kids;
+            }
+            const productIds = await Product.find({
+                category: { $in: [doc._id, ...descendantIds] },
+                ...NOT_DELETED,
+            }).distinct('_id');
+            const reviewIds = productIds.length
+                ? await Review.find({ product: { $in: productIds }, ...NOT_DELETED }).distinct('_id')
+                : [];
+            return [
+                cascadeGroup('categories', 'Categories', 'subcategories', 'subcategory', descendantIds),
+                cascadeGroup('products', 'Products', 'products', 'product', productIds),
+                cascadeGroup('reviews', 'Reviews', 'reviews', 'review', reviewIds),
+            ].filter((group) => group.ids.length);
+        }
+        case 'brands': {
+            const productIds = await Product.find({ brand: doc._id, ...NOT_DELETED }).distinct('_id');
+            const reviewIds = productIds.length
+                ? await Review.find({ product: { $in: productIds }, ...NOT_DELETED }).distinct('_id')
+                : [];
+            return [
+                cascadeGroup('products', 'Products', 'products', 'product', productIds),
+                cascadeGroup('reviews', 'Reviews', 'reviews', 'review', reviewIds),
+            ].filter((group) => group.ids.length);
+        }
+        case 'products': {
+            const reviewIds = await Review.find({ product: doc._id, ...NOT_DELETED }).distinct('_id');
+            return [
+                cascadeGroup('reviews', 'Reviews', 'reviews', 'review', reviewIds),
+            ].filter((group) => group.ids.length);
+        }
+        case 'customers': {
+            if (doc.role !== 'Customer') return [];
+            const reviewIds = await Review.find({ user: doc._id, ...NOT_DELETED }).distinct('_id');
+            return [
+                cascadeGroup('reviews', 'Reviews', 'reviews', 'review', reviewIds),
+            ].filter((group) => group.ids.length);
+        }
+        default:
+            return [];
+    }
+};
+
+/** Preview for the dialog: counts by module, each flagged with
+ *  whether the caller's role may delete that module at all. Modules
+ *  the caller cannot delete are EXCLUDED from the execution and the
+ *  dialog states that plainly (show, don't remove). */
+const computeCascadePreview = async (moduleKey, doc, role) => {
+    const groups = await collectCascade(moduleKey, doc);
+    const preview = [];
+    for (const group of groups) {
+        preview.push({
+            module: group.module,
+            label: group.label,
+            singular: group.singular,
+            count: group.ids.length,
+            // eslint-disable-next-line no-await-in-loop
+            allowed: await roleHasPermission(role, group.permissionModule, 'delete'),
+        });
+    }
+    return preview;
+};
+
+/** The one soft-delete path every delete flow shares: detach (with
+ *  snapshot) + stamp + save. */
+const softDeleteRecord = async (Model, moduleKey, doc, userId) => {
+    const snapshot = await detachForDelete(moduleKey, doc);
+    if (snapshot) doc.set('deletedLinks', snapshot);
+    applySoftDelete(Model, doc, userId);
+    await doc.save();
+};
+
+/** Soft-deletes pre-collected cascade groups, deepest records first
+ *  (reviews, then products, then categories) so a parent record's own
+ *  detach always sees its children still in place. Records already
+ *  gone are skipped. Returns the per-module counts deleted. */
+const cascadeDeleteRecords = async (groups, userId) => {
+    const order = { reviews: 0, products: 1, categories: 2 };
+    const sorted = [...groups].sort((a, b) => (order[a.module] ?? 3) - (order[b.module] ?? 3));
+    const deleted = {};
+    for (const group of sorted) {
+        const Model = CASCADE_MODELS[group.module];
+        if (!Model) continue;
+        let count = 0;
+        for (const id of group.ids) {
+            // eslint-disable-next-line no-await-in-loop
+            const doc = await Model.findOne({ _id: id, ...NOT_DELETED });
+            if (!doc) continue;
+            // eslint-disable-next-line no-await-in-loop
+            await softDeleteRecord(Model, group.module, doc, userId);
+            count += 1;
+        }
+        if (count) deleted[group.module] = count;
+    }
+    return deleted;
 };
 
 module.exports = {
     computeDeleteImpact,
     detachForDelete,
     relinkFromSnapshot,
+    collectCascade,
+    computeCascadePreview,
+    softDeleteRecord,
+    cascadeDeleteRecords,
 };
