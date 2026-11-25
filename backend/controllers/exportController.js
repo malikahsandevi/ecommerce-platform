@@ -25,6 +25,7 @@ const {
     Setting,
 } = require('../models');
 const { adaptRow, applyExportFilters, dayInTimezone } = require('../utils/exportFilter');
+const { sortExportRows } = require('../utils/exportSort');
 const { NOT_DELETED } = require('../utils/softDelete');
 const { sendError } = require('../utils/apiError');
 
@@ -319,6 +320,14 @@ const exportModule = async (req, res) => {
             spec.searchableFields,
             timeZone,
         );
+        // The sheet follows the order the table shows (Part 4): the
+        // panel's active sort when one is sent, else newest first.
+        const ordered = sortExportRows(
+            segment,
+            filtered,
+            req.query.sortKey ? String(req.query.sortKey) : '',
+            req.query.sortDir ? String(req.query.sortDir) : '',
+        );
 
         const workbook = new ExcelJS.Workbook();
         workbook.creator = 'E-Commerce Admin';
@@ -337,7 +346,7 @@ const exportModule = async (req, res) => {
         };
         sheet.views = [{ state: 'frozen', ySplit: 1 }];
 
-        filtered.forEach((row) => {
+        ordered.forEach((row) => {
             const values = spec.columns.map((col) => {
                 const value = col.get(row);
                 if (value === undefined || value === null) return '';

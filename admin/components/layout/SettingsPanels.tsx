@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Image from "next/image";
 import { Check, ChevronDown, ChevronUp, Copy, Eye, EyeOff, KeyRound, LoaderCircle, Pencil, Play, Plus, RotateCcw, Save, ShieldCheck, ShieldOff, Trash2, Code2 } from "lucide-react";
 import ServiceIcon from "@/components/ui/ServiceIcon";
@@ -643,6 +643,19 @@ function UsersPanel({
   const isSuperAdmin = sessionUser?.role === "Super Admin";
   const sessionUserId = sessionUser?.id || sessionUser?._id || "";
 
+  // Newest accounts first (Part 4) — this list follows the same
+  // default order as every other admin table, so a just-created
+  // account lands at the top instead of the end.
+  const sortedUsers = useMemo(
+    () =>
+      [...users].sort(
+        (a, b) =>
+          new Date(b.createdAt ?? 0).getTime() -
+          new Date(a.createdAt ?? 0).getTime(),
+      ),
+    [users],
+  );
+
   const [showAddForm, setShowAddForm] = useState(false);
   const [form, setForm] = useState<NewUserValues>({
     firstName: "",
@@ -1092,7 +1105,7 @@ function UsersPanel({
             </tr>
           </thead>
           <tbody>
-            {users.map((user) => {
+            {sortedUsers.map((user) => {
               const isOwnRow = Boolean(sessionUserId) && String(sessionUserId) === String(user._id);
               const canActOnRow = isSuperAdmin || isOwnRow;
               return (

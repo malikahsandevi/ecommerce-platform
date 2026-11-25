@@ -113,6 +113,20 @@ export const reviewConfig = {
     status: "Status",
   },
 
+  // Sortable header columns (Part 4) — values come from the RAW row.
+  sortableColumns: {
+    productName: {
+      get: (review: ProductReview) => referenceLabel(review.product) || review.productName || "",
+      type: "string",
+    },
+    customerName: {
+      get: (review: ProductReview) => referenceLabel(review.user) || review.customerName || "",
+      type: "string",
+    },
+    rating: { field: "rating", type: "number" },
+    status: { field: "status", type: "string" },
+  },
+
   // The list only SHOWS a preview of the review body (Ahsan: "review
   // ki lenght ko truncate ky sth kam karo, yha sirf show krna hai"):
   // the Review cell renders at most 60 characters + "…". The full

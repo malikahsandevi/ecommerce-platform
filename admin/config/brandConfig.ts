@@ -62,6 +62,12 @@ export const brandConfig = {
     status: "Status",
   },
 
+  // Sortable header columns (Part 4) — values come from the RAW row.
+  sortableColumns: {
+    name: { field: "name", type: "string" },
+    status: { field: "status", type: "string" },
+  },
+
   mapTableData: (brand: Brand) => ({
     id: brand._id,
     _id: brand._id,

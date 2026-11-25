@@ -89,6 +89,12 @@ export const customerConfig = {
     status: "Status",
   },
 
+  // Sortable header columns (Part 4) — values come from the RAW row.
+  sortableColumns: {
+    name: { get: (customer: Customer) => fullName(customer), type: "string" },
+    status: { field: "status", type: "string" },
+  },
+
   mapTableData: (customer: Customer) => ({
     id: customer._id,
     _id: customer._id,

@@ -114,6 +114,15 @@ export const categoryConfig = {
     status: "Status",
   },
 
+  // Sortable header columns (Part 4), shared by both tabs. The Sort
+  // arrow orders the ADMIN table only — the sortOrder values still
+  // govern the storefront navigation order, unchanged.
+  sortableColumns: {
+    name: { field: "name", type: "string" },
+    sortOrder: { field: "sortOrder", type: "number" },
+    status: { field: "status", type: "string" },
+  },
+
   // Map Data for CreateTable Component
   mapTableData: (category: Category) => ({
     id: category._id,

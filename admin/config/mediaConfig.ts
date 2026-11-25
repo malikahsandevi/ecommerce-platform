@@ -89,6 +89,14 @@ export const mediaConfig = {
     status: "Status",
   },
 
+  // Sortable header columns (Part 4) — values come from the RAW row
+  // (Size sorts by bytes, not the formatted cell).
+  sortableColumns: {
+    name: { get: (media: MediaItem) => displayName(media), type: "string" },
+    size: { field: "size", type: "number" },
+    status: { get: (media: MediaItem) => statusOf(media), type: "string" },
+  },
+
   mapTableData: (media: MediaItem) => ({
     id: media._id,
     _id: media._id,

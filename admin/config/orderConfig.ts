@@ -176,6 +176,14 @@ export const orderConfig = {
     status: "Status",
   },
 
+  // Sortable header columns (Part 4) — values come from the RAW row.
+  sortableColumns: {
+    customer: { get: (order: Order) => customerName(order), type: "string" },
+    totalAmount: { field: "total", type: "number" },
+    paymentStatus: { field: "paymentStatus", type: "string" },
+    status: { field: "status", type: "string" },
+  },
+
   // Map Data for CreateTable Component
   mapTableData: (order: Order) => ({
     id: order._id,

@@ -154,6 +154,16 @@ export const productConfig = {
     status: "Status",
   },
 
+  // Columns the table header offers a sort arrow for (Part 4): the
+  // value is read from the RAW row (never the formatted cell text),
+  // and sorting runs over the whole list before pagination.
+  sortableColumns: {
+    name: { field: "name", type: "string" },
+    price: { field: "price", type: "number" },
+    stock: { field: "stock", type: "number" },
+    status: { field: "status", type: "string" },
+  },
+
   // Map Data for CreateTable Component
   mapTableData: (product: Product) => ({
     id: product._id,

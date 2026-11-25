@@ -1,6 +1,6 @@
 // components/ui/CreateTable.tsx
 import React, { useLayoutEffect, useRef, useState } from "react";
-import { Inbox, Pencil, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Inbox, Pencil, Trash2 } from "lucide-react";
 import { AvatarViewerTrigger } from "@/components/ui/AvatarViewer";
 import { PersonAvatar } from "@/components/ui/PersonAvatar";
 import { useLanguage } from "@/services/i18n";
@@ -31,6 +31,17 @@ export interface CreateTableProps<T extends Record<string, any>> {
    * popup on click) with an initial-letter fallback if it fails.
    */
   enableAvatarViewer?: boolean;
+  /**
+   * Sortable header columns (Part 4): the config's sortableColumns
+   * map — only its KEYS are read here (which headers get the arrow);
+   * the shell owns the sort state and the actual ordering. Absent =
+   * headers render exactly as before.
+   */
+  sortableColumns?: Record<string, unknown>;
+  /** The shell's active sort (null = the default order). */
+  sortState?: { key: string; dir: "asc" | "desc" } | null;
+  /** Header-arrow click: the shell toggles/sets the sort. */
+  onSortChange?: (key: string) => void;
 }
 
 /**
@@ -190,6 +201,9 @@ export function CreateTable<T extends Record<string, any>>({
   columnAlign,
   columnMaxChars,
   enableAvatarViewer,
+  sortableColumns,
+  sortState,
+  onSortChange,
 }: CreateTableProps<T>) {
   const { t } = useLanguage();
   const showActions = Boolean(onEditItem || onDeleteItem);
@@ -270,7 +284,10 @@ export function CreateTable<T extends Record<string, any>>({
       const mins = measured.map((_, i) => {
         const label = headerCells?.[i]?.textContent?.trim() ?? "";
         ruler.textContent = label;
-        return Math.max(ruler.getBoundingClientRect().width + 18, 60);
+        // A sortable header also carries the 12px sort arrow + its
+        // 4px gap, which the text-only ruler cannot see.
+        const sortExtra = headerCells?.[i]?.querySelector("button") ? 16 : 0;
+        return Math.max(ruler.getBoundingClientRect().width + 18 + sortExtra, 60);
       });
       const widths = measured.map((w, i) => Math.max(w, mins[i]));
 
@@ -372,13 +389,44 @@ export function CreateTable<T extends Record<string, any>>({
             <tr>
               {columns.map((colKey, index) => {
                 const align = alignFor(String(colKey));
+                const keyStr = String(colKey);
+                const sortable = Boolean(
+                  onSortChange && sortableColumns && keyStr in sortableColumns,
+                );
+                const sortActive = sortable && sortState?.key === keyStr;
                 return (
                   <th
                     key={String(colKey) + index}
+                    aria-sort={
+                      sortActive
+                        ? sortState.dir === "asc"
+                          ? "ascending"
+                          : "descending"
+                        : undefined
+                    }
                     className={`px-2 py-3 whitespace-nowrap ${align === "center" ? "text-center" : "text-left"}`}
                   >
                     <div className={`flex items-center gap-1 select-none whitespace-nowrap ${align === "center" ? "justify-center" : ""}`}>
-                      {t(columnHeaders?.[colKey] ?? String(colKey))}
+                      {sortable ? (
+                        <button
+                          type="button"
+                          onClick={() => onSortChange?.(keyStr)}
+                          className="flex items-center gap-1 cursor-pointer uppercase tracking-wide hover:text-[var(--text)] transition-colors"
+                        >
+                          {t(columnHeaders?.[colKey] ?? String(colKey))}
+                          {sortActive ? (
+                            sortState.dir === "asc" ? (
+                              <ArrowUp className="w-3 h-3 shrink-0 text-[var(--primary)]" />
+                            ) : (
+                              <ArrowDown className="w-3 h-3 shrink-0 text-[var(--primary)]" />
+                            )
+                          ) : (
+                            <ArrowUpDown className="w-3 h-3 shrink-0 opacity-50" />
+                          )}
+                        </button>
+                      ) : (
+                        t(columnHeaders?.[colKey] ?? String(colKey))
+                      )}
                     </div>
                   </th>
                 );

@@ -420,6 +420,13 @@ const PageLayout: React.FC = () => {
   }>({ search: "", filters: {}, dateRange: null });
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(DEFAULT_PAGE_SIZE);
+  // Table sorting (Part 4): null = the default order (newest first).
+  // A header arrow sets { key, dir }; the full filtered set is sorted
+  // before pagination, and filters/tabs/search never reset it.
+  const [sortState, setSortState] = useState<{
+    key: string;
+    dir: "asc" | "desc";
+  } | null>(null);
   // Categories hierarchy tabs (Ahsan's order): "main" lists the
   // parentless categories, "sub" the subcategories. Only the
   // Categories page declares the tabs; every other page ignores this.
@@ -513,6 +520,7 @@ const PageLayout: React.FC = () => {
     setSelectedRawRow(null);
     setCurrentPage(1);
     setCategoryTab("main");
+    setSortState(null);
   }, [currentConfig]);
 
   // Any change to what is displayed returns to page 1.
@@ -598,10 +606,69 @@ const PageLayout: React.FC = () => {
 
   const totalPages = Math.max(1, Math.ceil(displayItems.length / itemsPerPage));
 
+  // --- table sorting (Part 4) -----------------------------------------
+  // The shell fetches the module's full set and paginates client-side,
+  // so the ordering lives here too: the full filtered set is sorted
+  // BEFORE the page slice. Default = newest first (createdAt desc).
+  // A header arrow (the config's sortableColumns) overrides it, and
+  // values are read from the RAW rows — never the formatted cells.
+  // Rows missing the sorted value always land last, either direction.
+  const sortableColumns = (
+    currentConfig as unknown as {
+      sortableColumns?: Record<
+        string,
+        {
+          field?: string;
+          get?: (row: Row) => unknown;
+          type?: "string" | "number" | "date";
+        }
+      >;
+    }
+  ).sortableColumns;
+  const sortedItems = useMemo(() => {
+    const spec = sortState ? sortableColumns?.[sortState.key] : undefined;
+    const read = (row: Row): unknown => {
+      if (sortState && spec) {
+        if (spec.get) return spec.get(row);
+        return row[spec.field ?? sortState.key];
+      }
+      return row.createdAt;
+    };
+    const type = sortState && spec ? (spec.type ?? "string") : "date";
+    const dir = sortState ? sortState.dir : "desc";
+    const isMissing = (value: unknown) =>
+      value === undefined || value === null || value === "";
+    return [...displayItems].sort((a, b) => {
+      const va = read(a);
+      const vb = read(b);
+      const missingA = isMissing(va);
+      const missingB = isMissing(vb);
+      if (missingA || missingB) return missingA === missingB ? 0 : missingA ? 1 : -1;
+      let cmp: number;
+      if (type === "number") cmp = Number(va) - Number(vb);
+      else if (type === "date")
+        cmp = new Date(String(va)).getTime() - new Date(String(vb)).getTime();
+      else
+        cmp = String(va).localeCompare(String(vb), undefined, {
+          sensitivity: "base",
+        });
+      return dir === "asc" ? cmp : -cmp;
+    });
+  }, [displayItems, sortState, sortableColumns]);
+
+  const handleSortChange = useCallback((key: string) => {
+    setSortState((prev) =>
+      prev && prev.key === key
+        ? { key, dir: prev.dir === "asc" ? "desc" : "asc" }
+        : { key, dir: "asc" },
+    );
+    setCurrentPage(1);
+  }, []);
+
   const pagedItems = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage;
-    return displayItems.slice(start, start + itemsPerPage);
-  }, [displayItems, currentPage, itemsPerPage]);
+    return sortedItems.slice(start, start + itemsPerPage);
+  }, [sortedItems, currentPage, itemsPerPage]);
 
   // The config union types each route's mappers with its own row shape, so
   // read them through one permissive signature.
@@ -841,6 +908,10 @@ const PageLayout: React.FC = () => {
           filters: JSON.stringify(exportFilters),
           from: exportCriteria.dateRange?.from || undefined,
           to: exportCriteria.dateRange?.to || undefined,
+          // The sheet follows the order the table currently shows
+          // (Part 4); absent = the server's default, newest first.
+          sortKey: sortState?.key || undefined,
+          sortDir: sortState?.dir || undefined,
         },
         responseType: "blob",
       });
@@ -875,7 +946,7 @@ const PageLayout: React.FC = () => {
       }
       toast.error(message);
     }
-  }, [user, pathname, Route, exportCriteria, t, isCategoriesPage, categoryTab]);
+  }, [user, pathname, Route, exportCriteria, t, isCategoriesPage, categoryTab, sortState]);
 
   const handleBtnClick = useCallback(
     (btnId: string) => {
@@ -1564,6 +1635,9 @@ const PageLayout: React.FC = () => {
                     : undefined
                 }
                 enableAvatarViewer={Route.toLowerCase() === "customers"}
+                sortableColumns={sortableColumns}
+                sortState={sortState}
+                onSortChange={handleSortChange}
               />
             </div>
 

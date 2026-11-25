@@ -98,6 +98,7 @@ export interface SettingsUser {
   avatar?: string;
   role?: string;
   isActive?: boolean;
+  createdAt?: string;
   /** Panel 2FA state (staff accounts) — drives the Reset 2FA row action. */
   twoFactorEnabled?: boolean;
 }

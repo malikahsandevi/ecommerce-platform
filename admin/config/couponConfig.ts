@@ -148,6 +148,13 @@ export const couponConfig = {
     status: "Status",
   },
 
+  // Sortable header columns (Part 4) — values come from the RAW row
+  // (Value sorts by the numeric discount, not the formatted cell).
+  sortableColumns: {
+    value: { get: (coupon: Coupon) => getDiscountValue(coupon), type: "number" },
+    status: { get: (coupon: Coupon) => getCouponStatus(coupon), type: "string" },
+  },
+
   // Map Data for CreateTable Component
   mapTableData: (coupon: Coupon) => ({
     id: coupon._id || String(coupon.id),
