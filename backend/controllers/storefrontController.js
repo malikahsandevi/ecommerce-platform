@@ -117,6 +117,21 @@ const getStoreConfig = async (req, res) => {
     try {
         const settings = await Setting.findOne().sort({ createdAt: 1 }).select('general paymentMethods appearance').lean();
         const general = settings?.general || {};
+        // Resolved ONCE: can the "Stripe" method actually take a card
+        // right now (active Stripe entry + secret key in Settings →
+        // Payments)? Drives both the boolean below and the auto-offered
+        // method — no keys or entry details ever leave the backend.
+        const stripeCheckout = await resolveStripeCheckout();
+        const paymentMethods = (settings?.paymentMethods || [])
+            .filter((method) => method && method.enabled !== false && method.name)
+            .map((method) => ({ name: method.name, description: method.description || '' }));
+        // The legacy paymentMethods array is no longer editable in the
+        // admin (the services system replaced it), so a configured
+        // Stripe gateway offers its method itself — appended only when
+        // the stored list doesn't already carry one under that name.
+        if (stripeCheckout && !paymentMethods.some((method) => String(method.name).trim().toLowerCase() === 'stripe')) {
+            paymentMethods.push({ name: 'Stripe', description: '' });
+        }
         res.json({
             appearance: resolveStorefrontAppearance(settings?.appearance),
             storeName: general.storeName || '',
@@ -127,14 +142,8 @@ const getStoreConfig = async (req, res) => {
             timeZone: general.timeZone || 'Asia/Karachi',
             contactEmail: general.storeEmail || '',
             phone: general.phone || '',
-            paymentMethods: (settings?.paymentMethods || [])
-                .filter((method) => method && method.enabled !== false && method.name)
-                .map((method) => ({ name: method.name, description: method.description || '' })),
-            // A single boolean: can the "Stripe" method actually take
-            // a card right now (active Stripe entry + secret key in
-            // Settings → Payments)? No keys or entry details — just
-            // whether the checkout may offer the redirect at all.
-            stripePayAvailable: (await resolveStripeCheckout()) !== null,
+            paymentMethods,
+            stripePayAvailable: stripeCheckout !== null,
         });
     } catch (error) {
         sendError(res, error, 500);
