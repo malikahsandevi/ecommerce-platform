@@ -16,11 +16,11 @@
 // The first palette round shipped dark-only sets, so in light mode
 // the panel derived its surfaces from the dark background/text and
 // the white theme broke (a coloured wash over the sidebar/content —
-// Ahsan's Ruby screenshot). The light sets keep the white theme
+// Ahsan's screenshot). The light sets keep the white theme
 // clean like the pre-palette light theme (globals.css :root:
 // background #ffffff, text #111827, neutral surfaces): the palette's
 // identity rides on its primary (the SAME hex in both sets — every
-// one of the eight reads on white) and a secondary darkened enough
+// one of the seven reads on white) and a secondary darkened enough
 // to read on white; text is a near-black tint of the palette hue
 // and the background is pure white, so the derived surface/border
 // shades come out neutral greys with NO coloured wash.
@@ -61,9 +61,6 @@ export const PALETTES: PaletteDef[] = [
   { id: "violet-dream", name: "Violet Dream",
     dark: { primary: "#7c3aed", secondary: "#c084fc", text: "#f5f3ff", background: "#130e20" },
     light: { primary: "#7c3aed", secondary: "#9333ea", text: "#2e1065", background: "#ffffff" } },
-  { id: "ruby-red", name: "Ruby Red",
-    dark: { primary: "#e11d48", secondary: "#fb7185", text: "#fff1f2", background: "#180a11" },
-    light: { primary: "#e11d48", secondary: "#be123c", text: "#4c0519", background: "#ffffff" } },
   { id: "slate-mono", name: "Slate Mono",
     dark: { primary: "#64748b", secondary: "#94a3b8", text: "#f1f5f9", background: "#0d1117" },
     light: { primary: "#64748b", secondary: "#475569", text: "#0f172a", background: "#ffffff" } },

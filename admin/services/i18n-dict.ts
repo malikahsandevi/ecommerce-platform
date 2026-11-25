@@ -1285,7 +1285,6 @@ export const T_PALETTE: Dict = {
   "Emerald Grove": { ur: "ایمرالڈ گروو", ar: "بستان الزمرد", hi: "एमराल्ड ग्रोव", bn: "এমারল্ড গ্রোভ", es: "Arboleda esmeralda", fr: "Bosquet émeraude", de: "Smaragd-Hain", tr: "Zümrüt Korusu", zh: "翡翠林" },
   "Teal Lagoon": { ur: "ٹیل لیگون", ar: "بحيرة البط البري", hi: "टील लैगून", bn: "টিল লেগুন", es: "Laguna verde azulada", fr: "Lagon sarcelle", de: "Petrol-Lagune", tr: "Turkuaz Lagün", zh: "青绿泻湖" },
   "Violet Dream": { ur: "وائلٹ ڈریم", ar: "حلم البنفسج", hi: "वायलेट ड्रीम", bn: "ভায়োলেট ড্রিম", es: "Sueño violeta", fr: "Rêve violet", de: "Violetter Traum", tr: "Menekşe Rüyası", zh: "紫罗兰之梦" },
-  "Ruby Red": { ur: "روبی ریڈ", ar: "الأحمر الياقوتي", hi: "रूबी रेड", bn: "রুবি রেড", es: "Rojo rubí", fr: "Rouge rubis", de: "Rubinrot", tr: "Yakut Kırmızısı", zh: "红宝石" },
   "Slate Mono": { ur: "سلیٹ مونو", ar: "أردواز أحادي", hi: "स्लेट मोनो", bn: "স্লেট মনো", es: "Pizarra mono", fr: "Ardoise mono", de: "Schiefer Mono", tr: "Arduvaz Mono", zh: "石板灰" },
   "Dark": { ur: "تاریک", ar: "داكن", hi: "डार्क", bn: "ডার্ক", es: "Oscuro", fr: "Sombre", de: "Dunkel", tr: "Koyu", zh: "深色" },
   "Light": { ur: "روشن", ar: "فاتح", hi: "लाइट", bn: "লাইট", es: "Claro", fr: "Clair", de: "Hell", tr: "Açık", zh: "浅色" },
