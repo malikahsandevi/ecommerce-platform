@@ -214,6 +214,40 @@ function productCategoryName(item: Row): string {
   return "";
 }
 
+/** A category row's parent id (the list API populates the ref, so
+ *  it is normally an object; a bare id string is handled too). An
+ *  empty string means the row is a MAIN category. */
+function categoryRowParentId(item: Row): string {
+  const parent = item.parent as
+    | { _id?: unknown; id?: unknown }
+    | string
+    | null
+    | undefined;
+  if (!parent) return "";
+  if (typeof parent === "object") return String(parent._id || parent.id || "");
+  return String(parent);
+}
+
+/** Every descendant id of a category within the loaded rows — the
+ *  category edit form never offers a category its own subtree as a
+ *  parent (the backend refuses such a cycle too; this keeps the
+ *  picker honest before the save is attempted). */
+function categoryDescendantIds(rootId: string, rows: Row[]): Set<string> {
+  const found = new Set<string>();
+  const queue = [rootId];
+  while (queue.length) {
+    const current = queue.shift()!;
+    rows.forEach((row) => {
+      const id = String(row._id || row.id || "");
+      if (id && categoryRowParentId(row) === current && !found.has(id)) {
+        found.add(id);
+        queue.push(id);
+      }
+    });
+  }
+  return found;
+}
+
 /** URL segment → permission module (role matrix). */
 const MODULE_BY_SEGMENT: Record<string, string> = {
   products: "Products",
@@ -262,6 +296,8 @@ const PageLayout: React.FC = () => {
     pathname.includes("/orders") || Route.toLowerCase() === "orders";
   const isProductsPage =
     pathname.includes("/products") || Route.toLowerCase() === "products";
+  const isCategoriesPage =
+    pathname.includes("/categories") || Route.toLowerCase() === "categories";
 
   // --- data state ---------------------------------------------------------
   const [items, setItems] = useState<Row[]>([]);
@@ -325,6 +361,10 @@ const PageLayout: React.FC = () => {
   }>({ search: "", filters: {}, dateRange: null });
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(DEFAULT_PAGE_SIZE);
+  // Categories hierarchy tabs (Ahsan's order): "main" lists the
+  // parentless categories, "sub" the subcategories. Only the
+  // Categories page declares the tabs; every other page ignores this.
+  const [categoryTab, setCategoryTab] = useState<"main" | "sub">("main");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [formMode, setFormMode] = useState<"add" | "edit">("add");
   const [formData, setFormData] = useState<ItemFormData>({});
@@ -413,6 +453,7 @@ const PageLayout: React.FC = () => {
   useEffect(() => {
     setSelectedRawRow(null);
     setCurrentPage(1);
+    setCategoryTab("main");
   }, [currentConfig]);
 
   // Any change to what is displayed returns to page 1.
@@ -468,6 +509,42 @@ const PageLayout: React.FC = () => {
       },
     ];
   }, [currentConfig, isMediaPage, isProductsPage, items]);
+
+  // Categories hierarchy tabs: the config declares the two tabs;
+  // the list flow below (FilterBar → table → pagination, and the
+  // export criteria) runs over the tab's scope only — Main = no
+  // parent, Sub = has a parent. Tab counts come from the full set.
+  const hierarchyTabs = (
+    currentConfig as unknown as {
+      hierarchyTabs?: { id: string; label: string }[];
+    }
+  ).hierarchyTabs;
+  const categoryCounts = useMemo(() => {
+    if (!isCategoriesPage) return { main: 0, sub: 0 };
+    let main = 0;
+    let sub = 0;
+    items.forEach((item) => {
+      if (categoryRowParentId(item)) sub += 1;
+      else main += 1;
+    });
+    return { main, sub };
+  }, [items, isCategoriesPage]);
+  const scopedItems = useMemo(() => {
+    if (!isCategoriesPage || !hierarchyTabs) return items;
+    return items.filter((item) =>
+      categoryTab === "sub"
+        ? categoryRowParentId(item) !== ""
+        : categoryRowParentId(item) === "",
+    );
+  }, [items, isCategoriesPage, hierarchyTabs, categoryTab]);
+
+  // The Sub tab's table carries the Parent Category column; the Main
+  // tab keeps the config's exact columns.
+  const activeColumnHeaders =
+    isCategoriesPage && categoryTab === "sub"
+      ? ((currentConfig as unknown as { subColumnHeaders?: Record<string, string> })
+          .subColumnHeaders ?? currentConfig.columnHeaders)
+      : currentConfig.columnHeaders;
 
   const totalPages = Math.max(1, Math.ceil(displayItems.length / itemsPerPage));
 
@@ -542,10 +619,52 @@ const PageLayout: React.FC = () => {
     const base = (currentConfig as { formFields?: FormField[] }).formFields || [];
     const withOptions = withDynamicOptions(base, options, optionsLoaded, t);
     // Only products need the vendor picker.
-    return Route.toLowerCase() === "products"
-      ? ensureVendorField(withOptions, options, t)
-      : withOptions;
-  }, [currentConfig, options, optionsLoaded, Route]);
+    const routed =
+      Route.toLowerCase() === "products"
+        ? ensureVendorField(withOptions, options, t)
+        : withOptions;
+    if (!isCategoriesPage) return routed;
+
+    // Categories: the Parent Category field follows the context the
+    // form was opened in — the active tab for an Add, the record's
+    // own place in the hierarchy for an Edit. Main context hides the
+    // field entirely (the record saves as a main category); Sub
+    // context makes a real parent REQUIRED — the "Main Category
+    // (None)" outcome is removed and, on edit, the category's own
+    // subtree is not offered (the backend refuses those saves too).
+    const editing = formMode === "edit" ? selectedRawRow : null;
+    const subContext = editing
+      ? categoryRowParentId(editing) !== ""
+      : categoryTab === "sub";
+    if (!subContext) {
+      return routed.filter((field) => field.name !== "parentCategory");
+    }
+    const banned = editing
+      ? categoryDescendantIds(String(editing._id || editing.id), items)
+      : new Set<string>();
+    if (editing) banned.add(String(editing._id || editing.id));
+    return routed.map((field) => {
+      if (field.name !== "parentCategory") return field;
+      return {
+        ...field,
+        required: true,
+        options: (field.options || []).filter(
+          (option) => option.value !== "" && !banned.has(String(option.value)),
+        ),
+      };
+    });
+  }, [
+    currentConfig,
+    options,
+    optionsLoaded,
+    Route,
+    isCategoriesPage,
+    categoryTab,
+    formMode,
+    selectedRawRow,
+    items,
+    t,
+  ]);
 
   // Static fallbacks declared in the route configs, read through one shape so
   // the union of config types does not fight the props.
@@ -594,11 +713,16 @@ const PageLayout: React.FC = () => {
     const segment =
       pathname.split("/").filter(Boolean).pop()?.toLowerCase() ||
       Route.toLowerCase();
+    // The Categories export follows the active hierarchy tab: the
+    // scope rides along inside the filters the server mirrors.
+    const exportFilters = isCategoriesPage
+      ? { ...(exportCriteria.filters || {}), parentScope: categoryTab }
+      : exportCriteria.filters || {};
     try {
       const response = await apiClient.get(`/export/${segment}`, {
         params: {
           search: exportCriteria.search || undefined,
-          filters: JSON.stringify(exportCriteria.filters || {}),
+          filters: JSON.stringify(exportFilters),
           from: exportCriteria.dateRange?.from || undefined,
           to: exportCriteria.dateRange?.to || undefined,
         },
@@ -635,7 +759,7 @@ const PageLayout: React.FC = () => {
       }
       toast.error(message);
     }
-  }, [user, pathname, Route, exportCriteria, t]);
+  }, [user, pathname, Route, exportCriteria, t, isCategoriesPage, categoryTab]);
 
   const handleBtnClick = useCallback(
     (btnId: string) => {
@@ -696,6 +820,20 @@ const PageLayout: React.FC = () => {
       // and gain the number later in its Shipment section). Cancelling
       // the prompt aborts the save entirely.
       let effectiveData = formData;
+      // Categories saved from a Sub context (the Sub tab's Add, or
+      // any edit of a subcategory) must keep a real parent: flag the
+      // save so the backend refuses a parentless subcategory with
+      // its own clean message — the form's required mark alone
+      // cannot stop an empty select from being submitted.
+      if (isCategoriesPage) {
+        const editing = formMode === "edit" ? selectedRawRow : null;
+        const subContext = editing
+          ? categoryRowParentId(editing) !== ""
+          : categoryTab === "sub";
+        if (subContext) {
+          effectiveData = { ...effectiveData, parentRequired: true };
+        }
+      }
       if (
         isOrdersPage &&
         formMode === "edit" &&
@@ -747,7 +885,7 @@ const PageLayout: React.FC = () => {
         setIsSaving(false);
       }
     },
-    [service, formMode, formData, selectedRawRow, Route, reload, isOrdersPage],
+    [service, formMode, formData, selectedRawRow, Route, reload, isOrdersPage, isCategoriesPage, categoryTab],
   );
 
   const handleDeleteItem = useCallback(
@@ -788,12 +926,21 @@ const PageLayout: React.FC = () => {
               };
               const lines: string[] = [];
               const removeLinks = links.filter((entry) => entry.action === "remove");
+              const promoteLinks = links.filter((entry) => entry.action === "promote");
               const keepLinks = links.filter((entry) => entry.action === "keep");
               if (removeLinks.length) {
                 lines.push(
                   t(
                     "This record is used in {list}. Deleting it will remove it from those places.",
                   ).replace("{list}", joinList(removeLinks)),
+                );
+              }
+              if (promoteLinks.length) {
+                lines.push(
+                  t("{list} will become main categories.").replace(
+                    "{list}",
+                    joinList(promoteLinks),
+                  ),
                 );
               }
               if (keepLinks.length) {
@@ -1231,21 +1378,39 @@ const PageLayout: React.FC = () => {
                   below (the tabs duplicated it). In the tabs' place the
                   strip shows the page's static "All …" label (styled
                   like the active tab, but not clickable), and the right
-                  side carries the header action buttons. */}
-              <TabsBar
-                tablist={[]}
-                activeTab=""
-                onTabChange={() => {}}
-                label={currentConfig.allLabel ? t(currentConfig.allLabel) : currentConfig.allLabel}
-                btnlist={headerButtons}
-                onBtnClick={handleBtnClick}
-              />
+                  side carries the header action buttons. The ONE
+                  exception is Categories (Ahsan's order): its strip
+                  carries the Main/Sub hierarchy tabs instead of the
+                  static label — they scope the list below, they are
+                  not status filters. */}
+              {isCategoriesPage && hierarchyTabs ? (
+                <TabsBar
+                  tablist={hierarchyTabs.map((tab) => ({
+                    id: tab.id,
+                    label: tab.label,
+                    count: tab.id === "sub" ? categoryCounts.sub : categoryCounts.main,
+                  }))}
+                  activeTab={categoryTab}
+                  onTabChange={(tab) => setCategoryTab(tab === "sub" ? "sub" : "main")}
+                  btnlist={headerButtons}
+                  onBtnClick={handleBtnClick}
+                />
+              ) : (
+                <TabsBar
+                  tablist={[]}
+                  activeTab=""
+                  onTabChange={() => {}}
+                  label={currentConfig.allLabel ? t(currentConfig.allLabel) : currentConfig.allLabel}
+                  btnlist={headerButtons}
+                  onBtnClick={handleBtnClick}
+                />
+              )}
             </div>
 
             <div className="shrink-0 bg-[var(--surface)] px-3 sm:px-3 pt-3 pb-1">
               <FilterBar
                 key={pathname}
-                sourceData={items as never}
+                sourceData={scopedItems as never}
                 searchableFieldsKeys={currentConfig.searchFields}
                 searchPlaceholder={t("Search {route}...").replace("{route}", t(Route).toLowerCase())}
                 filtersData={filtersData}
@@ -1272,7 +1437,7 @@ const PageLayout: React.FC = () => {
                 onSelectItem={handleSelectRow}
                 onEditItem={canEdit ? handleRowEdit : undefined}
                 onDeleteItem={canDelete ? handleRowDelete : undefined}
-                columnHeaders={currentConfig.columnHeaders}
+                columnHeaders={activeColumnHeaders}
                 columnAlign={
                   "columnAlign" in currentConfig
                     ? (currentConfig.columnAlign as Record<string, "left" | "center">)

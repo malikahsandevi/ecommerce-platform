@@ -119,7 +119,10 @@ const computeDeleteImpact = async (moduleKey, doc) => {
             ]);
             return onlyCounted([
                 link('products', 'products', 'product', products, 'remove'),
-                link('subcategories', 'subcategories', 'subcategory', subcategories, 'remove'),
+                // 'promote': the children are not removed from
+                // anywhere — losing their parent makes them main
+                // categories, and the dialog says exactly that.
+                link('subcategories', 'subcategories', 'subcategory', subcategories, 'promote'),
                 link('favoriteCategories', 'favorite category lists', 'favorite category list', favoriteLists, 'remove'),
             ]);
         }

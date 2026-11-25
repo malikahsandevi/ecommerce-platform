@@ -5,6 +5,10 @@ import { useLanguage } from "@/services/i18n";
 export interface TabItem {
   id: string;
   label: string;
+  /** Optional record count shown after the label (Categories'
+   *  Main/Sub tabs) — a plain number, never part of the translated
+   *  label itself. */
+  count?: number;
 }
 
 export interface HeaderActionButton {
@@ -63,6 +67,11 @@ const TabsBar: React.FC<TabsBarProps> = ({
               }`}
             >
               {t(tabLabel)}
+              {typeof tab !== "string" && tab.count !== undefined && (
+                <span className="ml-1.5 text-[11px] font-bold text-[var(--text-muted)]">
+                  {tab.count}
+                </span>
+              )}
               {isActive && (
                 <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--primary)] rounded-full" />
               )}

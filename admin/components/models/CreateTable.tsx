@@ -514,6 +514,51 @@ export function CreateTable<T extends Record<string, any>>({
                       );
                     }
 
+                    // 3b. Parent-name Column (the Sub Categories
+                    // table's Parent Category): the parent's
+                    // thumbnail in the same small square box the name
+                    // column uses, beside the parent's name — every
+                    // subcategory row shows WHICH main category it
+                    // belongs to, at a glance.
+                    if (colKeyStr === "parentname") {
+                      const parentImg = item.parentImage;
+                      const parentIsUrl =
+                        typeof parentImg === "string" &&
+                        (parentImg.startsWith("http") ||
+                          parentImg.startsWith("/") ||
+                          parentImg.startsWith("data:image"));
+                      const parentText =
+                        rawValue !== undefined && rawValue !== null && rawValue !== ""
+                          ? String(rawValue)
+                          : "-";
+                      return (
+                        <td
+                          key={String(colKey) + idx}
+                          className={`px-2 py-2.5 align-middle overflow-hidden ${alignClass}`}
+                          title={parentText}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="w-8 h-8 rounded-lg border border-[var(--border)] bg-[var(--surface)] flex items-center justify-center overflow-hidden shrink-0">
+                              {parentIsUrl ? (
+                                <CellThumb
+                                  key={parentImg as string}
+                                  src={parentImg as string}
+                                  alt={parentText}
+                                />
+                              ) : (
+                                <span className="text-[10px] text-[var(--text-muted)] font-bold">
+                                  {(parentText.trim().charAt(0) || "N").toUpperCase()}
+                                </span>
+                              )}
+                            </div>
+                            <span className="font-medium text-[var(--text)] line-clamp-2 min-w-0">
+                              {parentText}
+                            </span>
+                          </div>
+                        </td>
+                      );
+                    }
+
                     // 4. Standard Cells — content is contained in its
                     // own cell: a long unbroken value (phone, email,
                     // SKU) truncates with an ellipsis instead of

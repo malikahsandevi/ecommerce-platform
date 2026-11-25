@@ -128,6 +128,12 @@ const BUCKETS = {
         if (mime.startsWith('audio/')) return 'audio';
         return 'other';
     },
+    // admin Categories page Main/Sub tab scope: a category is a
+    // subcategory exactly when it carries a parent (the export rows
+    // populate the ref, so it is an object; a bare id counts too).
+    parentScope(row) {
+        return row.parent ? 'sub' : 'main';
+    },
 };
 
 // Which dropdown filters use a bucket instead of a plain field match,
@@ -136,6 +142,7 @@ const BUCKETS = {
 const FILTER_BUCKETS = {
     products: { stockLevel: 'stockLevel', priceRange: 'priceRange', category: 'category' },
     media: { mediaType: 'mediaType' },
+    categories: { parentScope: 'parentScope' },
 };
 
 function matchesFilters(moduleKey, row, filters) {

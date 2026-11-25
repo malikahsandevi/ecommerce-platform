@@ -405,6 +405,64 @@ export function getResourceService(pathname: string): ResourceService | null {
         name: string,
       ) => `#${record.code || String(record._id).slice(0, 6).toUpperCase()} · ${name}`;
 
+      // Category dropdowns are hierarchical (Ahsan's sub-category
+      // round): a subcategory's label carries its whole path —
+      // "#CODE · Electronics › Phones" — and the options are ordered
+      // as a tree walk, each main category followed by its own
+      // subcategories, so the picker reads the way the catalog is
+      // organised. The value stays the category's own id everywhere
+      // these options are consumed (product form, coupon scoping,
+      // the category form's own Parent Category picker).
+      const hierarchicalCategoryOptions = (
+        records: Array<{
+          _id: string;
+          code?: string;
+          name: string;
+          parent?: string | { _id?: string } | null;
+        }>,
+      ) => {
+        const byId = new Map(records.map((record) => [String(record._id), record]));
+        const parentIdOf = (record: (typeof records)[number]): string => {
+          const parent = record.parent;
+          if (!parent) return "";
+          return typeof parent === "string" ? parent : String(parent._id || "");
+        };
+        const pathOf = (record: (typeof records)[number]): string => {
+          const names = [record.name];
+          const seen = new Set<string>([String(record._id)]);
+          let pid = parentIdOf(record);
+          while (pid && byId.has(pid) && !seen.has(pid)) {
+            seen.add(pid);
+            names.unshift(byId.get(pid)!.name);
+            pid = parentIdOf(byId.get(pid)!);
+          }
+          return names.join(" › ");
+        };
+        const childrenOf = new Map<string, typeof records>();
+        records.forEach((record) => {
+          const pid = parentIdOf(record);
+          const list = childrenOf.get(pid) || [];
+          list.push(record);
+          childrenOf.set(pid, list);
+        });
+        const ordered: typeof records = [];
+        const visit = (record: (typeof records)[number]) => {
+          ordered.push(record);
+          (childrenOf.get(String(record._id)) || []).forEach(visit);
+        };
+        (childrenOf.get("") || []).forEach(visit);
+        // A record whose parent is not in this list (e.g. filtered
+        // out as inactive) still appears — after the tree, as a root.
+        const placed = new Set(ordered.map((record) => String(record._id)));
+        records.forEach((record) => {
+          if (!placed.has(String(record._id))) ordered.push(record);
+        });
+        return ordered.map((record) => ({
+          label: entityLabel(record, pathOf(record)),
+          value: record._id,
+        }));
+      };
+
       if (apiEndpoint === 'products' || apiEndpoint === 'categories') {
         const [categoriesResponse, brandsResponse] = await Promise.all([
           apiClient.get('/categories'),
@@ -417,12 +475,9 @@ export function getResourceService(pathname: string): ResourceService | null {
         const isEnabled = (record: { isActive?: boolean }) => record.isActive !== false;
 
         return {
-          categoryOptions: (categoriesResponse.data || [])
-            .filter(isEnabled)
-            .map((category: { _id: string; code?: string; name: string }) => ({
-              label: entityLabel(category, category.name),
-              value: category._id,
-            })),
+          categoryOptions: hierarchicalCategoryOptions(
+            (categoriesResponse.data || []).filter(isEnabled),
+          ),
           brandOptions: (brandsResponse.data || [])
             .filter(isEnabled)
             .map((brand: { _id: string; code?: string; name: string }) => ({
@@ -467,12 +522,7 @@ export function getResourceService(pathname: string): ResourceService | null {
               value: product._id,
             }),
           ),
-          categoryOptions: (categoriesResponse.data || []).map(
-            (category: { _id: string; code?: string; name: string }) => ({
-              label: entityLabel(category, category.name),
-              value: category._id,
-            }),
-          ),
+          categoryOptions: hierarchicalCategoryOptions(categoriesResponse.data || []),
           userOptions: (usersResponse.data || [])
             .filter((user: { role?: string }) => user.role === 'Customer')
             .map((user: Parameters<typeof userLabel>[0]) => ({

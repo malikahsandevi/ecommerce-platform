@@ -8,7 +8,7 @@ export interface Category {
   slug: string;
   description?: string;
   image?: string;
-  parent?: string | { _id?: string; name?: string } | null;
+  parent?: string | { _id?: string; name?: string; image?: string } | null;
   isActive?: boolean;
   /** Derived from isActive by the list adapter. */
   status?: string;
@@ -39,8 +39,19 @@ export const categoryConfig = {
   routeTitle: "Categories",
 
   // Static header-strip label (the old first tab's wording). Display
-  // only — status filtering lives in the FilterBar dropdown.
+  // only — status filtering lives in the FilterBar dropdown. The
+  // Categories page itself replaces this label with the hierarchy
+  // tabs below (Ahsan's marks on his screenshot: tab 1 = main
+  // categories, tab 2 = sub categories).
   allLabel: "All Categories",
+
+  // Header-strip tabs for the Categories page: the existing list
+  // flow (search, status/date filters, export, pagination) runs
+  // scoped to the active tab — Main = parent null, Sub = parent set.
+  hierarchyTabs: [
+    { id: "main", label: "Main Categories" },
+    { id: "sub", label: "Sub Categories" },
+  ],
 
   // Header Action Buttons
   buttons: [
@@ -83,6 +94,20 @@ export const categoryConfig = {
     status: "Status",
   },
 
+  // Sub Categories tab columns: the Parent Category column rides
+  // right after the name so every row identifies the main category
+  // it belongs to (Ahsan's order). The Main tab keeps the exact
+  // columns above — nothing there changes.
+  subColumnHeaders: {
+    _id: "ID",
+    name: "Name",
+    parentName: "Parent Category",
+    slug: "Slug",
+    sortOrder: "Sort",
+    productsCount: "Products",
+    status: "Status",
+  },
+
   // Map Data for CreateTable Component
   mapTableData: (category: Category) => ({
     id: category._id,
@@ -90,6 +115,17 @@ export const categoryConfig = {
     code: category.code,
     name: category.name,
     image: category.image || "",
+    // The parent's identity for the Sub tab's Parent Category cell
+    // (name + thumbnail). Main-category rows carry empty values and
+    // the Main tab's headers never render the column.
+    parentName:
+      category.parent && typeof category.parent === "object"
+        ? category.parent.name || ""
+        : "",
+    parentImage:
+      category.parent && typeof category.parent === "object"
+        ? category.parent.image || ""
+        : "",
     slug: category.slug,
     sortOrder: category.sortOrder ?? 0,
     // Real count attached by the API (products actually using this category).
