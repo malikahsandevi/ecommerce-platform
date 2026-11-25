@@ -30,7 +30,25 @@ const { logActivity } = require('../utils/activity');
 const { sendError } = require('../utils/apiError');
 const { verifyStripeSignature, resolveStripeWebhookSecret } = require('../utils/stripeWebhook');
 
-const SUCCESS_EVENT_TYPES = new Set(['payment_intent.succeeded', 'checkout.session.completed']);
+const SUCCESS_EVENT_TYPES = new Set([
+    'payment_intent.succeeded',
+    'checkout.session.completed',
+    'checkout.session.async_payment_succeeded',
+]);
+
+/**
+ * A Checkout Session event only proves the money arrived when the
+ * session itself says so: for card payments `checkout.session.completed`
+ * lands with payment_status 'paid', but with a delayed method (bank
+ * debit and friends) the same event fires while the payment is still
+ * processing ('unpaid') — the money settles later and Stripe then
+ * sends `checkout.session.async_payment_succeeded`. Flipping on the
+ * bare event type would mark an unpaid order Paid, so session events
+ * are gated on the session's own payment_status; PaymentIntent
+ * events need no such gate ('succeeded' IS the settlement).
+ */
+const sessionProvesPayment = (object) =>
+    object.object !== 'checkout.session' || object.payment_status !== 'unpaid';
 
 /**
  * Finds the order a success event belongs to. First by the gateway
@@ -111,6 +129,13 @@ const stripeWebhook = async (req, res) => {
 
         const object = event.data?.object;
         if (!object || typeof object !== 'object') {
+            return res.status(200).json({ received: true });
+        }
+
+        if (!sessionProvesPayment(object)) {
+            console.log(
+                `Stripe webhook: ${event.type} (${event.id || 'no event id'}) — session not yet paid (payment_status: ${object.payment_status || 'unknown'}); acknowledged without changes.`,
+            );
             return res.status(200).json({ received: true });
         }
 
