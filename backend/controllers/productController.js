@@ -118,7 +118,19 @@ const shapeProduct = (product) => {
     return obj;
 };
 
-const normalizeProductInput = async (data) => {
+// Ahsan's product rule (Main → Sub → Product): a product's category
+// must be a SUBcategory — a category that itself has a parent. The
+// refusal is one short main point (the toast rule).
+const assertSubCategory = async (categoryId) => {
+    const category = await Category.findOne({ _id: categoryId, ...NOT_DELETED })
+        .select('parent')
+        .lean();
+    if (category && !category.parent) {
+        throw new Error('Products can only be added to a sub category.');
+    }
+};
+
+const normalizeProductInput = async (data, { existingCategoryId = null } = {}) => {
     const normalized = { ...data };
 
     // The soft-delete stamps are server-owned (soft delete writes
@@ -134,6 +146,13 @@ const normalizeProductInput = async (data) => {
 
     if (data.category !== undefined) {
         normalized.category = await resolveReference(Category, data.category, 'Category', true);
+        // The sub-category rule binds a CREATE outright, and an UPDATE
+        // only when the category actually changes: a product already
+        // sitting in a main category (grandfathered — it was filed
+        // before the rule) keeps saving its other fields untouched.
+        if (!existingCategoryId || String(normalized.category) !== String(existingCategoryId)) {
+            await assertSubCategory(normalized.category);
+        }
     }
     if (data.brand !== undefined) {
         const resolvedBrand = await resolveReference(Brand, data.brand, 'Brand');
@@ -201,11 +220,11 @@ const createProduct = async (req, res) => {
 // @access  Admin
 const updateProduct = async (req, res) => {
     try {
-        const before = await Product.findOne({ _id: req.params.id, ...NOT_DELETED }).select('price name').lean();
+        const before = await Product.findOne({ _id: req.params.id, ...NOT_DELETED }).select('price name category').lean();
 
         const product = await Product.findOneAndUpdate(
             { _id: req.params.id, ...NOT_DELETED },
-            await normalizeProductInput(req.body),
+            await normalizeProductInput(req.body, { existingCategoryId: before?.category ?? null }),
             { new: true, runValidators: true }
         );
 
