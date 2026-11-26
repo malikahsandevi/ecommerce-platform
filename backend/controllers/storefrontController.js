@@ -853,6 +853,13 @@ const loginCustomer = async (req, res) => {
 
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 const hashResetToken = (token) => crypto.createHash('sha256').update(String(token)).digest('hex');
+// The reset link carries a credential, so its host is FIXED (env or
+// the production storefront) — never the request's Origin header,
+// which anyone can spoof when requesting a reset for someone else's
+// email (host-header poisoning). Same pattern as the admin flow's
+// adminAppUrl.
+const storefrontAppUrl = () =>
+    (process.env.STOREFRONT_URL || 'https://storefront-gilt-xi.vercel.app').replace(/\/+$/, '');
 
 // @desc    Request a customer password reset email (storefront
 //          "Forgot password"). Mirrors the admin flow's mechanics —
@@ -870,22 +877,17 @@ const forgotCustomerPassword = async (req, res) => {
         if (email) {
             const user = await User.findOne({ email, ...NOT_DELETED });
             if (user && user.role === 'Customer' && user.isActive !== false) {
-                const origin = storefrontOrigin(req);
-                if (origin) {
-                    const token = crypto.randomBytes(32).toString('hex');
-                    user.passwordResetTokenHash = hashResetToken(token);
-                    user.passwordResetExpires = new Date(Date.now() + RESET_TOKEN_TTL_MS);
-                    await user.save();
-                    // Fail-soft: the helper logs and swallows a
-                    // missing/failing email service; the response
-                    // stays generic either way.
-                    await sendCustomerPasswordResetEmail({
-                        to: user.email,
-                        resetUrl: `${origin}/reset-password?token=${token}`,
-                    });
-                } else {
-                    console.error('[storefront] forgot-password: no storefront origin available for the reset link');
-                }
+                const token = crypto.randomBytes(32).toString('hex');
+                user.passwordResetTokenHash = hashResetToken(token);
+                user.passwordResetExpires = new Date(Date.now() + RESET_TOKEN_TTL_MS);
+                await user.save();
+                // Fail-soft: the helper logs and swallows a
+                // missing/failing email service; the response
+                // stays generic either way.
+                await sendCustomerPasswordResetEmail({
+                    to: user.email,
+                    resetUrl: `${storefrontAppUrl()}/reset-password?token=${token}`,
+                });
             }
         }
         res.json(generic);
