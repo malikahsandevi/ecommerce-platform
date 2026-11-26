@@ -44,7 +44,7 @@ const populateReview = (query) => query
 
 // @desc    List reviews (with product + author populated for the panel)
 // @route   GET /api/reviews
-// @access  Public
+// @access  Admin (staff + Reviews permission — closed in the Claude 8.3 round)
 const getReviews = async (req, res) => {
     try {
         const reviews = await populateReview(Review.find({ ...NOT_DELETED }));
@@ -57,7 +57,7 @@ const getReviews = async (req, res) => {
 
 // @desc    Get one review
 // @route   GET /api/reviews/:id
-// @access  Public
+// @access  Admin (staff + Reviews permission — closed in the Claude 8.3 round)
 const getReviewById = async (req, res) => {
     try {
         const review = await populateReview(Review.findOne({ _id: req.params.id, ...NOT_DELETED }));

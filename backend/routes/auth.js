@@ -14,6 +14,7 @@ const {
     regenerateRecoveryCodes
 } = require('../controllers/authController');
 const { protect } = require('../middleware/auth');
+const { requireStaff } = require('../middleware/admin');
 
 router.post('/login', loginAdmin);
 
@@ -33,11 +34,15 @@ router.post('/2fa/verify', verifyTwoFactorLogin);
 router.post('/2fa/enroll-setup', enrollSetupTwoFactor);
 router.post('/2fa/enroll-confirm', enrollConfirmTwoFactor);
 
-// Enrolment management — all behind a completed sign-in.
-router.get('/2fa/status', protect, twoFactorStatus);
-router.post('/2fa/setup', protect, setupTwoFactor);
-router.post('/2fa/enable', protect, enableTwoFactor);
-router.post('/2fa/disable', protect, disableTwoFactor);
-router.post('/2fa/recovery-codes', protect, regenerateRecoveryCodes);
+// Enrolment management — all behind a completed sign-in. STAFF
+// sessions only (Claude Section 9 follow-up): panel 2FA belongs to
+// panel accounts, and a storefront customer token — same JWT shape,
+// refused at panel login — must not reach even these self-scoped
+// endpoints.
+router.get('/2fa/status', protect, requireStaff, twoFactorStatus);
+router.post('/2fa/setup', protect, requireStaff, setupTwoFactor);
+router.post('/2fa/enable', protect, requireStaff, enableTwoFactor);
+router.post('/2fa/disable', protect, requireStaff, disableTwoFactor);
+router.post('/2fa/recovery-codes', protect, requireStaff, regenerateRecoveryCodes);
 
 module.exports = router;

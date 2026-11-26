@@ -643,6 +643,24 @@ const updateOrder = async (req, res) => {
         const previousStatus = order.status;
         const nextStatus = req.body.status || previousStatus;
 
+        // The status fields are applied below through an atomic
+        // findOneAndUpdate, which runs NO schema validators — an
+        // out-of-vocabulary status would persist silently, and the
+        // poisoned record then fails whole-record validation far
+        // away (the backup restore pre-flight rejects the file as
+        // corrupted). Refuse such values here, checked against the
+        // schema's own enums so the lists can never drift apart.
+        // (Found by the default-deny round's regression: a PUT with
+        // status "confirmed" — not this system's word — was stored.)
+        for (const field of ['status', 'paymentStatus']) {
+            const value = req.body[field];
+            if (value !== undefined && !Order.schema.path(field).enumValues.includes(value)) {
+                return res.status(400).json({
+                    message: field === 'status' ? 'Invalid order status.' : 'Invalid payment status.',
+                });
+            }
+        }
+
         // Only the fields an order update may legitimately change are
         // applied — the lifecycle/payment/shipping surface the admin's
         // edit form sends. Anything else in the body (items, totals,

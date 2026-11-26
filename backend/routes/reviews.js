@@ -8,7 +8,13 @@ const {
     deleteReview,
 } = require('../controllers/reviewController');
 const { protect } = require('../middleware/auth');
+const { requireStaff } = require('../middleware/admin');
 const { requirePermission } = require('../middleware/permissions');
+
+// DEFAULT-DENY (Claude Section 9 follow-up): the group guard makes
+// authentication this router's default — a route added here tomorrow
+// is born signed-in-staff-only; per-route checks stay as layer two.
+router.use(protect, requireStaff);
 
 
 // Reviews use a dedicated controller (not the generic one) because writes

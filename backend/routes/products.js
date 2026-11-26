@@ -4,7 +4,16 @@ const { getProducts, getProductById, createProduct, updateProduct, deleteProduct
 const { makeDeleteImpactHandler, makeCascadeDeleteHandler } = require('../controllers/deleteImpactController');
 const { Product } = require('../models');
 const { protect } = require('../middleware/auth');
+const { requireStaff } = require('../middleware/admin');
 const { requirePermission } = require('../middleware/permissions');
+
+// DEFAULT-DENY (Claude Section 9 follow-up): authentication is the
+// router's default, not each route's memory. The 8.3 round found
+// catalog reads public because per-route `protect` had simply never
+// been added to them — a route added here tomorrow is born behind
+// this group guard, and the per-route `protect` + permission checks
+// below stay as the second layer.
+router.use(protect, requireStaff);
 
 
 // Delete-impact: the links the delete confirmation warns about.

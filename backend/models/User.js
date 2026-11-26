@@ -214,6 +214,27 @@ userSchema.virtual("fullName").get(function () {
   return `${this.firstName || ""} ${this.lastName || ""}`.trim();
 });
 
+// SERIALIZER HARDENING (Claude Section 9 follow-up): credential
+// material NEVER serializes. The fields above are select:false, which
+// covers ordinary queries — but a document loaded WITH one of them
+// (an auth flow's .select('+password'), a freshly saved record) would
+// otherwise carry it into any res.json / snapshot that returns the
+// document whole. This transform is the model-level guarantee: every
+// toJSON (res.json) and toObject of a User drops the password hash,
+// the TOTP secret, the recovery-code hashes and the reset-token hash,
+// whatever the caller loaded. Internal flows are unaffected — they
+// read the fields off the document itself, never off a serialization,
+// and the backup export reads .lean() and strips explicitly on top.
+const stripCredentialFields = (doc, ret) => {
+  delete ret.password;
+  delete ret.twoFactorSecret;
+  delete ret.twoFactorRecoveryCodes;
+  delete ret.passwordResetTokenHash;
+  return ret;
+};
+userSchema.set("toJSON", { transform: stripCredentialFields });
+userSchema.set("toObject", { transform: stripCredentialFields });
+
 // Short public code (6 chars, A–Z0–9) — see utils/code.js.
 addCodeSupport(userSchema);
 

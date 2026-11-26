@@ -5,7 +5,13 @@ const { Category, Product } = require('../models');
 const genericController = require('../controllers/genericController')(Category);
 const { makeDeleteImpactHandler, makeCascadeDeleteHandler } = require('../controllers/deleteImpactController');
 const { protect } = require('../middleware/auth');
+const { requireStaff } = require('../middleware/admin');
 const { requirePermission } = require('../middleware/permissions');
+
+// DEFAULT-DENY (Claude Section 9 follow-up): the group guard makes
+// authentication this router's default — a route added here tomorrow
+// is born signed-in-staff-only; per-route checks stay as layer two.
+router.use(protect, requireStaff);
 const { NOT_DELETED } = require('../utils/softDelete');
 const { sendError } = require('../utils/apiError');
 

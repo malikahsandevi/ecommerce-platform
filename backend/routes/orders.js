@@ -12,10 +12,14 @@ const {
     syncAllOrderTracking
 } = require('../controllers/orderController');
 const { protect } = require('../middleware/auth');
+const { requireStaff } = require('../middleware/admin');
 const { requirePermission } = require('../middleware/permissions');
 
 
-router.use(protect);
+// DEFAULT-DENY (Claude Section 9 follow-up): the group guard carries
+// the staff check too — orders are panel data, and a customer session
+// token must be refused here, not only by the permission matrix.
+router.use(protect, requireStaff);
 
 router.route('/')
     .get(requirePermission('Orders', 'view'), getOrders)

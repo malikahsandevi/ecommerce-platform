@@ -31,6 +31,11 @@ const {
 const { NOT_DELETED, applySoftDelete } = require('../utils/softDelete');
 const { sendError, translateErrorMessage } = require('../utils/apiError');
 
+// DEFAULT-DENY (Claude Section 9 follow-up): the group guard makes
+// authentication this router's default — a route added here tomorrow
+// is born signed-in-staff-only; per-route checks stay as layer two.
+router.use(protect, requireStaff);
+
 
 const UPLOAD_FOLDER = 'ecommerce-media';
 

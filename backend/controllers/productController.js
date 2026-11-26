@@ -184,7 +184,7 @@ const normalizeProductInput = async (data, { existingCategoryId = null } = {}) =
 
 // @desc    Fetch all products
 // @route   GET /api/products
-// @access  Public/Admin
+// @access  Admin (staff + Products permission — closed in the Claude 8.3 round)
 const getProducts = async (req, res) => {
     try {
         const products = await Product.find({ ...NOT_DELETED }).populate('category brand');
@@ -197,7 +197,7 @@ const getProducts = async (req, res) => {
 
 // @desc    Fetch one product
 // @route   GET /api/products/:id
-// @access  Public/Admin
+// @access  Admin (staff + Products permission — closed in the Claude 8.3 round)
 const getProductById = async (req, res) => {
     try {
         const product = await Product.findOne({ _id: req.params.id, ...NOT_DELETED }).populate('category brand');

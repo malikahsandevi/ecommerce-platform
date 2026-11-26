@@ -4,10 +4,16 @@ const { Coupon, Product } = require('../models');
 const genericController = require('../controllers/genericController')(Coupon);
 const { makeDeleteImpactHandler } = require('../controllers/deleteImpactController');
 const { protect } = require('../middleware/auth');
-const { requirePermission } = require('../middleware/permissions');
+const { requireStaff } = require('../middleware/admin');
+const { requirePermission, requireAnyPermission } = require('../middleware/permissions');
 const { resolveCoupon } = require('../utils/coupon');
 const { NOT_DELETED } = require('../utils/softDelete');
 const { sendError } = require('../utils/apiError');
+
+// DEFAULT-DENY (Claude Section 9 follow-up): the group guard makes
+// authentication this router's default — a route added here tomorrow
+// is born signed-in-staff-only; per-route checks stay as layer two.
+router.use(protect, requireStaff);
 
 
 // Live check for the admin Create Order form's Coupon field: validates
@@ -18,7 +24,13 @@ const { sendError } = require('../utils/apiError');
 // redemption. The lines are priced here from the product documents
 // (never from caller-supplied prices), exactly as createOrder prices
 // them.
-router.post('/validate', protect, async (req, res) => {
+// The staff guard comes from the group guard above; the permission
+// gate names the callers this helper exists for — the panel's order
+// forms (CouponApplyField) and the Coupons module itself. Before this
+// round the route carried `protect` alone, so ANY signed-in token —
+// including a self-registered storefront customer — could use it as
+// a coupon-code guessing oracle (valid code → its discount details).
+router.post('/validate', requireAnyPermission([['Orders', 'create'], ['Orders', 'edit'], ['Coupons', 'view']]), async (req, res) => {
     try {
         const body = req.body || {};
         let subtotal = Number(body.subtotal) || 0;
