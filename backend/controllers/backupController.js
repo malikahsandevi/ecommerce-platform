@@ -11,6 +11,7 @@ const {
     User,
     Review,
     Media,
+    BackupSnapshot,
 } = require('../models');
 const { refreshCredentials } = require('../utils/credentials');
 const { invalidatePermissionCache } = require('../utils/permissions');
@@ -41,6 +42,7 @@ const BACKUP_VERSION = 1;
 const USER_CREDENTIAL_FIELDS = [
     'password',
     'twoFactorSecret',
+    'twoFactorRecoveryCodes',
     'passwordResetTokenHash',
     'passwordResetExpires',
 ];
@@ -98,14 +100,44 @@ const fileStampInTimeZone = (date, timeZone) => {
     }
 };
 
-// POST /api/settings/backup — build the file and stream it as a
-// download. The payload goes out with res.send, NOT res.json: the
-// media-protection response signer hooks res.json only, and a backup
-// must carry the STORED (unsigned) asset URLs verbatim, exactly as
-// they would be restored.
-const createBackup = async (req, res) => {
-    try {
-        const [
+/** Assembles the backup payload for the CURRENT database state —
+ *  shared by the download endpoint and the pre-restore safety
+ *  snapshot (GAP C), so a snapshot is byte-for-byte a backup file. */
+const buildBackupPayload = async () => {
+    const [
+        settings,
+        rolePermissions,
+        products,
+        categories,
+        brands,
+        coupons,
+        orders,
+        users,
+        reviews,
+        media,
+    ] = await Promise.all([
+        Setting.find().lean(),
+        RolePermission.find().lean(),
+        Product.find().lean(),
+        Category.find().lean(),
+        Brand.find().lean(),
+        Coupon.find().lean(),
+        Order.find().lean(),
+        User.find().lean(),
+        Review.find().lean(),
+        Media.find().lean(),
+    ]);
+
+    const general = settings[0]?.general || {};
+    const timeZone = general.timeZone || 'Asia/Karachi';
+    const now = new Date();
+
+    const payload = {
+        format: BACKUP_FORMAT,
+        version: BACKUP_VERSION,
+        createdAt: now.toISOString(),
+        storeName: general.storeName || '',
+        data: {
             settings,
             rolePermissions,
             products,
@@ -113,50 +145,79 @@ const createBackup = async (req, res) => {
             brands,
             coupons,
             orders,
-            users,
+            users: users.map(stripUserCredentials),
             reviews,
             media,
-        ] = await Promise.all([
-            Setting.find().lean(),
-            RolePermission.find().lean(),
-            Product.find().lean(),
-            Category.find().lean(),
-            Brand.find().lean(),
-            Coupon.find().lean(),
-            Order.find().lean(),
-            User.find().lean(),
-            Review.find().lean(),
-            Media.find().lean(),
-        ]);
+        },
+    };
 
-        const general = settings[0]?.general || {};
-        const timeZone = general.timeZone || 'Asia/Karachi';
-        const now = new Date();
+    return {
+        payload,
+        filename: `backup-${fileStampInTimeZone(now, timeZone)}.json`,
+    };
+};
 
-        const payload = {
-            format: BACKUP_FORMAT,
-            version: BACKUP_VERSION,
-            createdAt: now.toISOString(),
-            storeName: general.storeName || '',
-            data: {
-                settings,
-                rolePermissions,
-                products,
-                categories,
-                brands,
-                coupons,
-                orders,
-                users: users.map(stripUserCredentials),
-                reviews,
-                media,
-            },
-        };
-
-        const filename = `backup-${fileStampInTimeZone(now, timeZone)}.json`;
+// POST /api/settings/backup — build the file and stream it as a
+// download. The payload goes out with res.send, NOT res.json: the
+// media-protection response signer hooks res.json only, and a backup
+// must carry the STORED (unsigned) asset URLs verbatim, exactly as
+// they would be restored.
+const createBackup = async (req, res) => {
+    try {
+        const { payload, filename } = await buildBackupPayload();
         res.setHeader('Content-Type', 'application/json');
         res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
         res.setHeader('Cache-Control', 'no-store');
         return res.send(JSON.stringify(payload));
+    } catch (error) {
+        return sendError(res, error, 500);
+    }
+};
+
+/** How many pre-restore safety snapshots are retained. */
+const SAFETY_SNAPSHOT_KEEP = 3;
+
+/** Captures the current state as a server-side safety snapshot
+ *  (GAP C). Runs BEFORE the first restore write; a failure here
+ *  aborts the restore — restoring without a way back is worse than
+ *  not restoring. Older snapshots beyond the keep-limit are pruned. */
+const takeSafetySnapshot = async (req) => {
+    const { payload } = await buildBackupPayload();
+    const serialized = JSON.stringify(payload);
+    const snapshot = await BackupSnapshot.create({
+        createdBy: req.user?._id || null,
+        reason: 'pre-restore',
+        payload: serialized,
+        sizeBytes: Buffer.byteLength(serialized),
+    });
+    const stale = await BackupSnapshot.find()
+        .sort({ createdAt: -1 })
+        .skip(SAFETY_SNAPSHOT_KEEP)
+        .select('_id')
+        .lean();
+    if (stale.length > 0) {
+        await BackupSnapshot.deleteMany({ _id: { $in: stale.map((entry) => entry._id) } });
+    }
+    return snapshot;
+};
+
+// GET /api/settings/backup/safety — download the newest pre-restore
+// safety snapshot as a backup file (restoring it undoes the restore
+// it preceded). Same gates as creating a backup: the payload carries
+// the same integration secrets.
+const downloadSafetyBackup = async (req, res) => {
+    try {
+        const snapshot = await BackupSnapshot.findOne().sort({ createdAt: -1 }).lean();
+        if (!snapshot) {
+            return res.status(404).json({
+                message: 'No safety backup exists yet — one is saved automatically before every restore.',
+            });
+        }
+        const stamp = fileStampInTimeZone(new Date(snapshot.createdAt), 'Asia/Karachi');
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Content-Disposition', `attachment; filename="safety-backup-${stamp}.json"`);
+        res.setHeader('Cache-Control', 'no-store');
+        return res.send(snapshot.payload);
     } catch (error) {
         return sendError(res, error, 500);
     }
@@ -302,7 +363,7 @@ const replaceCollection = async (Model, docs) => {
  *  writeRestoredUsers performs the replacement. */
 const prepareRestoredUsers = async (req, backupUsers) => {
     const current = await User.find()
-        .select('+password +twoFactorSecret +passwordResetTokenHash')
+        .select('+password +twoFactorSecret +passwordResetTokenHash +twoFactorRecoveryCodes')
         .lean();
     const currentByEmail = new Map(
         current.map((user) => [String(user.email || '').toLowerCase(), user]),
@@ -320,6 +381,11 @@ const prepareRestoredUsers = async (req, backupUsers) => {
         if (existing) {
             doc.password = existing.password;
             doc.twoFactorSecret = existing.twoFactorSecret ?? null;
+            // Recovery codes transplant with the rest of the live
+            // credential set (GAP B): a restore must never silently
+            // resurrect codes the owner burned or kill the set they
+            // are holding.
+            doc.twoFactorRecoveryCodes = existing.twoFactorRecoveryCodes ?? [];
             doc.twoFactorEnabled = Boolean(existing.twoFactorEnabled);
             doc.passwordResetTokenHash = existing.passwordResetTokenHash ?? null;
             doc.passwordResetExpires = existing.passwordResetExpires ?? null;
@@ -332,6 +398,7 @@ const prepareRestoredUsers = async (req, backupUsers) => {
             // eslint-disable-next-line no-await-in-loop
             doc.password = await bcrypt.hash(crypto.randomBytes(24).toString('hex'), 12);
             doc.twoFactorSecret = null;
+            doc.twoFactorRecoveryCodes = [];
             doc.twoFactorEnabled = false;
             doc.passwordResetTokenHash = null;
             doc.passwordResetExpires = null;
@@ -379,6 +446,20 @@ const restoreBackup = async (req, res) => {
             return res.status(400).json({ message: schemaError });
         }
 
+        // SAFETY SNAPSHOT (GAP C): the current state is captured
+        // server-side BEFORE the first write, in backup-file format,
+        // so this restore can itself be undone. If the snapshot
+        // cannot be taken, the restore does not run at all.
+        let safetySnapshot;
+        try {
+            safetySnapshot = await takeSafetySnapshot(req);
+        } catch (snapshotError) {
+            console.error(`[backup] safety snapshot failed, restore aborted: ${snapshotError.message}`);
+            return res.status(500).json({
+                message: 'The safety backup before this restore could not be saved, so nothing was restored. Try again.',
+            });
+        }
+
         const counts = {};
 
         counts.settings = await replaceCollection(Setting, data.settings);
@@ -403,10 +484,14 @@ const restoreBackup = async (req, res) => {
             message: 'Backup restored.',
             counts,
             restoredAt: new Date().toISOString(),
+            safetyBackup: {
+                id: String(safetySnapshot._id),
+                createdAt: safetySnapshot.createdAt,
+            },
         });
     } catch (error) {
         return sendError(res, error, 500);
     }
 };
 
-module.exports = { createBackup, restoreBackup };
+module.exports = { createBackup, restoreBackup, downloadSafetyBackup };

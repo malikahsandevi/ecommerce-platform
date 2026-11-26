@@ -12,6 +12,8 @@ const ActivityLog = require('./ActivityLog');
 const Analytics = require('./Analytics');
 const RolePermission = require('./RolePermission');
 const Credential = require('./Credential');
+const AuthThrottle = require('./AuthThrottle');
+const BackupSnapshot = require('./BackupSnapshot');
 
 module.exports = {
   User,
@@ -26,5 +28,7 @@ module.exports = {
   ActivityLog,
   Analytics,
   RolePermission,
-  Credential
+  Credential,
+  AuthThrottle,
+  BackupSnapshot
 };

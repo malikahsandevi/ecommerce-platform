@@ -8,6 +8,21 @@ const { getJwtSecret, getJwtSignSecret } = require('../utils/credentials');
 const { authenticator } = require('otplib');
 const QRCode = require('qrcode');
 const { sendError } = require('../utils/apiError');
+const {
+    AUTH_THROTTLE,
+    getClientIp,
+    throttleLock,
+    recordThrottleFailure,
+    lockoutEntries,
+    clearThrottle,
+    throttleCount,
+} = require('../utils/authThrottle');
+const {
+    generateRecoveryCodeSet,
+    matchRecoveryCode,
+    remainingRecoveryCodes,
+} = require('../utils/recoveryCodes');
+const { logActivity } = require('../utils/activity');
 
 // Accept codes from the neighbouring 30-second steps as well, to absorb
 // clock drift between the server and the admin's phone.
@@ -126,6 +141,19 @@ const loginAdmin = async (req, res) => {
     try {
         const { email, password } = req.body;
 
+        // Brute-force throttle (GAP A): checked before any credential
+        // work, keyed by the email as typed + the client IP — unknown
+        // emails accumulate failures identically, so the lock reveals
+        // nothing about which accounts exist.
+        const throttleKeys = [
+            `staff-login:${String(email || '').trim().toLowerCase()}`,
+            `staff-login-ip:${getClientIp(req)}`,
+        ];
+        const lock = await throttleLock(throttleKeys);
+        if (lock.locked) {
+            return res.status(429).json({ message: lock.message });
+        }
+
         // ADMIN_EMAIL / ADMIN_PASSWORD are SEED-ONLY: they create the
         // first Super Admin account when no account with that email
         // exists yet. From the first successful seed on, the account's
@@ -184,6 +212,9 @@ const loginAdmin = async (req, res) => {
         if (adminUser) {
             const isMatch = await adminUser.comparePassword(password);
             if (isMatch) {
+                // Credentials proven — the failure counters for this
+                // account + IP reset (the 2FA step has its own).
+                await clearThrottle(throttleKeys);
                 // This endpoint signs people into the ADMIN panel. Customer
                 // accounts (storefront sign-ups) must not pass here, and a
                 // deactivated account must not pass either.
@@ -216,6 +247,7 @@ const loginAdmin = async (req, res) => {
             }
         }
 
+        await recordThrottleFailure(lockoutEntries(throttleKeys[0], throttleKeys[1]));
         res.status(401).json({ message: 'Invalid email or password' });
     } catch (error) {
         if (error.code === 'JWT_SIGNING_DISABLED') {
@@ -249,7 +281,17 @@ const verifyTwoFactorLogin = async (req, res) => {
             return res.status(401).json({ message: 'This sign-in attempt expired — sign in again.' });
         }
 
-        const user = await User.findOne({ _id: decoded.id, ...NOT_DELETED }).select('+twoFactorSecret');
+        // Brute-force throttle (GAP A): the counter is keyed by the
+        // ACCOUNT (plus IP), so it survives fresh temp tokens — an
+        // attacker cannot reset it by signing in again.
+        const throttleKeys = [`staff-2fa:${decoded.id}`, `staff-2fa-ip:${getClientIp(req)}`];
+        const lock = await throttleLock(throttleKeys);
+        if (lock.locked) {
+            return res.status(429).json({ message: lock.message });
+        }
+
+        const user = await User.findOne({ _id: decoded.id, ...NOT_DELETED })
+            .select('+twoFactorSecret +twoFactorRecoveryCodes');
         if (!user || !user.twoFactorEnabled || !user.twoFactorSecret) {
             return res.status(400).json({ message: 'Two-factor authentication is not enabled for this account.' });
         }
@@ -259,12 +301,30 @@ const verifyTwoFactorLogin = async (req, res) => {
             return res.status(accessError.status).json({ message: accessError.message });
         }
 
-        const valid = authenticator.check(String(code).trim(), user.twoFactorSecret);
-        if (!valid) {
-            return res.status(400).json({ message: 'Invalid verification code — check your authenticator app and try again.' });
+        const submitted = String(code).trim();
+        if (authenticator.check(submitted, user.twoFactorSecret)) {
+            await clearThrottle(throttleKeys);
+            return res.json(await sessionPayload(user));
         }
 
-        res.json(await sessionPayload(user));
+        // Recovery codes (GAP B): a live one-time code from the set
+        // issued at enrolment stands in for the authenticator. It is
+        // burned the moment it works — reuse is just another failure.
+        const recoveryIndex = matchRecoveryCode(user.twoFactorRecoveryCodes, submitted);
+        if (recoveryIndex >= 0) {
+            user.twoFactorRecoveryCodes[recoveryIndex].usedAt = new Date();
+            await user.save();
+            await logActivity(
+                'STATUS_CHANGE',
+                `${user.email} signed in with a two-factor recovery code (${remainingRecoveryCodes(user.twoFactorRecoveryCodes)} left)`,
+                { customerId: user._id },
+            );
+            await clearThrottle(throttleKeys);
+            return res.json(await sessionPayload(user));
+        }
+
+        await recordThrottleFailure(lockoutEntries(throttleKeys[0], throttleKeys[1]));
+        return res.status(400).json({ message: 'Invalid verification code — check your authenticator app and try again.' });
     } catch (error) {
         if (error.code === 'JWT_SIGNING_DISABLED') {
             return sendError(res, error, 403);
@@ -337,6 +397,14 @@ const enrollConfirmTwoFactor = async (req, res) => {
             return res.status(401).json({ message: 'This sign-in attempt expired — sign in again.' });
         }
 
+        // Enrolment confirmation guesses count against the same 2FA
+        // throttle as the login verify step (GAP A).
+        const throttleKeys = [`staff-2fa:${decoded.id}`, `staff-2fa-ip:${getClientIp(req)}`];
+        const lock = await throttleLock(throttleKeys);
+        if (lock.locked) {
+            return res.status(429).json({ message: lock.message });
+        }
+
         const user = await User.findOne({ _id: decoded.id, ...NOT_DELETED }).select('+twoFactorSecret');
         if (!user) {
             return res.status(400).json({ message: 'Two-factor authentication is not available for this account.' });
@@ -355,13 +423,20 @@ const enrollConfirmTwoFactor = async (req, res) => {
 
         const valid = authenticator.check(String(code).trim(), user.twoFactorSecret);
         if (!valid) {
+            await recordThrottleFailure(lockoutEntries(throttleKeys[0], throttleKeys[1]));
             return res.status(400).json({ message: 'Invalid verification code — check your authenticator app and try again.' });
         }
 
+        await clearThrottle(throttleKeys);
         user.twoFactorEnabled = true;
+        // Recovery codes (GAP B) are born with the enrolment: the
+        // plain set rides this ONE response and is never retrievable
+        // again — the login screen shows it once for saving.
+        const recovery = generateRecoveryCodeSet();
+        user.twoFactorRecoveryCodes = recovery.records;
         await user.save();
 
-        res.json(await sessionPayload(user));
+        res.json({ ...(await sessionPayload(user)), recoveryCodes: recovery.plain });
     } catch (error) {
         if (error.code === 'JWT_SIGNING_DISABLED') {
             return sendError(res, error, 403);
@@ -374,7 +449,11 @@ const enrollConfirmTwoFactor = async (req, res) => {
 // @route   GET /api/auth/2fa/status
 // @access  Private
 const twoFactorStatus = async (req, res) => {
-    res.json({ enabled: Boolean(req.user.twoFactorEnabled) });
+    const user = await User.findById(req.user._id).select('+twoFactorRecoveryCodes');
+    res.json({
+        enabled: Boolean(req.user.twoFactorEnabled),
+        recoveryCodesRemaining: remainingRecoveryCodes(user?.twoFactorRecoveryCodes),
+    });
 };
 
 // @desc    Start enrolment: generate a fresh TOTP secret and return it
@@ -432,8 +511,12 @@ const enableTwoFactor = async (req, res) => {
         }
 
         user.twoFactorEnabled = true;
+        // Recovery codes (GAP B) are issued with the enrolment and
+        // shown exactly once, in this response.
+        const recovery = generateRecoveryCodeSet();
+        user.twoFactorRecoveryCodes = recovery.records;
         await user.save();
-        res.json({ enabled: true });
+        res.json({ enabled: true, recoveryCodes: recovery.plain });
     } catch (error) {
         sendError(res, error, 500);
     }
@@ -465,8 +548,56 @@ const disableTwoFactor = async (req, res) => {
 
         user.twoFactorEnabled = false;
         user.twoFactorSecret = null;
+        user.twoFactorRecoveryCodes = [];
         await user.save();
         res.json({ enabled: false });
+    } catch (error) {
+        sendError(res, error, 500);
+    }
+};
+
+// @desc    Regenerate the 2FA recovery codes — the security area's
+//          lost-phone safety net (GAP B). Requires the account
+//          password AND a current authenticator code, so a hijacked
+//          session alone cannot mint fresh codes. The old set dies
+//          the moment the new one is issued; the new plain codes are
+//          returned exactly once.
+// @route   POST /api/auth/2fa/recovery-codes
+// @access  Private
+const regenerateRecoveryCodes = async (req, res) => {
+    try {
+        const { password, code } = req.body || {};
+        if (!password || !code) {
+            return res.status(400).json({ message: 'Your password and a current verification code are required.' });
+        }
+
+        const user = await User.findById(req.user._id)
+            .select('+password +twoFactorSecret +twoFactorRecoveryCodes');
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        if (!user.twoFactorEnabled || !user.twoFactorSecret) {
+            return res.status(400).json({ message: 'Two-factor authentication is not enabled.' });
+        }
+
+        const passwordOk = await user.comparePassword(String(password));
+        if (!passwordOk) {
+            return res.status(403).json({ message: 'Incorrect password — the recovery codes were not changed.' });
+        }
+        const valid = authenticator.check(String(code).trim(), user.twoFactorSecret);
+        if (!valid) {
+            return res.status(400).json({ message: 'Invalid verification code — check your authenticator app and try again.' });
+        }
+
+        const recovery = generateRecoveryCodeSet();
+        user.twoFactorRecoveryCodes = recovery.records;
+        await user.save();
+        await logActivity(
+            'STATUS_CHANGE',
+            `${user.email} regenerated their two-factor recovery codes`,
+            { customerId: user._id },
+        );
+        res.json({ recoveryCodes: recovery.plain, recoveryCodesRemaining: recovery.plain.length });
     } catch (error) {
         sendError(res, error, 500);
     }
@@ -493,20 +624,29 @@ const forgotPassword = async (req, res) => {
     try {
         const email = String(req.body?.email || '').trim().toLowerCase();
         if (email) {
-            const user = await User.findOne({ email, ...NOT_DELETED });
-            // Panel accounts only — customer accounts never sign in to
-            // the admin, so they get no reset email from here either.
-            if (user && user.role !== 'Customer' && user.isActive !== false) {
-                const token = crypto.randomBytes(32).toString('hex');
-                user.passwordResetTokenHash = hashResetToken(token);
-                user.passwordResetExpires = new Date(Date.now() + RESET_TOKEN_TTL_MS);
-                await user.save();
-                // Fail-soft: the helper logs and swallows a missing /
-                // failing email service; the response stays generic.
-                await sendPasswordResetEmail({
-                    to: user.email,
-                    resetUrl: `${adminAppUrl()}/reset-password?token=${token}`,
-                });
+            // Forgot-password throttle (GAP A): past the request
+            // limit for this email or IP, the answer stays generic
+            // but no token is issued and no email is sent — the
+            // endpoint cannot be used to flood an inbox or probe.
+            const forgotKeys = [`forgot-staff:${email}`, `forgot-ip:${getClientIp(req)}`];
+            const already = await throttleCount(forgotKeys);
+            if (already < AUTH_THROTTLE.forgotMaxRequests) {
+                await recordThrottleFailure(forgotKeys, Number.MAX_SAFE_INTEGER);
+                const user = await User.findOne({ email, ...NOT_DELETED });
+                // Panel accounts only — customer accounts never sign in to
+                // the admin, so they get no reset email from here either.
+                if (user && user.role !== 'Customer' && user.isActive !== false) {
+                    const token = crypto.randomBytes(32).toString('hex');
+                    user.passwordResetTokenHash = hashResetToken(token);
+                    user.passwordResetExpires = new Date(Date.now() + RESET_TOKEN_TTL_MS);
+                    await user.save();
+                    // Fail-soft: the helper logs and swallows a missing /
+                    // failing email service; the response stays generic.
+                    await sendPasswordResetEmail({
+                        to: user.email,
+                        resetUrl: `${adminAppUrl()}/reset-password?token=${token}`,
+                    });
+                }
             }
         }
         res.json(generic);
@@ -569,5 +709,6 @@ module.exports = {
     twoFactorStatus,
     setupTwoFactor,
     enableTwoFactor,
-    disableTwoFactor
+    disableTwoFactor,
+    regenerateRecoveryCodes
 };

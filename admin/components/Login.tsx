@@ -194,7 +194,7 @@ export const AdminLoginPopup: React.FC<AdminLoginPopupProps> = ({
           </h3>
           <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
             {step === "code"
-              ? t("Enter the 6-digit code from your authenticator app")
+              ? t("Enter the 6-digit code from your authenticator app — or one of your recovery codes if you lost your phone")
               : step === "setup"
                 ? t("Every admin account uses two-factor authentication. Scan the QR code with your authenticator app, then enter the code to finish signing in.")
                 : step === "forgot"
@@ -304,13 +304,11 @@ export const AdminLoginPopup: React.FC<AdminLoginPopupProps> = ({
               <input
                 type="text"
                 required
-                inputMode="numeric"
                 autoComplete="one-time-code"
                 autoFocus
-                maxLength={6}
-                pattern="[0-9]{6}"
+                maxLength={11}
                 value={code}
-                onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+                onChange={(e) => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, ""))}
                 placeholder="123456"
                 className="w-full px-3 py-2 text-center text-sm tracking-[0.4em] bg-transparent rounded-xl focus:outline-none transition-colors"
                 style={{
@@ -320,11 +318,14 @@ export const AdminLoginPopup: React.FC<AdminLoginPopupProps> = ({
                   color: "var(--text)",
                 }}
               />
+              <p className="mt-2 text-center text-[11px]" style={{ color: "var(--text-muted)" }}>
+                {t("Lost your phone? Enter one of your recovery codes instead — each one works once.")}
+              </p>
             </div>
 
             <button
               type="submit"
-              disabled={loading || code.length !== 6}
+              disabled={loading || !(/^\d{6}$/.test(code) || code.replace(/-/g, "").length === 10)}
               className="w-full py-2.5 mt-2 font-semibold text-xs rounded-xl transition-all disabled:opacity-50 hover:opacity-90 text-white inline-flex items-center justify-center gap-2"
               style={{ backgroundColor: "var(--primary)" }}
             >

@@ -15,11 +15,11 @@ const { requirePermission } = require('../middleware/permissions');
 // must keep the product's averageRating / reviewCount in sync and record
 // dashboard activity.
 router.route('/')
-    .get(getReviews)
+    .get(protect, requirePermission('Reviews', 'view'), getReviews)
     .post(protect, requirePermission('Reviews', 'create'), createReview);
 
 router.route('/:id')
-    .get(getReviewById)
+    .get(protect, requirePermission('Reviews', 'view'), getReviewById)
     .put(protect, requirePermission('Reviews', 'edit'), updateReview)
     .delete(protect, requirePermission('Reviews', 'delete'), deleteReview);
 

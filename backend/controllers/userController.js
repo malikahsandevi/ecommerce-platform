@@ -2,7 +2,7 @@ const User = require('../models/User');
 const Order = require('../models/Order');
 // Registered so Order's coupon populate can resolve its code.
 require('../models/Coupon');
-const { getAllRoleNames } = require('../utils/permissions');
+const { getAllRoleNames, getEffectivePermissions } = require('../utils/permissions');
 const { NOT_DELETED, applySoftDelete } = require('../utils/softDelete');
 const { detachForDelete } = require('../utils/deleteImpact');
 const { sendError } = require('../utils/apiError');
@@ -13,12 +13,42 @@ const favoriteCategoryError = (res) =>
         message: `Favorite categories are limited to ${FAVORITE_CATEGORY_LIMIT}. Remove one before adding another.`
     });
 
+// ── Read scoping (Claude 8.3 verification round) ───────────────────
+// ONE collection backs two panel modules — Customers (storefront
+// accounts) and Users (panel accounts) — and the route guard admits a
+// caller holding EITHER module's view. The records a caller may READ
+// follow the same split as the write guards in routes/users.js: a
+// caller without Users view sees customer records only, and a caller
+// without Customers view sees staff records only. Before this, any
+// Customers-view role (Editor, Support…) received every staff
+// account's name, email and role from these reads.
+const callerReadScope = async (req) => {
+    const perms = await getEffectivePermissions(req.user.role);
+    return {
+        canStaff: Boolean(perms?.Users?.view),
+        canCustomers: Boolean(perms?.Customers?.view),
+    };
+};
+
+const scopeFilter = (scope) => {
+    if (scope.canStaff && scope.canCustomers) return {};
+    if (scope.canCustomers) return { role: 'Customer' };
+    if (scope.canStaff) return { role: { $ne: 'Customer' } };
+    return { role: '__none__' };
+};
+
+const targetInScope = (scope, target) => {
+    if (!target) return false;
+    return target.role === 'Customer' ? scope.canCustomers : scope.canStaff;
+};
+
 // @desc    Get all users (customers)
 // @route   GET /api/users
 // @access  Admin
 const getUsers = async (req, res) => {
     try {
-        const users = await User.find({ ...NOT_DELETED }).select('-password');
+        const scope = await callerReadScope(req);
+        const users = await User.find({ ...NOT_DELETED, ...scopeFilter(scope) }).select('-password');
         await User.withCodes(users);
         res.json(users);
     } catch (error) {
@@ -33,6 +63,11 @@ const getUserById = async (req, res) => {
     try {
         const user = await User.findOne({ _id: req.params.id, ...NOT_DELETED }).select('-password');
         if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        // Out-of-scope records answer exactly like missing ones — a
+        // Customers-only caller cannot confirm a staff account exists.
+        if (!targetInScope(await callerReadScope(req), user)) {
             return res.status(404).json({ message: 'User not found' });
         }
         await User.withCodes(user);
@@ -417,6 +452,10 @@ const resetUserTwoFactor = async (req, res) => {
 
         target.twoFactorEnabled = false;
         target.twoFactorSecret = null;
+        // Recovery codes die with the reset (GAP B) — they belong to
+        // the old enrolment; the member gets a fresh set when they
+        // enrol again at their next sign-in.
+        target.twoFactorRecoveryCodes = [];
         await target.save();
 
         const user = await User.findById(target._id).select('-password');
@@ -465,6 +504,9 @@ const getUserProfile = async (req, res) => {
             .populate('cart.product', 'name image images price')
             .populate('favoriteCategories', 'name image');
         if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        if (!targetInScope(await callerReadScope(req), user)) {
             return res.status(404).json({ message: 'User not found' });
         }
 

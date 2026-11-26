@@ -38,6 +38,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [isRestoring, setIsRestoring] = useState(true);
   const [user, setUser] = useState<AdminUser | null>(null);
   const [sessionNotice, setSessionNotice] = useState<string | null>(null);
+  // 2FA recovery codes issued by a login-time enrolment (GAP B): the
+  // API returns the plain set exactly once, in the enrol-confirm
+  // response, so it is held here — in memory only, never stored —
+  // for the Security panel to show once with a save acknowledgement.
+  const [pendingRecoveryCodes, setPendingRecoveryCodes] = useState<string[] | null>(null);
+
+  const clearPendingRecoveryCodes = useCallback(() => setPendingRecoveryCodes(null), []);
 
   const clearNotice = useCallback(() => setSessionNotice(null), []);
 
@@ -50,9 +57,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   // Wake the serverless backend (function boot + database connect) as soon
   // as the panel opens, so the first real request after login is not the
-  // one paying the cold-start cost. Fire-and-forget against a public route.
+  // one paying the cold-start cost. Fire-and-forget against a public route
+  // (the storefront config — the admin catalog routes require sign-in).
   useEffect(() => {
-    apiClient.get('/products').catch(() => {
+    apiClient.get('/storefront/config').catch(() => {
       /* warm-up only — failures are retried by the real requests */
     });
   }, []);
@@ -228,13 +236,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
    */
   const confirmLoginEnrolment = async (tempToken: string, code: string): Promise<boolean> => {
     const res = await apiClient.post('/auth/2fa/enroll-confirm', { tempToken, code });
+    if (Array.isArray(res.data?.recoveryCodes) && res.data.recoveryCodes.length > 0) {
+      setPendingRecoveryCodes(res.data.recoveryCodes as string[]);
+    }
     completeLogin(res.data, '');
     return true;
   };
 
   return (
     <AuthContext.Provider
-      value={{ isAuthenticated, isRestoring, user, login, verifyTwoFactor, startLoginEnrolment, confirmLoginEnrolment, logout, sessionNotice, clearNotice, hasPermission }}
+      value={{ isAuthenticated, isRestoring, user, login, verifyTwoFactor, startLoginEnrolment, confirmLoginEnrolment, logout, sessionNotice, clearNotice, hasPermission, pendingRecoveryCodes, clearPendingRecoveryCodes }}
     >
       {children}
     </AuthContext.Provider>

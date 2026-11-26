@@ -10,7 +10,8 @@ const {
     twoFactorStatus,
     setupTwoFactor,
     enableTwoFactor,
-    disableTwoFactor
+    disableTwoFactor,
+    regenerateRecoveryCodes
 } = require('../controllers/authController');
 const { protect } = require('../middleware/auth');
 
@@ -37,5 +38,6 @@ router.get('/2fa/status', protect, twoFactorStatus);
 router.post('/2fa/setup', protect, setupTwoFactor);
 router.post('/2fa/enable', protect, enableTwoFactor);
 router.post('/2fa/disable', protect, disableTwoFactor);
+router.post('/2fa/recovery-codes', protect, regenerateRecoveryCodes);
 
 module.exports = router;

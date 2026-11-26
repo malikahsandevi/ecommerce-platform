@@ -11,6 +11,15 @@ const { getShippingConfig, computeShippingCharge, shipmentBlock } = require('../
 const { paletteById, resolvePaletteId } = require('../config/palettes');
 const { resolveStripeCheckout, isStripePaymentMethod, createCheckoutSession, createPaymentIntent } = require('../utils/stripePay');
 const { sendCustomerPasswordResetEmail } = require('../utils/emailTemplates');
+const {
+    AUTH_THROTTLE,
+    getClientIp,
+    throttleLock,
+    recordThrottleFailure,
+    lockoutEntries,
+    clearThrottle,
+    throttleCount,
+} = require('../utils/authThrottle');
 
 // PUBLIC storefront endpoints. These never re-implement business
 // rules: order placement goes through the SAME createOrder the admin
@@ -889,6 +898,19 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // @access  Public
 const registerCustomer = async (req, res) => {
     try {
+        // Registration throttle (GAP A): attempts are counted per IP —
+        // past the limit the endpoint refuses with the standard
+        // too-many-attempts sentence before any account work happens.
+        const registerKeys = [`customer-register-ip:${getClientIp(req)}`];
+        const attempts = await throttleCount(registerKeys);
+        if (attempts >= AUTH_THROTTLE.registerMaxAttempts) {
+            const lock = await throttleLock(registerKeys);
+            return res.status(429).json({
+                message: lock.message || 'Too many attempts. Try again later.',
+            });
+        }
+        await recordThrottleFailure(registerKeys, AUTH_THROTTLE.registerMaxAttempts);
+
         const { firstName, lastName, email, password, phone } = req.body || {};
         const cleanEmail = String(email || '').trim().toLowerCase();
         if (!String(firstName || '').trim() || !cleanEmail || !String(password || '')) {
@@ -930,8 +952,17 @@ const loginCustomer = async (req, res) => {
         if (!email || !password) {
             return res.status(400).json({ message: 'Enter your email and password.' });
         }
+        // Brute-force throttle (GAP A) — same rules as the staff
+        // login: per account + per IP, one human sentence, and the
+        // lock reveals nothing about whether the account exists.
+        const throttleKeys = [`customer-login:${email}`, `customer-login-ip:${getClientIp(req)}`];
+        const lock = await throttleLock(throttleKeys);
+        if (lock.locked) {
+            return res.status(429).json({ message: lock.message });
+        }
         const user = await User.findOne({ email, ...NOT_DELETED }).select('+password');
         if (!user || user.role !== 'Customer') {
+            await recordThrottleFailure(lockoutEntries(throttleKeys[0], throttleKeys[1]));
             return res.status(401).json({ message: 'Invalid email or password.' });
         }
         if (user.isActive === false) {
@@ -939,8 +970,10 @@ const loginCustomer = async (req, res) => {
         }
         const isMatch = await user.comparePassword(password);
         if (!isMatch) {
+            await recordThrottleFailure(lockoutEntries(throttleKeys[0], throttleKeys[1]));
             return res.status(401).json({ message: 'Invalid email or password.' });
         }
+        await clearThrottle(throttleKeys);
         return res.json(await customerSession(user));
     } catch (error) {
         if (error.code === 'JWT_SIGNING_DISABLED') return sendError(res, error, 403);
@@ -972,19 +1005,27 @@ const forgotCustomerPassword = async (req, res) => {
     try {
         const email = String(req.body?.email || '').trim().toLowerCase();
         if (email) {
-            const user = await User.findOne({ email, ...NOT_DELETED });
-            if (user && user.role === 'Customer' && user.isActive !== false) {
-                const token = crypto.randomBytes(32).toString('hex');
-                user.passwordResetTokenHash = hashResetToken(token);
-                user.passwordResetExpires = new Date(Date.now() + RESET_TOKEN_TTL_MS);
-                await user.save();
-                // Fail-soft: the helper logs and swallows a
-                // missing/failing email service; the response
-                // stays generic either way.
-                await sendCustomerPasswordResetEmail({
-                    to: user.email,
-                    resetUrl: `${storefrontAppUrl()}/reset-password?token=${token}`,
-                });
+            // Forgot-password throttle (GAP A): same rule as the staff
+            // flow — past the limit the answer stays generic but no
+            // token is issued and no email is sent.
+            const forgotKeys = [`forgot-customer:${email}`, `forgot-ip:${getClientIp(req)}`];
+            const already = await throttleCount(forgotKeys);
+            if (already < AUTH_THROTTLE.forgotMaxRequests) {
+                await recordThrottleFailure(forgotKeys, Number.MAX_SAFE_INTEGER);
+                const user = await User.findOne({ email, ...NOT_DELETED });
+                if (user && user.role === 'Customer' && user.isActive !== false) {
+                    const token = crypto.randomBytes(32).toString('hex');
+                    user.passwordResetTokenHash = hashResetToken(token);
+                    user.passwordResetExpires = new Date(Date.now() + RESET_TOKEN_TTL_MS);
+                    await user.save();
+                    // Fail-soft: the helper logs and swallows a
+                    // missing/failing email service; the response
+                    // stays generic either way.
+                    await sendCustomerPasswordResetEmail({
+                        to: user.email,
+                        resetUrl: `${storefrontAppUrl()}/reset-password?token=${token}`,
+                    });
+                }
             }
         }
         res.json(generic);

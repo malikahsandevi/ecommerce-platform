@@ -99,6 +99,24 @@ const userSchema = new mongoose.Schema(
     // waiting for the first code to confirm).
     twoFactorSecret: { type: String, default: null, select: false },
 
+    // 2FA recovery codes (GAP B): ten one-time codes issued at
+    // enrolment (and on regeneration), each stored ONLY as a SHA-256
+    // hash — the plain codes are shown to the account owner exactly
+    // once and exist nowhere else. A used code is dead forever
+    // (usedAt set); regenerating replaces the whole set. select:false
+    // like every other credential field.
+    twoFactorRecoveryCodes: {
+      type: [
+        {
+          hash: { type: String, required: true },
+          usedAt: { type: Date, default: null },
+          createdAt: { type: Date, default: Date.now },
+        },
+      ],
+      default: [],
+      select: false,
+    },
+
     // Password reset (admin "Forgot password" flow). Only the SHA-256
     // HASH of the token is stored — the raw token exists solely in the
     // emailed link. select:false for the hash, same discipline as the

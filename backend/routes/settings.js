@@ -3,7 +3,7 @@ const router = express.Router();
 const { Setting } = require('../models');
 const genericController = require('../controllers/genericController')(Setting);
 const { getSettings, getShellBootstrap, updateSettings, verifySettingsPassword, updateSettingsAppearance, executeIntegration, getServicesCatalogue, getSettingById, updateSettingById, saveIntegrationEntry, deleteIntegrationEntry } = require('../controllers/settingController');
-const { createBackup, restoreBackup } = require('../controllers/backupController');
+const { createBackup, restoreBackup, downloadSafetyBackup } = require('../controllers/backupController');
 const { protect } = require('../middleware/auth');
 const { requireStaff } = require('../middleware/admin');
 const { requirePermission } = require('../middleware/permissions');
@@ -47,6 +47,9 @@ const requireSuperAdmin = (req, res, next) => {
 };
 router.post('/backup', requirePermission('Settings', 'edit'), requireSuperAdmin, requireSettingsSavePassword, createBackup);
 router.post('/backup/restore', requirePermission('Settings', 'edit'), requireSuperAdmin, requireSettingsSavePassword, restoreBackup);
+// The pre-restore safety snapshot (GAP C) downloads behind exactly
+// the same gates — it carries the same integration secrets.
+router.get('/backup/safety', requirePermission('Settings', 'edit'), requireSuperAdmin, requireSettingsSavePassword, downloadSafetyBackup);
 
 // Universal Driver execution route (to trigger dynamic integrations).
 // NOT a save and NOT password-gated: it executes the saved entry — or

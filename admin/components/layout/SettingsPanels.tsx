@@ -1688,19 +1688,33 @@ function RolePermissionsPanel({
  */
 function SecurityPanel() {
   const { t } = useLanguage();
+  const { pendingRecoveryCodes, clearPendingRecoveryCodes } = useAdminAuth();
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
   const [setupData, setSetupData] = useState<{ secret: string; qrCode: string } | null>(null);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+  // Recovery codes (GAP B): how many unused codes remain, the fresh
+  // set shown exactly once after an enrolment / regeneration, and
+  // the regenerate form's own fields.
+  const [remainingCodes, setRemainingCodes] = useState<number | null>(null);
+  const [freshCodes, setFreshCodes] = useState<string[] | null>(null);
+  const [regenPassword, setRegenPassword] = useState("");
+  const [regenCode, setRegenCode] = useState("");
+  const [regenBusy, setRegenBusy] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     apiClient
       .get("/auth/2fa/status")
       .then((res) => {
-        if (!cancelled) setEnabled(Boolean(res.data?.enabled));
+        if (!cancelled) {
+          setEnabled(Boolean(res.data?.enabled));
+          if (typeof res.data?.recoveryCodesRemaining === "number") {
+            setRemainingCodes(res.data.recoveryCodesRemaining);
+          }
+        }
       })
       .catch((statusError) => {
         if (!cancelled) {
@@ -1733,10 +1747,16 @@ function SecurityPanel() {
   const confirmEnable = async () => {
     setBusy(true);
     try {
-      await apiClient.post("/auth/2fa/enable", { code: code.trim() });
+      const res = await apiClient.post("/auth/2fa/enable", { code: code.trim() });
       setEnabled(true);
       setSetupData(null);
       setCode("");
+      // The enrolment response carries the one-time recovery codes
+      // (GAP B) — show them once, below, for saving.
+      if (Array.isArray(res.data?.recoveryCodes) && res.data.recoveryCodes.length > 0) {
+        setFreshCodes(res.data.recoveryCodes as string[]);
+        setRemainingCodes(res.data.recoveryCodes.length);
+      }
       toast.success(t("Two-factor authentication is now on. Your next sign-in will ask for a code."));
     } catch (enableError) {
       toast.error(extractApiError(enableError));
@@ -1751,11 +1771,36 @@ function SecurityPanel() {
       await apiClient.post("/auth/2fa/disable", { code: code.trim() });
       setEnabled(false);
       setCode("");
+      setRemainingCodes(null);
+      setFreshCodes(null);
       toast.success(t("Two-factor authentication has been turned off."));
     } catch (disableError) {
       toast.error(extractApiError(disableError));
     } finally {
       setBusy(false);
+    }
+  };
+
+  // Regenerating replaces the whole set: every old code dies, the
+  // new plain set is shown exactly once (this panel, right here).
+  const regenerateCodes = async () => {
+    setRegenBusy(true);
+    try {
+      const res = await apiClient.post("/auth/2fa/recovery-codes", {
+        password: regenPassword,
+        code: regenCode.trim(),
+      });
+      if (Array.isArray(res.data?.recoveryCodes)) {
+        setFreshCodes(res.data.recoveryCodes as string[]);
+        setRemainingCodes(res.data.recoveryCodes.length);
+      }
+      setRegenPassword("");
+      setRegenCode("");
+      toast.success(t("New recovery codes generated — save them now, they are shown only once."));
+    } catch (regenError) {
+      toast.error(extractApiError(regenError));
+    } finally {
+      setRegenBusy(false);
     }
   };
 
@@ -1886,6 +1931,84 @@ function SecurityPanel() {
               <Button variant="danger" onClick={() => void disable()} disabled={busy || code.length !== 6}>
                 {busy ? t("Turning off...") : t("Disable Two-Factor Authentication")}
               </Button>
+            </div>
+
+            <div className="mt-6 border-t border-[var(--border)] pt-5">
+              <div className="flex items-start gap-3">
+                <KeyRound className="mt-0.5 h-5 w-5 shrink-0 text-[var(--primary)]" />
+                <div>
+                  <h4 className="text-sm font-medium text-[var(--text)]">{t("Recovery Codes")}</h4>
+                  <p className="mt-1 max-w-xl text-xs text-[var(--text-muted)]">
+                    {t("If you lose your phone, a recovery code signs you in instead of the authenticator code. Each code works once.")}
+                    {remainingCodes !== null && (
+                      <> {t("Unused codes remaining:")} <strong className="text-[var(--text)]">{remainingCodes}</strong></>
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              {(freshCodes ?? pendingRecoveryCodes) && (
+                <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4">
+                  <p className="text-xs font-medium text-[var(--text)]">
+                    {t("Save these recovery codes now — they are shown only once and cannot be viewed again.")}
+                  </p>
+                  <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
+                    {(freshCodes ?? pendingRecoveryCodes ?? []).map((recoveryCode: string) => (
+                      <code
+                        key={recoveryCode}
+                        className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-center font-mono text-xs text-[var(--text)]"
+                      >
+                        {recoveryCode}
+                      </code>
+                    ))}
+                  </div>
+                  <div className="mt-3">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setFreshCodes(null);
+                        clearPendingRecoveryCodes();
+                      }}
+                    >
+                      {t("I have saved these codes")}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-4 grid max-w-xl gap-3 sm:grid-cols-2">
+                <SettingsInput
+                  label="Your Password"
+                  type="password"
+                  autoComplete="current-password"
+                  value={regenPassword}
+                  onChange={(event) => setRegenPassword(event.target.value)}
+                  id="two-factor-regen-password"
+                />
+                <SettingsInput
+                  label="Authenticator Code"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  placeholder="123456"
+                  value={regenCode}
+                  onChange={(event) => setRegenCode(event.target.value.replace(/\D/g, ""))}
+                  id="two-factor-regen-code"
+                />
+              </div>
+              <div className="mt-3">
+                <Button
+                  variant="outline"
+                  onClick={() => void regenerateCodes()}
+                  disabled={regenBusy || !regenPassword || regenCode.length !== 6}
+                >
+                  {regenBusy ? t("Generating...") : t("Generate New Recovery Codes")}
+                </Button>
+                <p className="mt-2 text-[11px] text-[var(--text-muted)]">
+                  {t("Generating a new set makes every old code stop working.")}
+                </p>
+              </div>
             </div>
           </div>
         )}

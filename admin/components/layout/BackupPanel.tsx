@@ -71,6 +71,7 @@ export default function BackupPanel({ timeZone }: { timeZone?: string }) {
   const { t } = useLanguage();
   const [creating, setCreating] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const [downloadingSafety, setDownloadingSafety] = useState(false);
   const [loaded, setLoaded] = useState<LoadedBackup | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -122,6 +123,33 @@ export default function BackupPanel({ timeZone }: { timeZone?: string }) {
     }
   };
 
+  const downloadSafetyBackup = async () => {
+    // Same per-save security check as every other backup operation —
+    // the safety copy carries the same integration settings.
+    const securityPassword = await securityCheckDialog({
+      message: t("Enter your own account password to download the safety copy."),
+      confirmLabel: t("Verify & Download"),
+    });
+    if (!securityPassword) return;
+    setDownloadingSafety(true);
+    try {
+      const response = await settingsService.downloadSafetyBackup(securityPassword);
+      const disposition = String(response.headers?.["content-disposition"] || "");
+      const match = /filename="?([^"]+)"?/.exec(disposition);
+      const url = URL.createObjectURL(response.data);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = match ? match[1] : "safety-backup.json";
+      link.click();
+      URL.revokeObjectURL(url);
+      toast.success(t("Safety copy downloaded."));
+    } catch (error) {
+      toast.error(await blobErrorMessage(error));
+    } finally {
+      setDownloadingSafety(false);
+    }
+  };
+
   const pickFile = async (file: File | undefined) => {
     if (!file) return;
     try {
@@ -168,7 +196,7 @@ export default function BackupPanel({ timeZone }: { timeZone?: string }) {
     const confirmed = await confirmDialog({
       title: t("Restore this backup?"),
       message: t(
-        "This REPLACES the store's current settings and data with the backup's contents. Anything created or changed after the backup was taken will be lost. This cannot be undone.",
+        "This REPLACES the store's current settings and data with the backup's contents. Anything created or changed after the backup was taken will be lost. A safety copy of the current data is saved automatically before the restore runs, so it can be undone by restoring that copy.",
       ),
       confirmLabel: t("Restore Backup"),
       variant: "danger",
@@ -233,6 +261,11 @@ export default function BackupPanel({ timeZone }: { timeZone?: string }) {
             "Accounts are restored as records: an account that still exists keeps its current password and two-factor setup, and an account that was deleted comes back needing a new password set by an admin before it can sign in. Accounts created after the backup was taken are removed by a restore — your own account is always kept.",
           )}
         </p>
+        <p className="mt-3 max-w-2xl text-xs leading-relaxed text-[var(--text-muted)]">
+          {t(
+            "Safety copy: immediately before every restore, the store's current state is saved automatically on the server. If a restore was a mistake, download the safety copy and restore it to put everything back exactly as it was.",
+          )}
+        </p>
 
         <input
           ref={fileInputRef}
@@ -275,7 +308,15 @@ export default function BackupPanel({ timeZone }: { timeZone?: string }) {
           </dl>
         )}
 
-        <div className="mt-6 flex justify-end border-t border-[var(--border)] pt-5">
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-5">
+          <Button
+            variant="secondary"
+            onClick={() => void downloadSafetyBackup()}
+            disabled={downloadingSafety}
+            icon={downloadingSafety ? LoaderCircle : Download}
+          >
+            {downloadingSafety ? t("Downloading...") : t("Download Safety Copy")}
+          </Button>
           <Button
             variant="danger"
             onClick={() => void restoreBackup()}

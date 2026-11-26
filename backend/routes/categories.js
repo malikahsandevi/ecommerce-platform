@@ -88,7 +88,7 @@ const validateCategoryParent = async (req, res, next) => {
 // products column (Ahsan's model: Main → Sub → Product), and a
 // server-side count stays correct whatever page of rows the panel
 // happens to display.
-router.get('/', async (req, res) => {
+router.get('/', protect, requirePermission('Categories', 'view'), async (req, res) => {
     try {
         const [categories, counts] = await Promise.all([
             // Populate the parent's name + image so the panel can show
@@ -125,7 +125,7 @@ router.post('/:id/cascade-delete', protect, requirePermission('Categories', 'del
 
 router.route('/').post(protect, requirePermission('Categories', 'create'), validateCategoryParent, genericController.create);
 router.route('/:id')
-    .get(genericController.getById)
+    .get(protect, requirePermission('Categories', 'view'), genericController.getById)
     .put(protect, requirePermission('Categories', 'edit'), validateCategoryParent, genericController.update)
     .delete(protect, requirePermission('Categories', 'delete'), genericController.remove);
 

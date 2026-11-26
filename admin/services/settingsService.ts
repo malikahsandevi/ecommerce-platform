@@ -443,6 +443,20 @@ export const settingsService = {
     );
     return data;
   },
+
+  /** Backup & Recovery — the pre-restore safety copy (GAP C): the
+   *  API saves the store's current state server-side immediately
+   *  before every restore; this downloads the newest one as a backup
+   *  file (restoring it undoes that restore). Same gates as creating
+   *  a backup — Super Admin + per-save password, which rides the
+   *  x-settings-password header because this is a GET. Resolves with
+   *  the raw response, like createBackup. */
+  async downloadSafetyBackup(securityPassword: string): Promise<AxiosResponse<Blob>> {
+    return apiClient.get<Blob>("/settings/backup/safety", {
+      headers: { "x-settings-password": securityPassword },
+      responseType: "blob",
+    });
+  },
 };
 
 /** Per-collection record counts from a backup file (its summary) and

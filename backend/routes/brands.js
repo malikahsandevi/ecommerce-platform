@@ -10,7 +10,10 @@ const { sendError } = require('../utils/apiError');
 
 
 // List brands with the real number of products for each one.
-router.get('/', async (req, res) => {
+// Staff-only like every admin read: the public catalog lives under
+// /api/storefront — these module reads were public once and leaked
+// the panel's data (closed in the Claude 8.3 verification round).
+router.get('/', protect, requirePermission('Brands', 'view'), async (req, res) => {
     try {
         const [brands, counts] = await Promise.all([
             Brand.find({ ...NOT_DELETED }).lean(),
@@ -35,7 +38,7 @@ router.post('/:id/cascade-delete', protect, requirePermission('Brands', 'delete'
 
 router.route('/').post(protect, requirePermission('Brands', 'create'), genericController.create);
 router.route('/:id')
-    .get(genericController.getById)
+    .get(protect, requirePermission('Brands', 'view'), genericController.getById)
     .put(protect, requirePermission('Brands', 'edit'), genericController.update)
     .delete(protect, requirePermission('Brands', 'delete'), genericController.remove);
 

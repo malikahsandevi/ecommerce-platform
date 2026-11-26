@@ -14,11 +14,11 @@ router.get('/:id/delete-impact', protect, requirePermission('Products', 'delete'
 router.post('/:id/cascade-delete', protect, requirePermission('Products', 'delete'), makeCascadeDeleteHandler(Product, 'products'));
 
 router.route('/')
-    .get(getProducts)
+    .get(protect, requirePermission('Products', 'view'), getProducts)
     .post(protect, requirePermission('Products', 'create'), createProduct);
 
 router.route('/:id')
-    .get(getProductById)
+    .get(protect, requirePermission('Products', 'view'), getProductById)
     .put(protect, requirePermission('Products', 'edit'), updateProduct)
     .delete(protect, requirePermission('Products', 'delete'), deleteProduct);
 
