@@ -128,6 +128,11 @@ const orderSchema = new mongoose.Schema({
   courierId: { type: String, default: '' },
   shippedAt: { type: Date },
   deliveredAt: { type: Date },
+  // When the post-delivery review-request email was claimed/sent.
+  // The claim is atomic (orderController.maybeSendReviewRequest),
+  // so the invitation goes out exactly once per order, however
+  // the Delivered transition was reached.
+  reviewRequestSentAt: { type: Date },
 
   // Shipping choice snapshots — what the shared calculator priced at
   // placement (utils/shipping): the method / delivery option the

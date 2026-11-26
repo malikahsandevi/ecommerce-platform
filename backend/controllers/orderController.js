@@ -3,7 +3,7 @@ const Product = require('../models/Product');
 const User = require('../models/User');
 const { logActivity } = require('../utils/activity');
 const { resolveCoupon, recordCouponUse, releaseCouponUse, claimCouponUse } = require('../utils/coupon');
-const { sendOrderConfirmationEmail, sendOrderStatusEmail } = require('../utils/emailTemplates');
+const { sendOrderConfirmationEmail, sendOrderStatusEmail, sendReviewRequestEmail } = require('../utils/emailTemplates');
 const { NOT_DELETED } = require('../utils/softDelete');
 const { transactionsSupported, withTransaction } = require('../utils/transactions');
 const {
@@ -854,6 +854,12 @@ const updateOrder = async (req, res) => {
                     trackingUrl: trackingUrlFor(findCourier(config, updated), updated.trackingNumber),
                 });
             }
+
+            // Landing on Delivered also invites the customer to
+            // review what they bought — exactly once per order.
+            if (nextStatus === 'delivered') {
+                await maybeSendReviewRequest(updated);
+            }
         }
 
         res.json(await presentOrder(updated));
@@ -1003,6 +1009,65 @@ const shippingQuote = async (req, res) => {
 const SYNC_ORDER_RANK = { pending: 0, processing: 1, shipped: 2, delivered: 3 };
 const SYNC_COURIER_RANK = { shipped: 2, out_for_delivery: 2.5, delivered: 3 };
 
+// ── Review-request email ────────────────────────────────────────
+// Sent exactly once per order, when it reaches Delivered — from
+// either path that can land the transition (the staff update
+// above, the courier sync below). The send is claimed atomically
+// on the order's reviewRequestSentAt stamp BEFORE mailing, so
+// two racing transitions can never invite twice; a failed or
+// unconfigured send releases the claim again, so the invitation
+// is not burned by a mail outage. Fail-soft throughout: nothing
+// here may break the status update that triggered it.
+const storefrontBaseUrl = () =>
+    (process.env.STOREFRONT_URL || 'https://storefront-gilt-xi.vercel.app').replace(/\/+$/, '');
+
+const maybeSendReviewRequest = async (order) => {
+    try {
+        if (!order || order.reviewRequestSentAt) return;
+        const claimed = await Order.findOneAndUpdate(
+            {
+                _id: order._id,
+                $or: [{ reviewRequestSentAt: null }, { reviewRequestSentAt: { $exists: false } }],
+            },
+            { $set: { reviewRequestSentAt: new Date() } },
+            { new: true }
+        );
+        if (!claimed) return;
+        order.reviewRequestSentAt = claimed.reviewRequestSentAt;
+        const userDoc = order.user
+            ? await User.findById(order.user).select('firstName lastName email').lean()
+            : null;
+        if (!userDoc?.email) return;
+        const productIds = [...new Set((order.items || []).map((item) => String(item.product)).filter(Boolean))];
+        const products = productIds.length
+            ? await Product.find({ _id: { $in: productIds } }).select('slug').lean()
+            : [];
+        const slugById = new Map(products.map((p) => [String(p._id), p.slug]));
+        const base = storefrontBaseUrl();
+        const items = (order.items || [])
+            .map((item) => {
+                const slug = slugById.get(String(item.product));
+                return slug ? { name: item.name, url: `${base}/product/${slug}` } : null;
+            })
+            .filter(Boolean);
+        const sent = await sendReviewRequestEmail({
+            to: userDoc.email,
+            customerName: customerLabel(userDoc),
+            order,
+            items,
+        });
+        if (!sent) {
+            // No mail service connected (or the provider refused):
+            // release the claim so a later transition can retry —
+            // the invitation itself was never delivered.
+            await Order.updateOne({ _id: order._id }, { $set: { reviewRequestSentAt: null } });
+            order.reviewRequestSentAt = null;
+        }
+    } catch (error) {
+        console.error(`[email] Review request for order ${order?.orderNumber} failed: ${error.message}`);
+    }
+};
+
 /**
  * Runs a status transition ARRIVED FROM courier tracking with the
  * full delivered/shipped side-effect set — stamps, the COD
@@ -1050,6 +1115,11 @@ const transitionViaSync = async (order, targetStatus, config) => {
             previousStatus,
             trackingUrl: trackingUrlFor(findCourier(config, order), order.trackingNumber),
         });
+    }
+    // A courier-reported delivery invites a review too — the same
+    // exactly-once rule as a staff-marked delivery.
+    if (targetStatus === 'delivered') {
+        await maybeSendReviewRequest(order);
     }
 };
 

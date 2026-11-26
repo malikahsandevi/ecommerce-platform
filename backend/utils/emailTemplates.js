@@ -161,6 +161,34 @@ const sendOrderStatusEmail = async ({ to, customerName, order, previousStatus, t
     });
 };
 
+/** "How was your order?" — the review invitation sent ONCE when an
+ *  order reaches Delivered. `items` carries each reviewable line
+ *  with its own product-page link (built by the caller from the
+ *  products' live slugs); the button takes the first one. Lines
+ *  without a link are simply not listed — an invitation is never
+ *  sent with a broken link in it. */
+const sendReviewRequestEmail = async ({ to, customerName, order, items }) => {
+    const { storeName } = await getStoreBranding();
+    const linked = (items || []).filter((item) => item && item.name && item.url);
+    const lines = [
+        `Hi ${firstNameOf(customerName)}, your order ${order.orderNumber} has been delivered — we hope everything arrived exactly as expected.`,
+        'Would you take a moment to review what you bought? Your review helps other shoppers and helps us stock better products.',
+        ...linked.map((item) => `Review ${item.name}: ${item.url}`),
+    ];
+    const { text, html } = buildMessage({
+        storeName,
+        heading: 'How was your order?',
+        lines,
+        cta: linked.length ? { label: `Review ${linked[0].name}`, url: linked[0].url } : null,
+    });
+    return sendEmailSafe({
+        to,
+        subject: `How was your order ${order.orderNumber}? — ${storeName}`,
+        text,
+        html,
+    });
+};
+
 /** Admin password reset — the email carries the one-time reset link. */
 const sendPasswordResetEmail = async ({ to, resetUrl }) => {
     const { storeName } = await getStoreBranding();
@@ -210,6 +238,7 @@ module.exports = {
     sendEmailSafe,
     sendOrderConfirmationEmail,
     sendOrderStatusEmail,
+    sendReviewRequestEmail,
     sendPasswordResetEmail,
     sendCustomerPasswordResetEmail,
     getStoreBranding,
