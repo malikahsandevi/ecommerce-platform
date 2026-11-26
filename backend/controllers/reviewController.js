@@ -110,9 +110,18 @@ const updateReview = async (req, res) => {
         if (!existing) return res.status(404).json({ message: 'Review not found' });
 
         const previousProductId = existing.product;
+        // Product and author are read-only on edit (the panel renders
+        // them read-only; the API now holds the same line): a body
+        // carrying them must not move a review to another product or
+        // re-attribute it to another customer — that would corrupt
+        // both products' ratings. They are stripped, never applied.
+        const updateBody = stripServerOwnedFields(req.body);
+        delete updateBody.product;
+        delete updateBody.user;
+        delete updateBody.customer;
         const updated = await Review.findOneAndUpdate(
             { _id: req.params.id, ...NOT_DELETED },
-            stripServerOwnedFields(req.body),
+            updateBody,
             { new: true, runValidators: true },
         );
 

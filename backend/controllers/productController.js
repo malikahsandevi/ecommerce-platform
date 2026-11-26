@@ -22,7 +22,17 @@ const resolveReference = async (Model, value, label, required = false) => {
     }
 
     const reference = typeof value === 'object' ? value._id || value.name : value;
-    if (mongoose.isValidObjectId(reference)) return reference;
+    // A syntactically valid ObjectId is not enough on its own: the
+    // referenced record must actually exist (and be live), exactly as
+    // the name lookup below already demands. Without this check a
+    // made-up or long-deleted id passed validation untouched and was
+    // stored as a dangling reference (found by the deep check: a
+    // product kept a brand id that exists nowhere).
+    if (mongoose.isValidObjectId(reference)) {
+        const byId = await Model.findOne({ _id: reference, ...NOT_DELETED }).select('_id');
+        if (!byId) throw new Error(`${label} "${reference}" not found`);
+        return byId._id;
+    }
 
     const record = await Model.findOne({
         name: { $regex: `^${escapeRegex(String(reference).trim())}$`, $options: 'i' },
