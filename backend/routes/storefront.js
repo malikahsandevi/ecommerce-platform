@@ -14,6 +14,7 @@ const {
     placeOrder,
     createStripeSession,
     trackOrder,
+    reviewSignInGate,
     submitReview,
     requireCustomer,
     registerCustomer,
@@ -64,7 +65,8 @@ router.get('/categories', getCatalogCategories);
 
 // PUBLIC commerce: delivery choices, a server-priced cart quote,
 // guest/signed-in checkout (through the admin's own createOrder),
-// account-free order tracking, and review submission (moderated).
+// and account-free order tracking. Review submission is NOT here
+// — it is account-only and guarded below (moderated as before).
 router.get('/shipping-options', getShippingOptions);
 router.post('/quote', quoteCart);
 router.post('/orders', placeOrder);
@@ -73,7 +75,10 @@ router.post('/orders', placeOrder);
 // only; the webhook in routes/payments.js settles it to Paid).
 router.post('/orders/:id/stripe-session', createStripeSession);
 router.post('/track', trackOrder);
-router.post('/reviews', submitReview);
+// Reviews are account-only: the gate gives a guest the human
+// refusal, then the standard customer guard stack applies and
+// the review is attributed to the signed-in account.
+router.post('/reviews', reviewSignInGate, protect, requireCustomer, submitReview);
 
 // Customer accounts: register + login (no staff 2FA — that flow is
 // the admin panel's), then the token-guarded account area. `protect`

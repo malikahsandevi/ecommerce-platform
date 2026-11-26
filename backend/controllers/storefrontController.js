@@ -709,27 +709,36 @@ const trackOrder = async (req, res) => {
     }
 };
 
+// Reviews are account-only (Ahsan, 2026-11-26): a guest attempt
+// is refused before `protect` runs so the refusal can carry the
+// sentence a shopper understands, not an auth error. A request
+// WITH a token passes through to the normal guard stack.
+const reviewSignInGate = (req, res, next) => {
+    if (!/^Bearer\s+\S+/i.test(String(req.headers.authorization || ''))) {
+        return res.status(401).json({ message: 'Please sign in to leave a review.' });
+    }
+    return next();
+};
+
 // @desc    Submit a product review from the storefront (lands in the
-//          admin moderation queue as 'pending')
+//          admin moderation queue as 'pending'). The reviewer is
+//          the signed-in account — any name/email in the body is
+//          ignored entirely; the review carries the account's own
+//          identity through its user link.
 // @route   POST /api/storefront/reviews
-// @access  Public
+// @access  Customer (signed in)
 const submitReview = async (req, res) => {
     try {
-        const { product, rating, title, content, customer } = req.body || {};
+        const { product, rating, title, content } = req.body || {};
         if (!product || !rating || !String(title || '').trim() || !String(content || '').trim()) {
             return res.status(400).json({ message: 'Please complete the review form.' });
         }
-        if (!customer || !String(customer.firstName || '').trim() || !String(customer.email || '').trim()) {
-            return res.status(400).json({ message: 'Your name and email are required to leave a review.' });
-        }
         const target = await Product.findOne({ _id: product, ...PUBLISHED }).select('_id').lean();
         if (!target) return res.status(400).json({ message: 'This product is not available.' });
-        const user = await findOrCreateCustomer(customer);
-        if (!user) return res.status(400).json({ message: 'A valid email is required.' });
 
         const result = await invoke(createReview, {
             product,
-            user: user._id,
+            user: req.user._id,
             rating: Number(rating),
             title: String(title).trim(),
             content: String(content).trim(),
@@ -1153,6 +1162,7 @@ module.exports = {
     placeOrder,
     createStripeSession,
     trackOrder,
+    reviewSignInGate,
     submitReview,
     requireCustomer,
     registerCustomer,
