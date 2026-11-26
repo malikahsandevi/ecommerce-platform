@@ -687,6 +687,7 @@ const updateOrder = async (req, res) => {
         let shippingConfig = null;
         let autoAssignedCourier = null;
         let codAutoPaid = false;
+        let refundPaymentFlip = false;
         if (nextStatus !== previousStatus) {
             shippingConfig = await getShippingConfig();
             if (
@@ -712,6 +713,25 @@ const updateOrder = async (req, res) => {
                 updates.paymentStatus = 'paid';
                 updates.paymentDate = updates.deliveredAt || new Date();
                 codAutoPaid = true;
+            }
+            // Payment state follows a refund, so the pair (status,
+            // paymentStatus) never contradicts itself on any surface:
+            // a Paid order that is refunded reads Refunded in the
+            // admin list AND the customer's account; reversing the
+            // refund restores Paid — the exact inverse. The rule
+            // yields only to a paymentStatus the request actually
+            // CHANGES: the edit form echoes the current value back
+            // untouched, and an echo is not a decision.
+            const paymentEchoed =
+                updates.paymentStatus === undefined || updates.paymentStatus === order.paymentStatus;
+            if (paymentEchoed) {
+                if (nextStatus === 'refunded' && order.paymentStatus === 'paid') {
+                    updates.paymentStatus = 'refunded';
+                    refundPaymentFlip = true;
+                } else if (previousStatus === 'refunded' && order.paymentStatus === 'refunded') {
+                    updates.paymentStatus = 'paid';
+                    refundPaymentFlip = true;
+                }
             }
         }
 
@@ -807,6 +827,13 @@ const updateOrder = async (req, res) => {
                 await logActivity(
                     'STATUS_CHANGE',
                     `Order ${order.orderNumber}: Payment marked Paid automatically — COD collected on delivery`,
+                    { orderId: order._id, customerId: order.user || undefined }
+                );
+            }
+            if (refundPaymentFlip) {
+                await logActivity(
+                    'STATUS_CHANGE',
+                    `Order ${order.orderNumber}: Payment marked ${nextStatus === 'refunded' ? 'Refunded' : 'Paid'} automatically — follows the refund status`,
                     { orderId: order._id, customerId: order.user || undefined }
                 );
             }

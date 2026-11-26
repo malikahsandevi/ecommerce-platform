@@ -19,8 +19,8 @@
 //     event may belong to another system sharing the account).
 //   - Already-paid order → 200, no further change, no second log
 //     line: Stripe retries and replays must never double-apply.
-//   - Trashed or cancelled order → never flipped to paid; logged
-//     server-side for a human to look at; 200.
+//   - Trashed, cancelled or refunded order → never flipped to paid;
+//     logged server-side for a human to look at; 200.
 //   - Marking paid touches ONLY the payment fields — no stock, no
 //     coupon accounting (those follow the order's lifecycle, which
 //     a payment does not change).
@@ -147,9 +147,9 @@ const stripeWebhook = async (req, res) => {
             return res.status(200).json({ received: true });
         }
 
-        if (order.deletedAt || order.status === 'cancelled') {
+        if (order.deletedAt || order.status === 'cancelled' || order.status === 'refunded') {
             console.log(
-                `Stripe webhook: ${event.type} (${event.id || 'no event id'}) names order ${order.orderNumber}, which is ${order.deletedAt ? 'in Deleted Items' : 'cancelled'} — NOT marked paid; a human needs to look at this payment.`,
+                `Stripe webhook: ${event.type} (${event.id || 'no event id'}) names order ${order.orderNumber}, which is ${order.deletedAt ? 'in Deleted Items' : order.status} — NOT marked paid; a human needs to look at this payment.`,
             );
             return res.status(200).json({ received: true });
         }

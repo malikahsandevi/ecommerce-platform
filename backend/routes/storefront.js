@@ -18,8 +18,11 @@ const {
     requireCustomer,
     registerCustomer,
     loginCustomer,
+    forgotCustomerPassword,
+    resetCustomerPassword,
     getMe,
     updateMe,
+    changeMyPassword,
     updateCart,
     updateWishlist,
     getMyOrders,
@@ -78,8 +81,11 @@ router.post('/reviews', submitReview);
 // Customer accounts.
 router.post('/auth/register', registerCustomer);
 router.post('/auth/login', loginCustomer);
+router.post('/auth/forgot-password', forgotCustomerPassword);
+router.post('/auth/reset-password', resetCustomerPassword);
 router.get('/me', protect, requireCustomer, getMe);
 router.put('/me', protect, requireCustomer, updateMe);
+router.put('/me/password', protect, requireCustomer, changeMyPassword);
 router.put('/me/cart', protect, requireCustomer, updateCart);
 router.put('/me/wishlist', protect, requireCustomer, updateWishlist);
 router.get('/me/orders', protect, requireCustomer, getMyOrders);

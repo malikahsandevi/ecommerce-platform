@@ -10,6 +10,7 @@ const { resolveCoupon } = require('../utils/coupon');
 const { getShippingConfig, computeShippingCharge, shipmentBlock } = require('../utils/shipping');
 const { paletteById, resolvePaletteId } = require('../config/palettes');
 const { resolveStripeCheckout, isStripePaymentMethod, createCheckoutSession } = require('../utils/stripePay');
+const { sendCustomerPasswordResetEmail } = require('../utils/emailTemplates');
 
 // PUBLIC storefront endpoints. These never re-implement business
 // rules: order placement goes through the SAME createOrder the admin
@@ -597,6 +598,19 @@ const storefrontOrigin = (req) => {
 //          names the order, never a price.
 // @route   POST /api/storefront/orders/:id/stripe-session
 // @access  Public
+// One source of truth for "this order can still be paid online":
+// the serializers expose it so the account + tracking pages render a
+// Pay action exactly when createStripeSession would accept the
+// order — unpaid, not cancelled, placed with the card method, a real
+// amount, and the gateway configured right now.
+const orderCanPayOnline = async (order) => {
+    if (!order) return false;
+    if (order.paymentStatus === 'paid' || order.status === 'cancelled' || order.status === 'refunded') return false;
+    if (!isStripePaymentMethod(order.paymentMethod)) return false;
+    if (!(Number(order.total) > 0)) return false;
+    return Boolean(await resolveStripeCheckout());
+};
+
 const createStripeSession = async (req, res) => {
     try {
         const { id } = req.params;
@@ -610,6 +624,9 @@ const createStripeSession = async (req, res) => {
         }
         if (order.status === 'cancelled') {
             return res.status(400).json({ message: 'This order was cancelled.' });
+        }
+        if (order.status === 'refunded') {
+            return res.status(400).json({ message: 'This order was refunded.' });
         }
         if (!isStripePaymentMethod(order.paymentMethod)) {
             return res.status(400).json({ message: 'This order was not placed with online card payment.' });
@@ -668,6 +685,8 @@ const trackOrder = async (req, res) => {
         const config = await getShippingConfig();
         res.json({
             orderNumber: order.orderNumber,
+            _id: order._id,
+            canPayOnline: await orderCanPayOnline(order),
             status: order.status,
             paymentStatus: order.paymentStatus,
             paymentMethod: order.paymentMethod,
@@ -832,6 +851,88 @@ const loginCustomer = async (req, res) => {
     }
 };
 
+const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
+const hashResetToken = (token) => crypto.createHash('sha256').update(String(token)).digest('hex');
+
+// @desc    Request a customer password reset email (storefront
+//          "Forgot password"). Mirrors the admin flow's mechanics —
+//          hashed single-use token, 1-hour expiry, generic answer —
+//          scoped to Customer accounts: staff accounts reset through
+//          the admin panel, never from here.
+// @route   POST /api/storefront/auth/forgot-password
+// @access  Public — ALWAYS the same generic message (no enumeration).
+const forgotCustomerPassword = async (req, res) => {
+    const generic = {
+        message: 'If an account with that email exists, a password reset link has been sent.',
+    };
+    try {
+        const email = String(req.body?.email || '').trim().toLowerCase();
+        if (email) {
+            const user = await User.findOne({ email, ...NOT_DELETED });
+            if (user && user.role === 'Customer' && user.isActive !== false) {
+                const origin = storefrontOrigin(req);
+                if (origin) {
+                    const token = crypto.randomBytes(32).toString('hex');
+                    user.passwordResetTokenHash = hashResetToken(token);
+                    user.passwordResetExpires = new Date(Date.now() + RESET_TOKEN_TTL_MS);
+                    await user.save();
+                    // Fail-soft: the helper logs and swallows a
+                    // missing/failing email service; the response
+                    // stays generic either way.
+                    await sendCustomerPasswordResetEmail({
+                        to: user.email,
+                        resetUrl: `${origin}/reset-password?token=${token}`,
+                    });
+                } else {
+                    console.error('[storefront] forgot-password: no storefront origin available for the reset link');
+                }
+            }
+        }
+        res.json(generic);
+    } catch (error) {
+        // Even a server error must not leak whether the account exists.
+        console.error(`[storefront] forgot-password failed: ${error.message}`);
+        res.json(generic);
+    }
+};
+
+// @desc    Complete a customer password reset with the emailed token
+// @route   POST /api/storefront/auth/reset-password
+// @access  Public (the token is the credential)
+const resetCustomerPassword = async (req, res) => {
+    try {
+        const { token, password } = req.body || {};
+        if (!token || !password) {
+            return res.status(400).json({ message: 'A reset token and a new password are required.' });
+        }
+        if (String(password).length < 6) {
+            return res.status(400).json({ message: 'The new password must be at least 6 characters.' });
+        }
+
+        const user = await User.findOne({
+            passwordResetTokenHash: hashResetToken(token),
+            passwordResetExpires: { $gt: new Date() },
+            ...NOT_DELETED,
+        }).select('+passwordResetTokenHash');
+        if (!user || user.role !== 'Customer' || user.isActive === false) {
+            return res.status(400).json({
+                message: 'This reset link is invalid or has expired. Request a new one.',
+            });
+        }
+
+        // The pre-save hook bcrypt-hashes the new password; clearing
+        // the token fields makes the link single-use.
+        user.password = String(password);
+        user.passwordResetTokenHash = null;
+        user.passwordResetExpires = null;
+        await user.save();
+
+        res.json({ message: 'Your password has been reset. You can now sign in with your new password.' });
+    } catch (error) {
+        sendError(res, error, 500);
+    }
+};
+
 // The signed-in customer's cart + wishlist, populated with the
 // catalog shape so the account pages render without a second call.
 // Entries whose product was deleted fall away (delete-impact already
@@ -895,6 +996,36 @@ const updateMe = async (req, res) => {
         return res.json({ ...publicCustomer(user), cart, wishlist });
     } catch (error) {
         sendError(res, error, 400);
+    }
+};
+
+// @route   PUT /api/storefront/me/password
+// @access  Customer — change own password: the current password is
+//          the credential, the new one must differ and meet the same
+//          minimum as registration.
+const changeMyPassword = async (req, res) => {
+    try {
+        const { currentPassword, newPassword } = req.body || {};
+        if (!String(currentPassword || '') || !String(newPassword || '')) {
+            return res.status(400).json({ message: 'Enter your current password and a new password.' });
+        }
+        if (String(newPassword).length < 6) {
+            return res.status(400).json({ message: 'The new password must be at least 6 characters.' });
+        }
+        if (String(newPassword) === String(currentPassword)) {
+            return res.status(400).json({ message: 'The new password must be different from your current password.' });
+        }
+        const user = await User.findById(req.user._id).select('+password');
+        if (!user) return res.status(404).json({ message: 'Account not found.' });
+        const isMatch = await user.comparePassword(String(currentPassword));
+        if (!isMatch) {
+            return res.status(400).json({ message: 'Your current password is incorrect.' });
+        }
+        user.password = String(newPassword);
+        await user.save();
+        return res.json({ message: 'Your password has been changed.' });
+    } catch (error) {
+        sendError(res, error, 500);
     }
 };
 
@@ -1001,7 +1132,9 @@ const getMyOrder = async (req, res) => {
         const order = await Order.findOne({ _id: req.params.id, user: req.user._id, ...NOT_DELETED });
         if (!order) return res.status(404).json({ message: 'Order not found.' });
         const config = await getShippingConfig();
-        res.json(await shapeMyOrder(order, config));
+        const shaped = await shapeMyOrder(order, config);
+        shaped.canPayOnline = await orderCanPayOnline(order);
+        res.json(shaped);
     } catch (error) {
         sendError(res, error, 500);
     }
@@ -1022,8 +1155,11 @@ module.exports = {
     requireCustomer,
     registerCustomer,
     loginCustomer,
+    forgotCustomerPassword,
+    resetCustomerPassword,
     getMe,
     updateMe,
+    changeMyPassword,
     updateCart,
     updateWishlist,
     getMyOrders,

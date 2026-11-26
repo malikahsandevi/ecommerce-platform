@@ -183,10 +183,34 @@ const sendPasswordResetEmail = async ({ to, resetUrl }) => {
     });
 };
 
+/** Customer password reset — the storefront counterpart of the admin
+ *  reset email: same one-time link mechanics, shopper wording. */
+const sendCustomerPasswordResetEmail = async ({ to, resetUrl }) => {
+    const { storeName } = await getStoreBranding();
+    const lines = [
+        'We received a request to reset the password for your account.',
+        'Use the button below to choose a new password. This link expires in 1 hour and can be used only once.',
+        'If you did not request this, you can ignore this email — your password will not change.',
+    ];
+    const { text, html } = buildMessage({
+        storeName,
+        heading: 'Reset your password',
+        lines,
+        cta: { label: 'Reset password', url: resetUrl },
+    });
+    return sendEmailSafe({
+        to,
+        subject: `Reset your password — ${storeName}`,
+        text,
+        html,
+    });
+};
+
 module.exports = {
     sendEmailSafe,
     sendOrderConfirmationEmail,
     sendOrderStatusEmail,
     sendPasswordResetEmail,
+    sendCustomerPasswordResetEmail,
     getStoreBranding,
 };
