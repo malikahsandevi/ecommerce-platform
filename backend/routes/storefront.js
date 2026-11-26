@@ -13,6 +13,7 @@ const {
     quoteCart,
     placeOrder,
     createStripeSession,
+    createStripePaymentIntent,
     trackOrder,
     reviewSignInGate,
     submitReview,
@@ -74,6 +75,9 @@ router.post('/orders', placeOrder);
 // order whose method is the Stripe entry (amount/identity server-side
 // only; the webhook in routes/payments.js settles it to Paid).
 router.post('/orders/:id/stripe-session', createStripeSession);
+// Embedded card payment at checkout (the session route above now
+// serves the pay-later Pay actions on the account/track pages).
+router.post('/orders/:id/stripe-intent', createStripePaymentIntent);
 router.post('/track', trackOrder);
 // Reviews are account-only: the gate gives a guest the human
 // refusal, then the standard customer guard stack applies and

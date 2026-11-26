@@ -9,7 +9,7 @@ const { getJwtSecret, getJwtSignSecret } = require('../utils/credentials');
 const { resolveCoupon } = require('../utils/coupon');
 const { getShippingConfig, computeShippingCharge, shipmentBlock } = require('../utils/shipping');
 const { paletteById, resolvePaletteId } = require('../config/palettes');
-const { resolveStripeCheckout, isStripePaymentMethod, createCheckoutSession } = require('../utils/stripePay');
+const { resolveStripeCheckout, isStripePaymentMethod, createCheckoutSession, createPaymentIntent } = require('../utils/stripePay');
 const { sendCustomerPasswordResetEmail } = require('../utils/emailTemplates');
 
 // PUBLIC storefront endpoints. These never re-implement business
@@ -155,6 +155,11 @@ const getStoreConfig = async (req, res) => {
             phone: general.phone || '',
             paymentMethods,
             stripePayAvailable: stripeCheckout !== null,
+            // The publishable key is public by design (it ships in
+            // every Stripe.js page load); the embedded checkout
+            // needs it to mount the Payment Element. Empty when
+            // the gateway is not configured.
+            stripePublishableKey: stripeCheckout?.publishableKey || '',
         });
     } catch (error) {
         sendError(res, error, 500);
@@ -664,6 +669,66 @@ const createStripeSession = async (req, res) => {
     }
 };
 
+// @desc    Open EMBEDDED card payment for a placed storefront
+//          order: creates the PaymentIntent and returns its
+//          client secret — the checkout page confirms it in
+//          place with the Payment Element, no redirect anywhere
+//          (Ahsan, 2026-11-26: "details wha hi leni chahiyee").
+//          The guards mirror the hosted-session endpoint beside
+//          it; amount, currency and identity come ONLY from the
+//          stored order. Payment itself stays webhook-truth: this
+//          endpoint opens the intent, the webhook settles it.
+// @route   POST /api/storefront/orders/:id/stripe-intent
+// @access  Public
+const createStripePaymentIntent = async (req, res) => {
+    try {
+        const { id } = req.params;
+        if (!/^[a-f0-9]{24}$/i.test(String(id || ''))) {
+            return res.status(404).json({ message: 'Order not found.' });
+        }
+        const order = await Order.findOne({ _id: id, ...NOT_DELETED });
+        if (!order) return res.status(404).json({ message: 'Order not found.' });
+        if (order.paymentStatus === 'paid') {
+            return res.status(400).json({ message: 'This order is already paid.' });
+        }
+        if (order.status === 'cancelled') {
+            return res.status(400).json({ message: 'This order was cancelled.' });
+        }
+        if (order.status === 'refunded') {
+            return res.status(400).json({ message: 'This order was refunded.' });
+        }
+        if (!isStripePaymentMethod(order.paymentMethod)) {
+            return res.status(400).json({ message: 'This order was not placed with online card payment.' });
+        }
+        const stripe = await resolveStripeCheckout();
+        if (!stripe) {
+            return res.status(503).json({ message: 'Online card payment is not available right now.' });
+        }
+        if (!(Number(order.total) > 0)) {
+            return res.status(400).json({ message: 'This order has no amount to pay.' });
+        }
+        const settings = await Setting.findOne().sort({ createdAt: 1 }).select('general').lean();
+        const currency = settings?.general?.currency || 'USD';
+
+        let intent;
+        try {
+            intent = await createPaymentIntent({ config: stripe, order, currency });
+        } catch {
+            // The real Stripe reason was logged in the util; the
+            // shopper gets one clean sentence and the order simply
+            // stays placed + unpaid.
+            return res.status(502).json({ message: 'Online payment could not be started — your order is placed but unpaid.' });
+        }
+        // The intent id becomes the order's paymentId — the first
+        // key the webhook matcher tries for payment_intent events.
+        order.paymentId = intent.id;
+        await order.save();
+        return res.json({ clientSecret: intent.clientSecret, paymentIntentId: intent.id });
+    } catch (error) {
+        return sendError(res, error, 500);
+    }
+};
+
 // @desc    Track an order without an account: order number + the
 //          email the order was placed with. Both must match — the
 //          answer never confirms which one was wrong.
@@ -1161,6 +1226,7 @@ module.exports = {
     quoteCart,
     placeOrder,
     createStripeSession,
+    createStripePaymentIntent,
     trackOrder,
     reviewSignInGate,
     submitReview,

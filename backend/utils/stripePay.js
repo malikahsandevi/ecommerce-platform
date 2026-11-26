@@ -1,14 +1,21 @@
-// Stripe Checkout (hosted page) — the OUTBOUND half of online card
-// payment; the inbound half (the webhook that marks orders Paid)
-// lives in utils/stripeWebhook.js + controllers/paymentController.js.
+// Stripe — the OUTBOUND half of online card payment; the inbound
+// half (the webhook that marks orders Paid) lives in
+// utils/stripeWebhook.js + controllers/paymentController.js.
 //
-// Flow: the storefront places the order FIRST (through the shared
-// createOrder, so totals/stock/coupon/shipping are the server's own
-// numbers), then asks POST /api/storefront/orders/:id/stripe-session
-// to open payment. This module creates a Stripe Checkout Session for
-// the STORED order — amount, currency and identity come from the
-// order document, never from the client — with a raw form-encoded
-// POST to the entry's baseUrl (no SDK; the codebase's raw style).
+// Two outbound shapes share this module's config/amount rules:
+//   - EMBEDDED (checkout, Ahsan 2026-11-26: card details are taken
+//     on our own checkout page, never by redirect): a PaymentIntent
+//     the storefront confirms in-page with the Payment Element —
+//     POST /api/storefront/orders/:id/stripe-intent.
+//   - HOSTED (pay-later only): a Checkout Session whose URL the
+//     account/track Pay action redirects to —
+//     POST /api/storefront/orders/:id/stripe-session.
+// Flow for both: the storefront places the order FIRST (through
+// the shared createOrder, so totals/stock/coupon/shipping are the
+// server's own numbers), then opens payment against the STORED
+// order — amount, currency and identity come from the order
+// document, never from the client — with a raw form-encoded POST
+// to the entry's baseUrl (no SDK; the codebase's raw style).
 //
 // The session carries the order reference in every place the webhook
 // matcher looks (see findOrderForEvent in paymentController.js):
@@ -46,7 +53,14 @@ const resolveStripeCheckout = async () => {
     if (!entry) return null;
     const definition = getDefinition('stripe');
     const baseUrl = String(entry.baseUrl || definition?.baseUrl || 'https://api.stripe.com/v1').replace(/\/+$/, '');
-    return { secretKey: String(entry.values.secretKey).trim(), baseUrl };
+    return {
+        secretKey: String(entry.values.secretKey).trim(),
+        // The publishable key is PUBLIC by design — the storefront
+        // config serves it so the browser can load Stripe.js. The
+        // secret + webhook secret never leave the backend.
+        publishableKey: String(entry.values.publishableKey || '').trim(),
+        baseUrl,
+    };
 };
 
 /** Whether online card payment can be offered to shoppers at all. */
@@ -128,10 +142,67 @@ const createCheckoutSession = async ({ config, order, currency, origin }) => {
     return { id: payload.id, url: payload.url };
 };
 
+/**
+ * Creates a PaymentIntent for a placed order (the embedded
+ * checkout flow). Returns { id, clientSecret } — the secret is
+ * what the browser's Payment Element confirms against; it can
+ * only ever pay THIS intent's fixed amount. The intent carries
+ * the order reference in its metadata, which is one of the keys
+ * the webhook matcher (findOrderForEvent) resolves orders by —
+ * and the caller persists the intent id as the order's
+ * paymentId, the key it tries FIRST. Redirect-based payment
+ * methods are disallowed on the intent itself, so confirming in
+ * the page can never bounce the shopper off the store.
+ * Throws a plain Error on any failure, same discipline as the
+ * session creator.
+ */
+const createPaymentIntent = async ({ config, order, currency }) => {
+    const orderId = String(order._id);
+    const orderNumber = String(order.orderNumber);
+    const params = new URLSearchParams();
+    params.set('amount', String(toMinorUnits(order.total, currency)));
+    params.set('currency', String(currency || 'USD').toLowerCase());
+    params.set('metadata[orderId]', orderId);
+    params.set('metadata[orderNumber]', orderNumber);
+    params.set('automatic_payment_methods[enabled]', 'true');
+    params.set('automatic_payment_methods[allow_redirects]', 'never');
+    params.set('description', `Order ${orderNumber}`);
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
+    let response;
+    try {
+        response = await fetch(`${config.baseUrl}/payment_intents`, {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${config.secretKey}`,
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: params.toString(),
+            signal: controller.signal,
+        });
+    } catch (error) {
+        console.error(`Stripe payment intent request failed for order ${orderNumber}:`, error?.message || error);
+        throw new Error('Stripe payment intent could not be created.');
+    } finally {
+        clearTimeout(timer);
+    }
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload?.id || !payload?.client_secret) {
+        console.error(
+            `Stripe refused a payment intent for order ${orderNumber}:`,
+            payload?.error?.message || `HTTP ${response.status}`,
+        );
+        throw new Error('Stripe payment intent could not be created.');
+    }
+    return { id: payload.id, clientSecret: payload.client_secret };
+};
+
 module.exports = {
     resolveStripeCheckout,
     isStripeCheckoutAvailable,
     isStripePaymentMethod,
     toMinorUnits,
     createCheckoutSession,
+    createPaymentIntent,
 };
