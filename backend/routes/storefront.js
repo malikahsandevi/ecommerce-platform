@@ -15,6 +15,7 @@ const {
     createStripeSession,
     createStripePaymentIntent,
     trackOrder,
+    trackSignInGate,
     reviewSignInGate,
     submitReview,
     requireCustomer,
@@ -65,9 +66,9 @@ router.get('/products/:id/reviews', getProductReviews);
 router.get('/categories', getCatalogCategories);
 
 // PUBLIC commerce: delivery choices, a server-priced cart quote,
-// guest/signed-in checkout (through the admin's own createOrder),
-// and account-free order tracking. Review submission is NOT here
-// — it is account-only and guarded below (moderated as before).
+// and guest/signed-in checkout (through the admin's own
+// createOrder). Order tracking and review submission are NOT
+// public — both are account-only and guarded below.
 router.get('/shipping-options', getShippingOptions);
 router.post('/quote', quoteCart);
 router.post('/orders', placeOrder);
@@ -78,7 +79,10 @@ router.post('/orders/:id/stripe-session', createStripeSession);
 // Embedded card payment at checkout (the session route above now
 // serves the pay-later Pay actions on the account/track pages).
 router.post('/orders/:id/stripe-intent', createStripePaymentIntent);
-router.post('/track', trackOrder);
+// Order tracking is account-only: the gate gives a guest the human
+// refusal, then the standard customer guard stack applies and the
+// controller checks the order actually belongs to the caller.
+router.post('/track', trackSignInGate, protect, requireCustomer, trackOrder);
 // Reviews are account-only: the gate gives a guest the human
 // refusal, then the standard customer guard stack applies and
 // the review is attributed to the signed-in account.

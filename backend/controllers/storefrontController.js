@@ -729,23 +729,46 @@ const createStripePaymentIntent = async (req, res) => {
     }
 };
 
-// @desc    Track an order without an account: order number + the
-//          email the order was placed with. Both must match — the
-//          answer never confirms which one was wrong.
+// Order tracking is account-only (Ahsan, 2026-11-26: "user must
+// be login for this"): same gate shape as the review gate — a
+// guest attempt is refused before `protect` runs so the refusal
+// can carry the sentence a shopper understands, not an auth
+// error. A request WITH a token passes through to the normal
+// guard stack.
+const trackSignInGate = (req, res, next) => {
+    if (!/^Bearer\s+\S+/i.test(String(req.headers.authorization || ''))) {
+        return res.status(401).json({ message: 'Please sign in to track your order.' });
+    }
+    return next();
+};
+
+// @desc    Track one of the signed-in customer's own orders by its
+//          order number. The email is never asked: it comes from
+//          the account. An order belongs to the caller when it sits
+//          on their account, or when the email it was placed with
+//          is the account's email (so an order placed as guest
+//          becomes trackable once that email's account is claimed
+//          and signed in). A stranger's order and a nonexistent
+//          number get the SAME answer — the lookup never confirms
+//          someone else's order exists.
 // @route   POST /api/storefront/track
-// @access  Public
+// @access  Customer (signed in)
 const trackOrder = async (req, res) => {
     try {
         const orderNumber = String(req.body?.orderNumber || '').trim().toUpperCase();
-        const email = String(req.body?.email || '').trim().toLowerCase();
-        if (!orderNumber || !email) {
-            return res.status(400).json({ message: 'Enter your order number and email.' });
+        if (!orderNumber) {
+            return res.status(400).json({ message: 'Enter your order number.' });
         }
         const order = await Order.findOne({ orderNumber, ...NOT_DELETED })
             .populate('user', 'email')
             .lean();
-        if (!order || String(order.user?.email || '').toLowerCase() !== email) {
-            return res.status(404).json({ message: 'No order matches that order number and email.' });
+        const accountEmail = String(req.user?.email || '').toLowerCase();
+        const owns = Boolean(order) && (
+            String(order.user?._id || '') === String(req.user?._id || '') ||
+            (accountEmail !== '' && String(order.user?.email || '').toLowerCase() === accountEmail)
+        );
+        if (!owns) {
+            return res.status(404).json({ message: 'No order matches that order number.' });
         }
         const config = await getShippingConfig();
         res.json({
@@ -1228,6 +1251,7 @@ module.exports = {
     createStripeSession,
     createStripePaymentIntent,
     trackOrder,
+    trackSignInGate,
     reviewSignInGate,
     submitReview,
     requireCustomer,
