@@ -25,6 +25,7 @@ const {
     resetCustomerPassword,
     getMe,
     updateMe,
+    updateMyAvatar,
     changeMyPassword,
     updateCart,
     updateWishlist,
@@ -98,6 +99,7 @@ router.post('/auth/forgot-password', forgotCustomerPassword);
 router.post('/auth/reset-password', resetCustomerPassword);
 router.get('/me', protect, requireCustomer, getMe);
 router.put('/me', protect, requireCustomer, updateMe);
+router.post('/me/avatar', protect, requireCustomer, updateMyAvatar);
 router.put('/me/password', protect, requireCustomer, changeMyPassword);
 router.put('/me/cart', protect, requireCustomer, updateCart);
 router.put('/me/wishlist', protect, requireCustomer, updateWishlist);

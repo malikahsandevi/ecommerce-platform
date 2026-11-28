@@ -11,6 +11,14 @@ const { getShippingConfig, computeShippingCharge, shipmentBlock } = require('../
 const { paletteById, resolvePaletteId } = require('../config/palettes');
 const { resolveStripeCheckout, isStripePaymentMethod, createCheckoutSession, createPaymentIntent } = require('../utils/stripePay');
 const { sendCustomerPasswordResetEmail } = require('../utils/emailTemplates');
+const cloudinary = require('../config/cloudinary');
+const cloudinaryClient = require('../utils/cloudinaryClient');
+const {
+    isCloudinaryActive,
+    resolveUploadTargetDetailed,
+    getDefaultStorageEntry,
+} = require('../utils/credentials');
+const { canonicalUrl } = require('../utils/cloudinaryUrl');
 const {
     AUTH_THROTTLE,
     getClientIp,
@@ -1139,6 +1147,83 @@ const updateMe = async (req, res) => {
     }
 };
 
+// ── Customer avatar ────────────────────────────────────────────────
+// The photo rides the platform's own storage resolution (Settings →
+// Integrations): the rotation policy picks the entry, the original
+// entry uploads through the SDK singleton and any other through the
+// per-entry REST client — the same split as POST /api/media/upload.
+// Like every asset in this system it is an AUTHENTICATED-type
+// upload stored in canonical form: the response signer
+// (utils/cloudinaryUrl signDeep) turns it into a signed delivery
+// URL in every response that carries it (/me, the customer's
+// reviews), which is what the storefront's <img> tags load. The
+// folder is the media system's own profiles purpose
+// (routes/media.js PURPOSE_FOLDERS).
+const AVATAR_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
+const AVATAR_FOLDER = 'ecommerce-media/profiles';
+
+// @route   POST /api/storefront/me/avatar
+// @access  Customer — replace the signed-in customer's own profile
+//          photo; the body is a base64 data URL, exactly the
+//          contract POST /api/media/upload accepts from staff.
+const updateMyAvatar = async (req, res) => {
+    try {
+        const { dataUrl } = req.body || {};
+        if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:')) {
+            return res.status(400).json({ message: 'Choose a photo to upload.' });
+        }
+        const mimeType = dataUrl.slice(5, dataUrl.indexOf(';'));
+        if (!AVATAR_MIME_TYPES.includes(mimeType)) {
+            return res.status(400).json({ message: 'Use a JPG, PNG or WebP photo.' });
+        }
+        // A base64 payload's byte size is 3/4 of its character length
+        // (the same arithmetic POST /api/media/upload uses).
+        const comma = dataUrl.indexOf(',');
+        const fileSize = comma > 0 ? Math.floor(((dataUrl.length - comma - 1) * 3) / 4) : 0;
+        if (!fileSize || fileSize > AVATAR_MAX_BYTES) {
+            return res.status(400).json({ message: 'The photo must be 2 MB or smaller.' });
+        }
+        if (!(await isCloudinaryActive())) {
+            return res.status(403).json({ message: 'Photo upload is not available right now.' });
+        }
+        const detail = await resolveUploadTargetDetailed({ fileSize });
+        if (detail.blocked) {
+            return res.status(400).json({ message: detail.blockMessage });
+        }
+        const target = detail.entry;
+        if (!target || !target.configured || !target.isConnected) {
+            return res.status(400).json({ message: 'Photo upload is not available right now.' });
+        }
+        const fallback = await getDefaultStorageEntry();
+        const isDefault = Boolean(fallback) && target.slug === fallback.slug;
+        const uploadParams = { folder: AVATAR_FOLDER, resource_type: 'image', type: 'authenticated' };
+        const result = isDefault
+            ? await cloudinary.uploader.upload(dataUrl, uploadParams)
+            : await cloudinaryClient.upload(
+                  { cloudName: target.cloudName, apiKey: target.apiKey, apiSecret: target.apiSecret },
+                  dataUrl,
+                  uploadParams,
+              );
+        if (!result?.public_id) {
+            return res.status(502).json({ message: 'The photo could not be uploaded. Try again.' });
+        }
+        const user = await User.findById(req.user._id);
+        if (!user) return res.status(404).json({ message: 'Account not found.' });
+        user.avatar = canonicalUrl({
+            resourceType: result.resource_type || 'image',
+            publicId: result.public_id,
+            format: result.format || mimeType.split('/')[1],
+            cloudName: target.cloudName,
+        });
+        await user.save();
+        const { cart, wishlist } = await populatedLists(user);
+        return res.json({ ...publicCustomer(user), cart, wishlist });
+    } catch (error) {
+        sendError(res, error, 400);
+    }
+};
+
 // @route   PUT /api/storefront/me/password
 // @access  Customer — change own password: the current password is
 //          the credential, the new one must differ and meet the same
@@ -1302,6 +1387,7 @@ module.exports = {
     resetCustomerPassword,
     getMe,
     updateMe,
+    updateMyAvatar,
     changeMyPassword,
     updateCart,
     updateWishlist,
